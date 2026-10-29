@@ -19,7 +19,7 @@ final class AppSettings: ObservableObject {
   private enum Default {
     static let hideNotch = true
     static let roundCorners = true
-    static let cornerRadius: Double = 10
+    static let cornerRadius: Double = 15
     static let cornersOnAllDisplays = false
     static let showMenuBarIcon = true
   }

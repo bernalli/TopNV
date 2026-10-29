@@ -30,7 +30,7 @@ Click the menu-bar icon:
 
 - **Hide notch**: black menu bar on notched displays (default on).
 - **Round corners**: rounded screen corners (default on).
-- **Corner radius**: 0 to 30 points, applied live (default 10).
+- **Corner radius**: 0 to 30 points, applied live (default 15).
 - **Corners on all displays**: round corners on external displays too (default: built-in
   display only).
 - **Launch at login**: registers the app as a login item. If macOS asks for approval, allow
