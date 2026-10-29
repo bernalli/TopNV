@@ -15,10 +15,30 @@ private struct MenuBarScene: Scene {
   let loginItem: LoginItem
 
   var body: some Scene {
-    MenuBarExtra("topNV", systemImage: "menubar.rectangle", isInserted: $settings.showMenuBarIcon) {
+    MenuBarExtra(isInserted: $settings.showMenuBarIcon) {
       SettingsMenu(settings: settings, loginItem: loginItem)
+    } label: {
+      MenuBarLabel()
     }
     .menuBarExtraStyle(.window)
+  }
+}
+
+/// The menu bar icon from the app bundle, or an SF Symbol when run unbundled.
+private struct MenuBarLabel: View {
+  private static let icon: NSImage? = {
+    guard let image = Bundle.main.image(forResource: "MenuBarIcon") else { return nil }
+    image.isTemplate = true
+    image.size = NSSize(width: 18, height: 18)
+    return image
+  }()
+
+  var body: some View {
+    if let icon = Self.icon {
+      Image(nsImage: icon).accessibilityLabel("topNV")
+    } else {
+      Image(systemName: "menubar.rectangle").accessibilityLabel("topNV")
+    }
   }
 }
 

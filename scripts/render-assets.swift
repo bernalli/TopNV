@@ -6,10 +6,10 @@
 // Usage:
 //   swiftc -O scripts/render-assets.swift -o "$TMPDIR/render-assets"
 //   "$TMPDIR/render-assets" Assets
-//   iconutil -c icns Assets/AppIcon.iconset -o Assets/AppIcon.icns
 //
 // Output (relative to the output directory):
 //   AppIcon.iconset/icon_{16,32,128,256,512}x{...}[@2x].png
+//   AppIcon.icns                          (the iconset images, written with ImageIO)
 //   MenuBarIcon.png, MenuBarIcon@2x.png   (template images, alpha only)
 //   cover.png                             (1280x640 social preview)
 
@@ -583,14 +583,29 @@ func run() throws {
     return image
   }
 
-  for points in [16, 32, 128, 256, 512] {
-    for scale in [1, 2] {
-      let name = scale == 1 ? "icon_\(points)x\(points).png" : "icon_\(points)x\(points)@2x.png"
-      try writePNG(
-        try icon(points * scale), to: iconset.appendingPathComponent(name), dpi: 72 * scale)
-      print("wrote AppIcon.iconset/\(name) (\(points * scale)px)")
-    }
+  let iconSizes = [16, 32, 128, 256, 512].flatMap { points in [1, 2].map { (points, $0) } }
+  for (points, scale) in iconSizes {
+    let name = scale == 1 ? "icon_\(points)x\(points).png" : "icon_\(points)x\(points)@2x.png"
+    try writePNG(
+      try icon(points * scale), to: iconset.appendingPathComponent(name), dpi: 72 * scale)
+    print("wrote AppIcon.iconset/\(name) (\(points * scale)px)")
   }
+
+  // iconutil is not always usable, so the .icns is written directly with ImageIO.
+  let icnsURL = out.appendingPathComponent("AppIcon.icns")
+  guard
+    let icns = CGImageDestinationCreateWithURL(
+      icnsURL as CFURL, "com.apple.icns" as CFString, iconSizes.count, nil)
+  else {
+    throw RenderError.destination(icnsURL.path)
+  }
+  for (points, scale) in iconSizes {
+    let dpi = 72 * scale
+    let props: [CFString: Any] = [kCGImagePropertyDPIWidth: dpi, kCGImagePropertyDPIHeight: dpi]
+    CGImageDestinationAddImage(icns, try icon(points * scale), props as CFDictionary)
+  }
+  guard CGImageDestinationFinalize(icns) else { throw RenderError.write(icnsURL.path) }
+  print("wrote AppIcon.icns (\(iconSizes.count) images)")
 
   try writePNG(
     try renderMenuBarIcon(scale: 1), to: out.appendingPathComponent("MenuBarIcon.png"), dpi: 72)

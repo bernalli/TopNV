@@ -1,5 +1,7 @@
 # topNV
 
+![topNV](Assets/cover.png)
+
 Hide the MacBook notch and round the screen corners (macOS menu bar app).
 
 topNV paints the menu-bar strip of every notched display black, so the notch blends into
