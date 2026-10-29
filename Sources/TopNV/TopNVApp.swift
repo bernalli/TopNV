@@ -6,8 +6,17 @@ struct TopNVApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
   var body: some Scene {
-    MenuBarExtra("topNV", systemImage: "menubar.rectangle") {
-      SettingsMenu(settings: appDelegate.settings, loginItem: appDelegate.loginItem)
+    MenuBarScene(settings: appDelegate.settings, loginItem: appDelegate.loginItem)
+  }
+}
+
+private struct MenuBarScene: Scene {
+  @ObservedObject var settings: AppSettings
+  let loginItem: LoginItem
+
+  var body: some Scene {
+    MenuBarExtra("topNV", systemImage: "menubar.rectangle", isInserted: $settings.showMenuBarIcon) {
+      SettingsMenu(settings: settings, loginItem: loginItem)
     }
     .menuBarExtraStyle(.window)
   }
@@ -18,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   let settings = AppSettings()
   let loginItem = LoginItem()
   private var overlay: OverlayController?
+
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    settings.showMenuBarIcon = true
+    return true
+  }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     // The bundle sets LSUIElement; this also keeps the Dock icon away when run unbundled.
@@ -70,6 +84,16 @@ struct SettingsMenu: View {
       }
 
       Divider()
+
+      VStack(alignment: .leading, spacing: 4) {
+        Toggle(
+          "Hide menu bar icon",
+          isOn: Binding(
+            get: { !settings.showMenuBarIcon }, set: { settings.showMenuBarIcon = !$0 }))
+        Text("Open topNV again to bring it back.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
 
       Button("Quit topNV") { NSApp.terminate(nil) }
         .keyboardShortcut("q")

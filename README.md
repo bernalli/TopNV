@@ -33,6 +33,8 @@ Click the menu-bar icon:
   display only).
 - **Launch at login**: registers the app as a login item. If macOS asks for approval, allow
   it in System Settings > General > Login Items.
+- **Hide menu bar icon**: hide the icon while topNV keeps running. Open topNV again to
+  bring it back.
 - **Quit topNV**.
 
 ## Build and install
