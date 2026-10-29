@@ -163,19 +163,22 @@ func roundedRect(_ rect: CGRect, radius: CGFloat) -> CGPath {
 
 // MARK: - App icon
 
-/// Level of detail, chosen from the output pixel size so small icons stay legible.
-enum Detail {
-  case tiny  // 16 and 32 px: bold shapes only
-  case small  // 64 px: no menu items, no dashed notch
-  case full  // 128 px and up
-
-  init(pixels: Int) {
-    if pixels <= 32 { self = .tiny } else if pixels < 128 { self = .small } else { self = .full }
-  }
+/// Geometry of the app icon in the 1024x1024 y-down design space.
+enum IconGrid {
+  /// Body: macOS grid, 824x824 centred on the 1024 canvas.
+  static let body = CGRect(x: 100, y: 100, width: 824, height: 824)
+  static let cornerRadius: CGFloat = 185
+  /// Bottom edge of the black band (29% of the body height).
+  static let bandBottom = body.minY + (body.height * 0.29).rounded()
+  /// Radius of the rounded screen corners tucked under the band.
+  static let filletRadius = (body.width * 0.095).rounded()
+  /// How far black shapes reach past the body, so only the squircle mask defines the outline.
+  static let bleed: CGFloat = 24
 }
 
-/// Draws the aurora wallpaper inside `rect`. The caller sets up the clip.
-func drawWallpaper(_ ctx: CGContext, in rect: CGRect, scale: CGFloat, detail: Detail) {
+/// Draws the wallpaper with its gradient laid out on `rect`: deep indigo at the
+/// bottom-left flowing to magenta and warm orange at the top-right.
+func drawWallpaper(_ ctx: CGContext, in rect: CGRect) {
   let w = rect.width
   let h = rect.height
   func at(_ fx: CGFloat, _ fy: CGFloat) -> CGPoint {
@@ -183,233 +186,117 @@ func drawWallpaper(_ ctx: CGContext, in rect: CGRect, scale: CGFloat, detail: De
   }
 
   if let base = linearGradient([
-    (0.00, color(0x0A1650)),
-    (0.40, color(0x2C1B86)),
-    (0.70, color(0x7A2B94)),
-    (0.88, color(0xD8507E)),
-    (1.00, color(0xFF9A5C)),
+    (0.00, color(0x140F52)),
+    (0.30, color(0x3A2397)),
+    (0.56, color(0x8E2FA6)),
+    (0.78, color(0xE04E86)),
+    (1.00, color(0xFFA25A)),
   ]) {
     ctx.drawLinearGradient(
-      base, start: at(0.05, 0), end: at(0.95, 1.1),
+      base, start: at(0, 1), end: at(1, 0),
       options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
   }
 
-  glow(ctx, center: at(0.22, 0.30), radius: 0.55 * w, hex: 0x29E3C1, alpha: 0.55)
-  glow(ctx, center: at(0.78, 0.50), radius: 0.45 * w, hex: 0xFF4FA3, alpha: 0.42)
-  glow(ctx, center: at(0.92, 1.05), radius: 0.50 * w, hex: 0xFFC46B, alpha: 0.65)
-  glow(ctx, center: at(0.05, 0.95), radius: 0.40 * w, hex: 0x3D6BFF, alpha: 0.45)
+  // Soft light pooling in the warm corner and a cool haze in the deep one.
+  glow(ctx, center: at(0.95, 0.02), radius: 0.62 * w, hex: 0xFFC27A, alpha: 0.38)
+  glow(ctx, center: at(0.08, 0.98), radius: 0.55 * w, hex: 0x4C3BFF, alpha: 0.30)
+}
 
-  // Aurora ribbon: a glowing stroke sweeping across the sky.
-  if detail != .tiny {
-    let ribbon = CGMutablePath()
-    ribbon.move(to: at(-0.08, 0.70))
-    ribbon.addCurve(to: at(1.08, 0.18), control1: at(0.30, 0.05), control2: at(0.62, 0.85))
-    ctx.saveGState()
-    ctx.setLineCap(.round)
-    // Only the blurred shadow of the stroke is painted: the stroke itself is drawn far
-    // outside the clip and the shadow offset brings the blur back in place. This gives a
-    // soft band of light with no hard edges. Shadow offsets live in device pixels.
-    let shift: CGFloat = 4 * w
-    var moveAway = CGAffineTransform(translationX: shift, y: 0)
-    guard let farRibbon = ribbon.copy(using: &moveAway) else {
-      ctx.restoreGState()
-      return
-    }
-    let passes: [(width: CGFloat, blur: CGFloat, hex: UInt32, alpha: CGFloat)] = [
-      (0.16, 90, 0x3DFFC8, 0.55),
-      (0.06, 34, 0x9DFFE6, 0.60),
-      (0.015, 10, 0xEFFFFA, 0.55),
-    ]
-    for pass in passes {
-      ctx.setShadow(
-        offset: CGSize(width: -shift * scale, height: 0), blur: pass.blur * scale,
-        color: color(pass.hex, pass.alpha))
-      ctx.setStrokeColor(color(0xFFFFFF))
-      ctx.setLineWidth(pass.width * h)
-      ctx.addPath(farRibbon)
-      ctx.strokePath()
-    }
-    ctx.restoreGState()
+/// Renders the screen face (wallpaper, black band, rounded corners) with no outline.
+///
+/// The face is drawn unclipped and masked by the squircle in a single step afterwards:
+/// two anti-aliased fills on the same clip edge would leave a tinted fringe on the rim.
+func renderScreen(pixels: Int) throws -> CGImage {
+  let ctx = try makeContext(width: pixels, height: pixels)
+  flipToTopLeft(ctx, height: pixels)
+  ctx.scaleBy(x: CGFloat(pixels) / 1024, y: CGFloat(pixels) / 1024)
+
+  let body = IconGrid.body
+  let bandBottom = IconGrid.bandBottom
+  let radius = IconGrid.filletRadius
+  let bleed = IconGrid.bleed
+
+  drawWallpaper(
+    ctx, in: CGRect(x: body.minX, y: bandBottom, width: body.width, height: body.maxY - bandBottom))
+
+  ctx.setFillColor(color(0x000000))
+  ctx.fill(
+    CGRect(
+      x: body.minX - bleed, y: body.minY - bleed,
+      width: body.width + 2 * bleed, height: bandBottom - body.minY + bleed))
+
+  // Each fillet is a black square with a quarter disc cut out, tangent to the band and to
+  // the body edge. It overlaps the band slightly so the two never show a seam.
+  for side in [CGFloat(-1), 1] {
+    let edgeX = side < 0 ? body.minX : body.maxX
+    let inner = edgeX - side * radius
+    let fillet = CGMutablePath()
+    fillet.move(to: CGPoint(x: edgeX + side * bleed, y: bandBottom - 2))
+    fillet.addLine(to: CGPoint(x: inner, y: bandBottom - 2))
+    fillet.addLine(to: CGPoint(x: inner, y: bandBottom))
+    fillet.addArc(
+      tangent1End: CGPoint(x: edgeX, y: bandBottom),
+      tangent2End: CGPoint(x: edgeX, y: bandBottom + radius), radius: radius)
+    fillet.addLine(to: CGPoint(x: edgeX + side * bleed, y: bandBottom + radius))
+    fillet.closeSubpath()
+    ctx.addPath(fillet)
+    ctx.fillPath()
   }
 
-  // Soft glass sheen from the top-left.
-  if let sheen = linearGradient([(0, color(0xFFFFFF, 0.08)), (0.45, color(0xFFFFFF, 0.0))]) {
-    ctx.drawLinearGradient(sheen, start: at(0, 0), end: at(0.55, 0.9), options: [])
-  }
+  guard let image = ctx.makeImage() else { throw RenderError.image("icon face \(pixels)px") }
+  return image
 }
 
 /// Draws the whole icon in a 1024x1024 y-down design space, scaled by `scale`.
-func drawIcon(_ ctx: CGContext, scale s: CGFloat, detail: Detail) {
+///
+/// The squircle is the screen: a black band across the top (the hidden notch area) and,
+/// just below it, two concave black fillets that round the visible corners of the screen.
+func drawIcon(_ ctx: CGContext, scale s: CGFloat, screen: CGImage) {
   ctx.saveGState()
   ctx.scaleBy(x: s, y: s)
 
-  // Body: macOS grid, 824x824 centred on the 1024 canvas.
-  let body = CGRect(x: 100, y: 100, width: 824, height: 824)
-  let bodyPath = continuousRoundedRect(body, radius: 185)
+  let body = IconGrid.body
+  let bodyPath = continuousRoundedRect(body, radius: IconGrid.cornerRadius)
 
+  // One transparency layer, so the drop shadow is cast by the finished icon.
   ctx.saveGState()
-  let shadowBlur: CGFloat = detail == .tiny ? 14 : 28
-  let shadowY: CGFloat = detail == .tiny ? 6 : 12
   ctx.setShadow(
-    offset: CGSize(width: 0, height: -shadowY * s), blur: shadowBlur * s,
-    color: color(0x000000, 0.38))
-  ctx.setFillColor(color(0xE4E8F1))
-  ctx.addPath(bodyPath)
-  ctx.fillPath()
-  ctx.restoreGState()
+    offset: CGSize(width: 0, height: -12 * s), blur: 28 * s, color: color(0x000000, 0.38))
+  ctx.beginTransparencyLayer(auxiliaryInfo: nil)
 
   ctx.saveGState()
   ctx.addPath(bodyPath)
   ctx.clip()
-  if let g = linearGradient([(0, color(0xFBFCFF)), (1, color(0xC9D0DF))]) {
-    ctx.drawLinearGradient(
-      g, start: CGPoint(x: 512, y: 100), end: CGPoint(x: 512, y: 924), options: [])
-  }
+
+  // The context is y-down; the image must be drawn in a y-up frame to stay upright.
+  ctx.saveGState()
+  ctx.translateBy(x: 0, y: 1024)
+  ctx.scaleBy(x: 1, y: -1)
+  ctx.draw(screen, in: CGRect(x: 0, y: 0, width: 1024, height: 1024))
   ctx.restoreGState()
 
-  // Geometry of the laptop. Small sizes get a larger display and thicker parts.
-  let tiny = detail == .tiny
-  let display =
-    tiny
-    ? CGRect(x: 150, y: 228, width: 724, height: 520)
-    : CGRect(x: 168, y: 254, width: 688, height: 476)
-  let rim: CGFloat = tiny ? 0 : 5
-  let bezel: CGFloat = tiny ? 26 : 20
-  let displayRadius: CGFloat = tiny ? 44 : 34
-  let baseHeight: CGFloat = tiny ? 44 : 30
-  let baseOverhang: CGFloat = tiny ? 34 : 38
-
-  // Lower deck of the laptop, drawn first so the display sits on top of its hinge.
-  let base = CGRect(
-    x: display.minX - baseOverhang, y: display.maxY - 4,
-    width: display.width + 2 * baseOverhang, height: baseHeight + 4)
-  let basePath = CGMutablePath()
-  let br = baseHeight * 0.55
-  basePath.move(to: CGPoint(x: base.minX, y: base.minY))
-  basePath.addLine(to: CGPoint(x: base.maxX, y: base.minY))
-  basePath.addLine(to: CGPoint(x: base.maxX, y: base.maxY - br))
-  basePath.addQuadCurve(
-    to: CGPoint(x: base.maxX - br * 2.2, y: base.maxY),
-    control: CGPoint(x: base.maxX - br * 0.15, y: base.maxY))
-  basePath.addLine(to: CGPoint(x: base.minX + br * 2.2, y: base.maxY))
-  basePath.addQuadCurve(
-    to: CGPoint(x: base.minX, y: base.maxY - br),
-    control: CGPoint(x: base.minX + br * 0.15, y: base.maxY))
-  basePath.closeSubpath()
-
-  ctx.saveGState()
-  ctx.setShadow(
-    offset: CGSize(width: 0, height: -6 * s), blur: 16 * s, color: color(0x1B2240, 0.30))
-  ctx.setFillColor(color(0xA9AFBC))
-  ctx.addPath(basePath)
-  ctx.fillPath()
-  ctx.restoreGState()
-  ctx.saveGState()
-  ctx.addPath(basePath)
+  // Faint highlight on the top rim, fading out well before the band ends.
+  ctx.addPath(bodyPath)
+  ctx.setLineWidth(6)
+  ctx.replacePathWithStrokedPath()
   ctx.clip()
-  if let g = linearGradient([(0, color(0xF1F3F7)), (0.35, color(0xC7CCD6)), (1, color(0x868C9A))]) {
+  if let rim = linearGradient([(0, color(0xFFFFFF, 0.20)), (1, color(0xFFFFFF, 0))]) {
     ctx.drawLinearGradient(
-      g, start: CGPoint(x: 0, y: base.minY), end: CGPoint(x: 0, y: base.maxY), options: [])
-  }
-  if !tiny {
-    // Thumb notch on the front edge of the deck.
-    let notch = CGRect(x: 512 - 62, y: base.minY + 4, width: 124, height: 10)
-    ctx.setFillColor(color(0x7D8392, 0.85))
-    ctx.addPath(roundedRect(notch, radius: 5))
-    ctx.fillPath()
+      rim, start: CGPoint(x: 0, y: body.minY), end: CGPoint(x: 0, y: body.minY + 200), options: [])
   }
   ctx.restoreGState()
 
-  // Display: thin aluminium rim, black bezel, black glass.
-  let displayPath = continuousRoundedRect(display, radius: displayRadius)
-  ctx.saveGState()
-  ctx.setShadow(
-    offset: CGSize(width: 0, height: -8 * s), blur: 22 * s, color: color(0x141A33, 0.35))
-  ctx.setFillColor(color(0xB3B8C3))
-  ctx.addPath(displayPath)
-  ctx.fillPath()
+  ctx.endTransparencyLayer()
   ctx.restoreGState()
-
-  let bezelRect = display.insetBy(dx: rim, dy: rim)
-  ctx.setFillColor(color(0x17181C))
-  ctx.addPath(continuousRoundedRect(bezelRect, radius: displayRadius - rim))
-  ctx.fillPath()
-
-  let glass = display.insetBy(dx: rim + bezel, dy: rim + bezel)
-  ctx.setFillColor(color(0x000000))
-  ctx.addPath(roundedRect(glass, radius: tiny ? 10 : 12))
-  ctx.fillPath()
-
-  // Black menu bar band and rounded desktop below it.
-  let bandHeight = (glass.height * (tiny ? 0.24 : 0.205)).rounded()
-  let desktop = CGRect(
-    x: glass.minX, y: glass.minY + bandHeight, width: glass.width, height: glass.height - bandHeight
-  )
-  let desktopPath = continuousRoundedRect(desktop, radius: tiny ? 52 : 44)
-
-  ctx.saveGState()
-  ctx.addPath(desktopPath)
-  ctx.clip()
-  drawWallpaper(ctx, in: desktop, scale: s, detail: detail)
-  ctx.restoreGState()
-
-  if detail == .full {
-    // Hint of the hidden notch: a faint dashed outline inside the band.
-    let notchWidth: CGFloat = 112
-    let notchHeight = bandHeight * 0.74
-    let nx = glass.midX - notchWidth / 2
-    let ny = glass.minY
-    let nr: CGFloat = 16
-    let notch = CGMutablePath()
-    notch.move(to: CGPoint(x: nx, y: ny + 2))
-    notch.addLine(to: CGPoint(x: nx, y: ny + notchHeight - nr))
-    notch.addQuadCurve(
-      to: CGPoint(x: nx + nr, y: ny + notchHeight), control: CGPoint(x: nx, y: ny + notchHeight))
-    notch.addLine(to: CGPoint(x: nx + notchWidth - nr, y: ny + notchHeight))
-    notch.addQuadCurve(
-      to: CGPoint(x: nx + notchWidth, y: ny + notchHeight - nr),
-      control: CGPoint(x: nx + notchWidth, y: ny + notchHeight))
-    notch.addLine(to: CGPoint(x: nx + notchWidth, y: ny + 2))
-    ctx.saveGState()
-    ctx.setStrokeColor(color(0xFFFFFF, 0.38))
-    ctx.setLineWidth(3)
-    ctx.setLineCap(.round)
-    ctx.setLineDash(phase: 0, lengths: [9, 8])
-    ctx.addPath(notch)
-    ctx.strokePath()
-    ctx.restoreGState()
-
-    // Menu bar items: short light bars left and right of the hidden notch.
-    let itemHeight = (bandHeight * 0.20).rounded()
-    let itemY = glass.minY + (bandHeight - itemHeight) / 2
-    var x = glass.minX + 30
-    for (i, width) in [CGFloat(22), 50, 38, 44].enumerated() {
-      ctx.setFillColor(color(0xFFFFFF, i == 1 ? 0.78 : 0.52))
-      ctx.addPath(
-        roundedRect(
-          CGRect(x: x, y: itemY, width: width, height: itemHeight), radius: itemHeight / 2))
-      ctx.fillPath()
-      x += width + 16
-    }
-    x = glass.maxX - 30
-    for width in [CGFloat(58), 22, 22, 32] {
-      x -= width
-      ctx.setFillColor(color(0xFFFFFF, 0.52))
-      ctx.addPath(
-        roundedRect(
-          CGRect(x: x, y: itemY, width: width, height: itemHeight), radius: itemHeight / 2))
-      ctx.fillPath()
-      x -= 16
-    }
-  }
 
   ctx.restoreGState()
 }
 
 func renderIcon(pixels: Int) throws -> CGImage {
+  let screen = try renderScreen(pixels: pixels)
   let ctx = try makeContext(width: pixels, height: pixels)
   flipToTopLeft(ctx, height: pixels)
-  drawIcon(ctx, scale: CGFloat(pixels) / 1024, detail: Detail(pixels: pixels))
+  drawIcon(ctx, scale: CGFloat(pixels) / 1024, screen: screen)
   guard let image = ctx.makeImage() else { throw RenderError.image("icon \(pixels)px") }
   return image
 }
