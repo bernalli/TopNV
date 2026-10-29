@@ -4,13 +4,16 @@ import Foundation
 @MainActor
 final class AppSettings: ObservableObject {
   static let radiusRange: ClosedRange<Double> = 0...30
+  /// Read directly through `@AppStorage`: the menu bar scene must not observe this object,
+  /// or `MenuBarExtra(isInserted:)` publishes during the scene update and the menu stops opening.
+  nonisolated static let showMenuBarIconKey = "showMenuBarIcon"
 
   private enum Key {
     static let hideNotch = "hideNotch"
     static let roundCorners = "roundCorners"
     static let cornerRadius = "cornerRadius"
     static let cornersOnAllDisplays = "cornersOnAllDisplays"
-    static let showMenuBarIcon = "showMenuBarIcon"
+    static let showMenuBarIcon = AppSettings.showMenuBarIconKey
   }
 
   private enum Default {
@@ -40,10 +43,6 @@ final class AppSettings: ObservableObject {
     didSet { defaults.set(cornersOnAllDisplays, forKey: Key.cornersOnAllDisplays) }
   }
 
-  @Published var showMenuBarIcon: Bool {
-    didSet { defaults.set(showMenuBarIcon, forKey: Key.showMenuBarIcon) }
-  }
-
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
     defaults.register(defaults: [
@@ -58,6 +57,5 @@ final class AppSettings: ObservableObject {
     let storedRadius = defaults.double(forKey: Key.cornerRadius)
     cornerRadius = min(max(storedRadius, Self.radiusRange.lowerBound), Self.radiusRange.upperBound)
     cornersOnAllDisplays = defaults.bool(forKey: Key.cornersOnAllDisplays)
-    showMenuBarIcon = defaults.bool(forKey: Key.showMenuBarIcon)
   }
 }

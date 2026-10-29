@@ -4,19 +4,11 @@ import SwiftUI
 @main
 struct TopNVApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+  @AppStorage(AppSettings.showMenuBarIconKey) private var showMenuBarIcon = true
 
   var body: some Scene {
-    MenuBarScene(settings: appDelegate.settings, loginItem: appDelegate.loginItem)
-  }
-}
-
-private struct MenuBarScene: Scene {
-  @ObservedObject var settings: AppSettings
-  let loginItem: LoginItem
-
-  var body: some Scene {
-    MenuBarExtra(isInserted: $settings.showMenuBarIcon) {
-      SettingsMenu(settings: settings, loginItem: loginItem)
+    MenuBarExtra(isInserted: $showMenuBarIcon) {
+      SettingsMenu(settings: appDelegate.settings, loginItem: appDelegate.loginItem)
     } label: {
       MenuBarLabel()
     }
@@ -49,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var overlay: OverlayController?
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    settings.showMenuBarIcon = true
+    UserDefaults.standard.set(true, forKey: AppSettings.showMenuBarIconKey)
     return true
   }
 
@@ -65,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct SettingsMenu: View {
   @ObservedObject var settings: AppSettings
   @ObservedObject var loginItem: LoginItem
+  @AppStorage(AppSettings.showMenuBarIconKey) private var showMenuBarIcon = true
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
@@ -109,7 +102,7 @@ struct SettingsMenu: View {
         Toggle(
           "Hide menu bar icon",
           isOn: Binding(
-            get: { !settings.showMenuBarIcon }, set: { settings.showMenuBarIcon = !$0 }))
+            get: { !showMenuBarIcon }, set: { showMenuBarIcon = !$0 }))
         Text("Open topNV again to bring it back.")
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -121,6 +114,7 @@ struct SettingsMenu: View {
     .toggleStyle(.switch)
     .padding(14)
     .frame(width: 260)
-    .onAppear { loginItem.refresh() }
+    // Deferred: publishing while the menu window is being laid out is not allowed.
+    .onAppear { Task { @MainActor in loginItem.refresh() } }
   }
 }
