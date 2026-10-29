@@ -45,13 +45,19 @@ public enum ScreenGeometry {
   }
 
   /// The four square corner rectangles (side = radius) for a screen.
-  /// Returns an empty dictionary when the radius is zero or negative (no windows needed).
-  public static func cornerRects(frame: CGRect, radius: CGFloat) -> [ScreenCorner: CGRect] {
-    let side = effectiveRadius(radius, frame: frame)
+  /// Top corners start below `topInset`; negative or non-finite insets are treated as zero.
+  /// Returns an empty dictionary when the radius or remaining height is zero (no windows needed).
+  public static func cornerRects(
+    frame: CGRect, radius: CGFloat, topInset: CGFloat = 0
+  ) -> [ScreenCorner: CGRect] {
+    let inset = topInset.isFinite ? max(topInset, 0) : 0
+    var usableFrame = frame
+    usableFrame.size.height = max(0, frame.height - inset)
+    let side = effectiveRadius(radius, frame: usableFrame)
     guard side > 0 else { return [:] }
     return [
-      .topLeft: CGRect(x: frame.minX, y: frame.maxY - side, width: side, height: side),
-      .topRight: CGRect(x: frame.maxX - side, y: frame.maxY - side, width: side, height: side),
+      .topLeft: CGRect(x: frame.minX, y: frame.maxY - inset - side, width: side, height: side),
+      .topRight: CGRect(x: frame.maxX - side, y: frame.maxY - inset - side, width: side, height: side),
       .bottomLeft: CGRect(x: frame.minX, y: frame.minY, width: side, height: side),
       .bottomRight: CGRect(x: frame.maxX - side, y: frame.minY, width: side, height: side),
     ]

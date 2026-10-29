@@ -74,11 +74,12 @@ final class OverlayController: NSObject {
     for screen in NSScreen.screens {
       guard let displayID = screen.displayID else { continue }
 
-      if settings.hideNotch,
-        let rect = ScreenGeometry.barRect(
+      let barRect = settings.hideNotch
+        ? ScreenGeometry.barRect(
           frame: screen.frame, visibleFrame: screen.visibleFrame,
           safeAreaTop: screen.safeAreaInsets.top)
-      {
+        : nil
+      if let rect = barRect {
         let key = "\(displayID).bar"
         desiredKeys.insert(key)
         show(key: key, frame: rect) { BarWindow(frame: rect) }
@@ -89,7 +90,8 @@ final class OverlayController: NSObject {
         && (settings.cornersOnAllDisplays || CGDisplayIsBuiltin(displayID) != 0)
       if wantsCorners {
         let rects = ScreenGeometry.cornerRects(
-          frame: screen.frame, radius: CGFloat(settings.cornerRadius))
+          frame: screen.frame, radius: CGFloat(settings.cornerRadius),
+          topInset: barRect?.height ?? 0)
         for (corner, rect) in rects {
           let key = "\(displayID).\(corner.rawValue)"
           desiredKeys.insert(key)

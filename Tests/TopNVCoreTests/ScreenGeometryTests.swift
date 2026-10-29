@@ -61,6 +61,53 @@ final class ScreenGeometryTests: XCTestCase {
     XCTAssertEqual(rects[.bottomRight], CGRect(x: 1502, y: 0, width: 10, height: 10))
   }
 
+  func testTopCornersStartBelowTheBar() {
+    let rects = ScreenGeometry.cornerRects(frame: notchedFrame, radius: 10, topInset: 37)
+    XCTAssertEqual(rects.count, 4)
+    XCTAssertEqual(rects[.topLeft], CGRect(x: 0, y: 935, width: 10, height: 10))
+    XCTAssertEqual(rects[.topRight], CGRect(x: 1502, y: 935, width: 10, height: 10))
+    XCTAssertEqual(rects[.topLeft]?.maxY, notchedFrame.maxY - 37)
+    XCTAssertEqual(rects[.topRight]?.maxY, notchedFrame.maxY - 37)
+  }
+
+  func testZeroTopInsetKeepsCornersAtTheScreenEdges() {
+    let rects = ScreenGeometry.cornerRects(frame: notchedFrame, radius: 10, topInset: 0)
+    XCTAssertEqual(rects[.topLeft], CGRect(x: 0, y: 972, width: 10, height: 10))
+    XCTAssertEqual(rects[.topRight], CGRect(x: 1502, y: 972, width: 10, height: 10))
+  }
+
+  func testTopInsetLeavesBottomCornersUnchanged() {
+    let rects = ScreenGeometry.cornerRects(frame: notchedFrame, radius: 10, topInset: 37)
+    XCTAssertEqual(rects[.bottomLeft], CGRect(x: 0, y: 0, width: 10, height: 10))
+    XCTAssertEqual(rects[.bottomRight], CGRect(x: 1502, y: 0, width: 10, height: 10))
+  }
+
+  func testTopInsetClampsRadiusToRemainingHeight() {
+    let frame = CGRect(x: -100, y: 200, width: 100, height: 40)
+    let rects = ScreenGeometry.cornerRects(frame: frame, radius: 30, topInset: 30)
+    XCTAssertEqual(rects[.topLeft], CGRect(x: -100, y: 205, width: 5, height: 5))
+    XCTAssertEqual(rects[.topRight], CGRect(x: -5, y: 205, width: 5, height: 5))
+    XCTAssertEqual(rects[.bottomLeft], CGRect(x: -100, y: 200, width: 5, height: 5))
+    XCTAssertEqual(rects[.bottomRight], CGRect(x: -5, y: 200, width: 5, height: 5))
+  }
+
+  func testTopInsetCoveringScreenProducesNoWindows() {
+    for inset in [notchedFrame.height, notchedFrame.height + 100] {
+      let rects = ScreenGeometry.cornerRects(frame: notchedFrame, radius: 10, topInset: inset)
+      XCTAssertTrue(rects.isEmpty)
+    }
+  }
+
+  func testInvalidTopInsetsAreTreatedAsZero() {
+    for inset: CGFloat in [-37, .nan, .infinity, -.infinity] {
+      let rects = ScreenGeometry.cornerRects(frame: notchedFrame, radius: 10, topInset: inset)
+      XCTAssertEqual(rects[.topLeft], CGRect(x: 0, y: 972, width: 10, height: 10))
+      XCTAssertEqual(rects[.topRight], CGRect(x: 1502, y: 972, width: 10, height: 10))
+      XCTAssertEqual(rects[.bottomLeft], CGRect(x: 0, y: 0, width: 10, height: 10))
+      XCTAssertEqual(rects[.bottomRight], CGRect(x: 1502, y: 0, width: 10, height: 10))
+    }
+  }
+
   func testCornerRectsOnScreenWithNonZeroOrigin() {
     let frame = CGRect(x: 1512, y: -98, width: 1920, height: 1080)  // maxX 3432, maxY 982
     let rects = ScreenGeometry.cornerRects(frame: frame, radius: 10)
