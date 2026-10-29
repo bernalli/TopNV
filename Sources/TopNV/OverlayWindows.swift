@@ -5,8 +5,8 @@ enum OverlayLevel {
   /// Right above the wallpaper and below every other window, so the system menu bar draws
   /// on top of the black bar and stays readable and clickable.
   static let bar = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) + 1)
-  /// Above the menu bar, the Dock and pop-up menus, so the rounded corners are always visible.
-  static let corner = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.overlayWindow)))
+  /// Above the Dock and normal windows, below pop-up menus so menu-bar dropdowns stay uncovered.
+  static let corner = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue - 1)
 }
 
 /// A borderless, click-through window that is present on every Space and never takes focus.
