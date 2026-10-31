@@ -39,6 +39,17 @@ Click the menu-bar icon:
   bring it back.
 - **Quit topNV**.
 
+## Download
+
+Download `topNV-<version>.dmg` from the
+[latest release](https://github.com/bernalli/topNV/releases/latest), open it and drag
+**topNV** into **Applications**.
+
+topNV is signed ad hoc, not notarized. The first time, right-click the app in Applications
+and choose **Open**, then confirm (or allow it in System Settings > Privacy & Security).
+
+Requires macOS 14 or later.
+
 ## Build and install
 
 Requirements: macOS 14 or later, Xcode command-line tools with Swift 5.9 or later.
@@ -52,6 +63,18 @@ open /Applications/topNV.app
 `scripts/bundle.sh` builds the release executable with SwiftPM, assembles
 `build/topNV.app` and signs it ad hoc. To bundle an executable you already built (for
 example with `xcodebuild`), set `TOPNV_EXECUTABLE` to its path.
+
+To pack the app into a disk image, run `scripts/make-dmg.sh` after `scripts/bundle.sh`; it
+writes `build/topNV.dmg`.
+
+## Publish a release
+
+The `Release` workflow (`.github/workflows/release.yml`) builds a universal app, packs it into
+a DMG and publishes it as a GitHub Release. Start it in one of two ways:
+
+- push a tag such as `v1.0.0`, or
+- in the Actions tab, open **Release**, click **Run workflow** and enter a version such as
+  `1.0.0`; the workflow creates the tag `v1.0.0`.
 
 Run the tests with `swift test`, or with
 `xcodebuild -scheme topNV -destination 'platform=macOS' test`.

@@ -4,13 +4,15 @@
 # Usage: scripts/bundle.sh [extra swift build flags]
 # Set TOPNV_EXECUTABLE to the path of an already built release executable to skip the
 # SwiftPM build (for example one produced by xcodebuild).
+# Set TOPNV_VERSION and TOPNV_BUILD_NUMBER to override the bundle version (used by the release
+# workflow). Pass "--arch arm64 --arch x86_64" to build a universal app.
 set -euo pipefail
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly APP_NAME="topNV"
 readonly BUNDLE_ID="io.github.bernalli.topnv"
-readonly VERSION="1.0.0"
-readonly BUILD_NUMBER="1"
+readonly VERSION="${TOPNV_VERSION:-1.0.0}"
+readonly BUILD_NUMBER="${TOPNV_BUILD_NUMBER:-1}"
 readonly MIN_MACOS="14.0"
 readonly APP_DIR="$ROOT/build/$APP_NAME.app"
 
