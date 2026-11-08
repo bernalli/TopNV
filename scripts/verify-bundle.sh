@@ -21,7 +21,9 @@ then fail 'V5: invalid framework version or binary'; fi
 for entry in Versions/Current Sparkle Autoupdate Updater.app XPCServices Resources Headers Modules PrivateHeaders; do
   [[ -L "$FRAMEWORK/$entry" && -e "$FRAMEWORK/$entry" ]] || fail "V6: invalid symlink $entry"
 done
-otool -l "$APP/Contents/MacOS/TopNV" 2>/dev/null | grep -Fq 'path @executable_path/../Frameworks (offset ' || fail 'V7: missing rpath'
+# Capture first: grep -q stops reading early, and under pipefail the SIGPIPE to otool reads as failure.
+load_commands="$(otool -l "$APP/Contents/MacOS/TopNV" 2>/dev/null)" || load_commands=''
+[[ "$load_commands" == *'path @executable_path/../Frameworks (offset '* ]] || fail 'V7: missing rpath'
 codesign --verify --deep --strict "$APP" >/dev/null 2>&1 || fail 'V8: signature verification failed'
 SIGNATURE=$(codesign -dv --verbose=4 "$APP" 2>&1) || fail 'V9: signature metadata unavailable'
 if [[ "$SIGNATURE" != *'Signature=adhoc'* || "$SIGNATURE" == *runtime* ]]; then fail 'V9: outer signature must be ad hoc without runtime'; fi

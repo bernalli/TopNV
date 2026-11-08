@@ -56,7 +56,9 @@ cp "$ROOT/Assets/AppIcon.icns" "$ROOT/Assets/MenuBarIcon.png" "$ROOT/Assets/Menu
   "$ROOT/Assets/GitHubMark.png" "$ROOT/Assets/GitHubMark@2x.png" \
   "$APP_DIR/Contents/Resources/"
 
-if ! otool -l "$APP_DIR/Contents/MacOS/$APP_NAME" | grep -Fq "path @executable_path/../Frameworks (offset "; then
+# Capture first: grep -q stops reading early, and under pipefail the SIGPIPE to otool reads as failure.
+LOAD_COMMANDS="$(otool -l "$APP_DIR/Contents/MacOS/$APP_NAME")"
+if [[ "$LOAD_COMMANDS" != *"path @executable_path/../Frameworks (offset "* ]]; then
   install_name_tool -add_rpath @executable_path/../Frameworks "$APP_DIR/Contents/MacOS/$APP_NAME"
 fi
 

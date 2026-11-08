@@ -117,6 +117,9 @@ def run_tests(kind):
         for name, script, code in [('otool','exit 0','V7'),('codesign','exit 1','V8'),('codesign','echo "flags=0x10000(runtime)" >&2','V9'),('lipo','echo arm64','V10'),('plutil','exit 1','V0')]:
             (bindir/name).write_text('#!/bin/bash\n'+script+'\n'); verify(code)
             (bindir/name).write_text('#!/bin/bash\n'+responses[name]+'\n')
+        # A long listing must not turn an early grep match into a false failure under pipefail.
+        (bindir/'otool').write_text('#!/bin/bash\n'+responses['otool']+'\nexec /usr/bin/seq 1 200000\n'); verify()
+        (bindir/'otool').write_text('#!/bin/bash\n'+responses['otool']+'\n')
         verify(); print('PASS verifier V0-V13 mutations')
 
 run_tests(sys.argv[1])
