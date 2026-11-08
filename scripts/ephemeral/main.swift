@@ -80,6 +80,8 @@ do {
   let publicKey = key.publicKey.rawRepresentation.base64EncodedString()
   info["SUPublicEDKey"] = publicKey
   let feed = try Data(contentsOf: appcast)
+  // The feed holds only a signature from the disposable key: show it to diagnose format changes.
+  FileHandle.standardError.write(feed)
   let payload = try Data(contentsOf: dmg)
   func validate(_ feed: Data, _ publicKey: String) throws {
     try ReleaseValidator.feed(
