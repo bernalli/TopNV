@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Packs build/topNV.app into build/topNV.dmg: a compressed disk image with the app and a
+# Packs build/TopNV.app into build/TopNV.dmg: a compressed disk image with the app and a
 # link to /Applications, so it can be installed by dragging the icon.
 #
 # Usage: scripts/make-dmg.sh [output.dmg]
@@ -7,7 +7,7 @@
 set -euo pipefail
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly APP_NAME="topNV"
+readonly APP_NAME="TopNV"
 readonly APP_DIR="$ROOT/build/$APP_NAME.app"
 readonly DMG_PATH="${1:-$ROOT/build/$APP_NAME.dmg}"
 

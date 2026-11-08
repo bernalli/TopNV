@@ -8,7 +8,7 @@ final class LoginItem: ObservableObject {
   @Published private(set) var isEnabled = false
   /// True when the user still has to allow the app in System Settings.
   @Published private(set) var needsApproval = false
-  /// The last registration error, shown in the menu until the next successful change.
+  /// The last registration error, shown in Options until the next successful change.
   @Published private(set) var errorMessage: String?
 
   init() {

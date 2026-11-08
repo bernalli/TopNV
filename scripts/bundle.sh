@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds topNV in release mode and assembles an ad-hoc signed build/topNV.app.
+# Builds TopNV in release mode and assembles an ad-hoc signed build/TopNV.app.
 #
 # Usage: scripts/bundle.sh [extra swift build flags]
 # Set TOPNV_EXECUTABLE to the path of an already built release executable to skip the
@@ -9,12 +9,21 @@
 set -euo pipefail
 
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-readonly APP_NAME="topNV"
+readonly APP_NAME="TopNV"
 readonly BUNDLE_ID="io.github.bernalli.topnv"
-readonly VERSION="${TOPNV_VERSION:-1.0.0}"
+readonly VERSION="${TOPNV_VERSION:-1.1.0}"
 readonly BUILD_NUMBER="${TOPNV_BUILD_NUMBER:-1}"
 readonly MIN_MACOS="14.0"
 readonly APP_DIR="$ROOT/build/$APP_NAME.app"
+# The author's name lives only in AUTHORS, the single source of attribution.
+AUTHOR="$(head -n 1 "$ROOT/AUTHORS")"
+AUTHOR="$(printf '%s' "$AUTHOR" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+if [[ -z "$AUTHOR" ]]; then
+  echo "error: AUTHORS is empty" >&2
+  exit 1
+fi
+AUTHOR_XML="$(printf '%s' "$AUTHOR" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
+readonly AUTHOR AUTHOR_XML
 
 cd "$ROOT"
 if [[ -n "${TOPNV_EXECUTABLE:-}" ]]; then
@@ -32,6 +41,7 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$EXECUTABLE" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "$ROOT/Assets/AppIcon.icns" "$ROOT/Assets/MenuBarIcon.png" "$ROOT/Assets/MenuBarIcon@2x.png" \
+  "$ROOT/Assets/GitHubMark.png" "$ROOT/Assets/GitHubMark@2x.png" \
   "$APP_DIR/Contents/Resources/"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
@@ -59,6 +69,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <string>$VERSION</string>
   <key>CFBundleVersion</key>
   <string>$BUILD_NUMBER</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>Copyright (c) 2026 $AUTHOR_XML. All rights reserved.</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_MACOS</string>
   <key>LSUIElement</key>

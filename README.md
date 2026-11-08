@@ -1,93 +1,113 @@
-# topNV
-
-![topNV](Assets/cover.png)
-
-Hide the MacBook notch and round the screen corners (macOS menu bar app).
-
-topNV paints the menu-bar strip of every notched display black, so the notch blends into
-the bar. It can also round the four corners of the screen. It lives in the menu bar only
-(no Dock icon) and needs no Screen Recording or Accessibility permission.
-
-## How it works
-
-topNV never reads or changes the wallpaper. Instead it places a borderless, opaque, black,
-click-through window over the menu-bar strip, one window level above the desktop picture
-and below every other window. The system menu bar draws on top of that window, so it
-appears black with readable and clickable items.
-
-Because the wallpaper itself is untouched, this works with any wallpaper, including
-animated and dynamic ones, and it survives wallpaper changes without doing anything.
-
-Rounded corners are four small transparent windows per display, each with a black inverted
-quarter circle, placed above the menu bar and the Dock. They ignore the mouse.
-
-The overlay windows are rebuilt when displays change, when the active Space changes, after
-wake from sleep, and when a setting changes.
-
-## Settings
-
-Click the menu-bar icon:
-
-- **Hide notch**: black menu bar on notched displays (default on).
-- **Round corners**: rounded screen corners (default on).
-- **Corner radius**: 0 to 30 points, applied live (default 15).
-- **Corners on all displays**: round corners on external displays too (default: built-in
-  display only).
-- **Launch at login**: registers the app as a login item. If macOS asks for approval, allow
-  it in System Settings > General > Login Items.
-- **Hide menu bar icon**: hide the icon while topNV keeps running. Open topNV again to
-  bring it back.
-- **Quit topNV**.
+<div align="center">
+  <img src="Assets/cover.png" alt="TopNV" width="800">
+  <h1>TopNV</h1>
+  <p>Blend the MacBook notch into a black menu bar and give your display rounded corners.</p>
+  <p>
+    <a href="https://github.com/bernalli/topNV/releases/latest"><img src="https://img.shields.io/github/v/release/bernalli/topNV?label=release" alt="Latest release"></a>
+    <img src="https://img.shields.io/badge/macOS-14%2B-blue" alt="macOS 14 or later">
+  </p>
+</div>
 
 ## Download
 
-Download `topNV-<version>.dmg` from the
-[latest release](https://github.com/bernalli/topNV/releases/latest), open it and drag
-**topNV** into **Applications**.
+**[Download the latest release](https://github.com/bernalli/topNV/releases/latest)** · macOS 14 or later
 
-topNV is signed ad hoc, not notarized. The first time, right-click the app in Applications
-and choose **Open**, then confirm (or allow it in System Settings > Privacy & Security).
+Open `TopNV-<version>.dmg` and drag **TopNV** into **Applications**.
 
-Requires macOS 14 or later.
+TopNV is signed ad hoc, not notarized. On first launch, right-click the app in
+Applications and choose **Open**, then confirm. If macOS blocks it, allow it in
+**System Settings > Privacy & Security**.
 
-## Build and install
+## Features
 
-Requirements: macOS 14 or later, Xcode command-line tools with Swift 5.9 or later.
+- Hide the notch against a black menu-bar strip on notched displays.
+- Round the corners of the built-in display, or enable corners on all displays.
+- Choose a corner radius of 5, 10, 15, 20, 25 or 30 points.
+- Keep your wallpaper untouched, including dynamic and animated wallpapers.
+- Launch at login and optionally hide the menu-bar icon while the app keeps running.
 
-```sh
-scripts/bundle.sh
-mv build/topNV.app /Applications/
-open /Applications/topNV.app
-```
+There is no Dock icon. No Screen Recording or Accessibility permission is required.
+Hide Notch and Round Corners start enabled, with a 15-point radius on the built-in display.
+Your choices are saved automatically.
 
-`scripts/bundle.sh` builds the release executable with SwiftPM, assembles
-`build/topNV.app` and signs it ad hoc. To bundle an executable you already built (for
-example with `xcodebuild`), set `TOPNV_EXECUTABLE` to its path.
+## Menu
 
-To pack the app into a disk image, run `scripts/make-dmg.sh` after `scripts/bundle.sh`; it
-writes `build/topNV.dmg`.
+Click the menu-bar icon to see the current configuration and change it directly.
 
-## Publish a release
+| Item | What it does |
+| --- | --- |
+| Hide Notch | Turn the black menu-bar strip on or off. |
+| Round Corners | Turn corner overlays on or off. |
+| Corner Radius | Select a preset. A stored non-preset value remains selected as **Custom**, without rounding it to a preset. |
+| Details | Show the stored radius, selected display scope and system requirements; open the source, release notes or issue tracker. |
+| Options | Set **Corners on All Displays**, **Launch at Login** and **Hide Menu Bar Icon**. |
+| Version / About TopNV | Show the installed version and the About window with a GitHub icon and a Buy Me a Coffee button. |
+| Quit TopNV · ⌘Q | Stop the app and remove its overlays. |
 
-The `Release` workflow (`.github/workflows/release.yml`) builds a universal app, packs it into
-a DMG and publishes it as a GitHub Release. Start it in one of two ways:
+Corner Radius and Corners on All Displays are disabled while Round Corners is off.
+If Launch at Login needs approval, Options tells you to allow it in
+**System Settings > General > Login Items**; registration errors appear there too.
 
-- push a tag such as `v1.0.0`, or
-- in the Actions tab, open **Release**, click **Run workflow** and enter a version such as
-  `1.0.0`; the workflow creates the tag `v1.0.0`.
+To restore a hidden menu-bar icon, **open TopNV again from Applications**.
 
-Run the tests with `swift test`, or with
-`xcodebuild -scheme topNV -destination 'platform=macOS' test`.
+## How it works
+
+TopNV places a black, click-through window behind the menu bar on each notched display.
+The system menu bar draws above it, keeping its items readable and clickable.
+It neither reads nor changes the wallpaper.
+
+Four small click-through overlays create the rounded corners. They sit above the Dock
+and ordinary windows, below pop-up menus. The overlays update when settings, displays
+or Spaces change, and after wake from sleep.
 
 ## Limitations
 
-- The menu bar turns black only on displays with a notch. Other displays keep their normal
-  menu bar.
-- In full-screen apps the black bar is not visible, as any desktop-level window is covered
-  there; macOS handles the notch area of full-screen apps itself.
-- When the menu bar is set to hide automatically, the bar covers only the notch-height strip
-  at the top of the screen.
-- Rounded corners sit above most windows, so a few points of content at the very corners
-  are hidden.
-- The app is signed ad hoc, not notarized: on first launch macOS may ask you to confirm
-  opening it.
+- The black menu-bar strip applies only to displays with a notch. Other displays keep
+  their normal menu bar.
+- The desktop-level black strip is covered in full-screen apps; macOS handles their
+  notch area itself.
+- With an automatically hidden menu bar, the black strip covers only the notch-height
+  area at the top of the screen.
+- Rounded corners hide a few points of content at the very corners of the display.
+- The app is signed ad hoc, not notarized, so macOS may require confirmation on first launch.
+
+## Build from source
+
+Install Xcode 16 or later with its macOS SDK and command-line tools selected, then run:
+
+```sh
+git clone https://github.com/bernalli/topNV.git
+cd topNV
+scripts/bundle.sh
+open build/TopNV.app
+```
+
+The script builds the release executable, assembles `build/TopNV.app` and signs it ad hoc.
+Move the app to Applications to keep it installed. To bundle an existing executable,
+set `TOPNV_EXECUTABLE` to its path when running the script.
+
+Run the tests with:
+
+```sh
+swift test
+```
+
+## Releases
+
+[Release notes and downloads](https://github.com/bernalli/topNV/releases) are on GitHub.
+The release workflow tests the code, builds a universal app for Apple silicon and Intel,
+and publishes a versioned DMG. It runs on a `v*` tag or through **Actions > Release >
+Run workflow** with a version number.
+
+For a local disk image, run `scripts/make-dmg.sh` after `scripts/bundle.sh`;
+the result is `build/TopNV.dmg`.
+
+## Support
+
+If TopNV is useful to you, you can [buy me a coffee](https://github.com/sponsors/bernalli).
+
+## Author
+
+Created by Samuele Martinalli.
+
+Copyright (c) 2026 Samuele Martinalli. All rights reserved.
