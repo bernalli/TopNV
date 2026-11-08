@@ -7,6 +7,11 @@ public struct CornerRadiusOption: Identifiable, Equatable {
   public let isCustom: Bool
   public var id: Double { value }
 
+  public init(value: Double, isCustom: Bool) {
+    self.value = value
+    self.isCustom = isCustom
+  }
+
   public var title: String {
     let text = String(value)
     let points = text.hasSuffix(".0") ? String(text.dropLast(2)) : text

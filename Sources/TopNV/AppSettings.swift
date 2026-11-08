@@ -3,9 +3,7 @@ import Foundation
 /// User preferences, persisted in `UserDefaults`.
 @MainActor
 final class AppSettings: ObservableObject {
-  static let radiusRange: ClosedRange<Double> = 0...30
-  /// Read directly through `@AppStorage`: the menu bar scene must not observe this object,
-  /// or `MenuBarExtra(isInserted:)` publishes during the scene update and the menu stops opening.
+  /// Shared with the separate visibility model so the scene never observes display settings.
   nonisolated static let showMenuBarIconKey = "showMenuBarIcon"
 
   private enum Key {
@@ -54,8 +52,8 @@ final class AppSettings: ObservableObject {
     ])
     hideNotch = defaults.bool(forKey: Key.hideNotch)
     roundCorners = defaults.bool(forKey: Key.roundCorners)
-    let storedRadius = defaults.double(forKey: Key.cornerRadius)
-    cornerRadius = min(max(storedRadius, Self.radiusRange.lowerBound), Self.radiusRange.upperBound)
+    // Keep legacy custom values exact; overlay geometry already bounds the rendered radius.
+    cornerRadius = defaults.double(forKey: Key.cornerRadius)
     cornersOnAllDisplays = defaults.bool(forKey: Key.cornersOnAllDisplays)
   }
 }
