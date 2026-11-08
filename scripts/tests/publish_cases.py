@@ -11,12 +11,15 @@ module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 class Fake:
     def __init__(self):
         self.releases=[]; self.tag=None; self.sha='a'*40; self.events=[]; self.fail=None; self.public=False; self.downloads={}; self.status=404
+        self.api_status=None; self.api_transport=False; self.deleted=[]
         self.latest={'tag_name':'v1.0.0','assets':[]}; self.order_failed=False; self.different=None; self.rollback_fails=False
     def git(self, *args):
         if args[0]=='rev-parse': return self.sha
         return ''
     def api(self, method, path, body=None, file=None, binary=False):
         self.events.append((method,path,body))
+        if self.api_transport: raise module.ReleaseError('API transport failed')
+        if self.api_status is not None: return self.api_status,{}
         if method=='GET' and '/git/ref/tags/' in path:
             return (404,{}) if self.tag is None else (200, {'object':self.tag})
         if method=='GET' and '/git/tags/' in path: return 200,{'object':{'type':'commit','sha':self.sha}}
@@ -35,6 +38,7 @@ class Fake:
                 self.public=True
                 if self.tag is None: self.tag={'type':'commit','sha':self.sha}
             if self.fail=='interrupt' and self.public: raise KeyboardInterrupt()
+            if self.fail=='draft' and body.get('draft'): raise module.ReleaseError('draft response lost')
             if self.fail=='publish' and self.public: raise module.ReleaseError('injected publish response loss')
             return 200,dict(id=5,**body)
         if method=='POST' and '/assets?' in path:
@@ -46,7 +50,10 @@ class Fake:
         if method=='GET' and '/releases/assets/' in path:
             result=self.downloads[int(path.rsplit('/',1)[1])]
             return 200,result+b'bad' if self.different=='private' else result
-        if method=='DELETE': return 204,{}
+        if method=='DELETE':
+            self.deleted.append(path)
+            if self.fail=='delete': raise module.ReleaseError('delete response lost')
+            return 204,{}
         raise AssertionError((method,path,body))
     def download(self,url,path):
         if self.fail=='transport': raise module.ReleaseError('transport error')
@@ -111,7 +118,7 @@ class Cases(unittest.TestCase):
         self.transport.order_failed=False; self.transport.fail='transport'
         with self.assertRaises(module.ReleaseError): self.publisher().order()
     def test_failures_never_leave_public_release(self):
-        for failure in ['TopNV-1.1.0.dmg','appcast.xml','verify','publish','tag-after','interrupt']:
+        for failure in ['create','TopNV-1.1.0.dmg','appcast.xml','verify','publish','tag-after','interrupt']:
             with self.subTest(failure=failure):
                 self.transport=Fake(); p=self.prepared(); self.transport.fail=failure
                 with self.assertRaises(module.ReleaseError): p.publish()
@@ -133,6 +140,40 @@ class Cases(unittest.TestCase):
         p=self.prepared(); p.publish()
         body=[body for method,path,body in self.transport.events if method=='PATCH' and body.get('draft') is False][0]
         self.assertTrue(body['prerelease']); self.assertEqual(body['make_latest'],'false')
+    def test_api_errors_never_mean_absence(self):
+        for status in [403,500]:
+            self.transport.api_status=status
+            with self.assertRaises(module.ReleaseError): self.publisher().resolve()
+        self.transport.api_status=None; self.transport.api_transport=True
+        with self.assertRaises(module.ReleaseError): self.publisher().resolve()
+    def test_push_requires_exact_canonical_tag_and_checkout(self):
+        self.env.update(GITHUB_EVENT_NAME='push',GITHUB_REF='refs/tags/v1.1.0')
+        with self.assertRaises(module.ReleaseError): self.publisher().resolve()
+        self.transport.tag={'type':'commit','sha':'a'*40}; self.publisher().resolve()
+        self.transport.sha='b'*40
+        with self.assertRaises(module.ReleaseError): self.publisher().resolve()
+    def test_existing_proof_is_drafted_before_asset_replacement(self):
+        self.env.update(INPUT_CHANNEL='proof',GITHUB_REF='refs/tags/update-proof')
+        self.transport.tag={'type':'commit','sha':'a'*40}; self.transport.status=200
+        self.transport.releases=[{'id':5,'tag_name':'update-proof','draft':False,'assets':[{'id':8},{'id':9}]}]
+        p=self.prepared(); p.publish()
+        self.assertEqual(len(self.transport.deleted),2)
+        mutations=[(method,body) for method,path,body in self.transport.events if method!='GET']
+        self.assertEqual(mutations[0][0],'PATCH'); self.assertTrue(mutations[0][1]['draft'])
+        self.assertTrue(self.transport.public)
+    def test_failure_after_proof_mutations_preserves_failure(self):
+        self.env.update(INPUT_CHANNEL='proof',GITHUB_REF='refs/tags/update-proof')
+        for failure in ['draft','delete']:
+            self.transport=Fake(); self.transport.tag={'type':'commit','sha':'a'*40}; self.transport.status=200
+            self.transport.releases=[{'id':5,'tag_name':'update-proof','draft':False,'assets':[{'id':8}]}]
+            p=self.prepared(); self.transport.fail=failure
+            with self.assertRaises(module.ReleaseError): p.publish()
+            self.assertFalse(self.transport.public)
+    def test_failed_stable_draft_blocks_rerun(self):
+        p=self.prepared(); self.transport.fail='appcast.xml'
+        with self.assertRaises(module.ReleaseError): p.publish()
+        self.transport.fail=None
+        with self.assertRaises(module.ReleaseError): self.publisher().resolve()
     def test_proof_404_rejects_existing_draft(self):
         self.env.update(INPUT_CHANNEL='proof',GITHUB_REF='refs/tags/update-proof')
         self.transport.releases=[{'tag_name':'update-proof','draft':True,'id':5}]
