@@ -1,0 +1,65 @@
+name: CI
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-and-package:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Toolchain and tests
+        run: |
+          xcodebuild -version
+          swift test
+          scripts/tests/run-all.sh
+      - name: Build and verify universal app
+        env:
+          TOPNV_VERSION: '0.0.1'
+          TOPNV_BUILD_NUMBER: '1'
+          TOPNV_EXPECT_UNIVERSAL: '1'
+        run: |
+          scripts/bundle.sh --arch arm64 --arch x86_64
+          scripts/verify-bundle.sh build/TopNV.app
+          test -x .build/artifacts/sparkle/Sparkle/bin/generate_appcast
+          scripts/make-dmg.sh build/TopNV-0.0.1.dmg
+      - name: Verify mounted disk image
+        env:
+          TOPNV_EXPECT_UNIVERSAL: '1'
+        run: |
+          mkdir -p build/ci-mount
+          attached=0
+          cleanup() { if [[ "$attached" == 1 ]]; then hdiutil detach build/ci-mount; fi; }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          hdiutil attach -nobrowse -readonly -mountpoint build/ci-mount build/TopNV-0.0.1.dmg
+          attached=1
+          scripts/verify-bundle.sh build/ci-mount/TopNV.app
+      - name: Verify ephemeral signing without production credentials
+        run: |
+          swiftc Sources/TopNVReleaseCheck/*.swift scripts/ephemeral/main.swift -o build/ephemeral-signing-check
+          build/ephemeral-signing-check
+      - name: Verify initial process survives three seconds
+        run: |
+          build/TopNV.app/Contents/MacOS/TopNV &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true; wait "$app_pid" 2>/dev/null || true' EXIT
+          sleep 3
+          kill -0 "$app_pid"
+  missing-signing-key:
+    runs-on: macos-15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Missing key fails closed
+        run: |
+          mkdir -p build
+          if scripts/require-signing-key.sh >build/missing-key.log 2>&1; then
+            echo 'Expected the absent signing key to fail' >&2
+            exit 1
+          fi
+          grep -Fxq 'error: signing key missing or invalid (expected base64 encoding of 32 bytes)' build/missing-key.log
+          test "$(wc -l < build/missing-key.log | tr -d ' ')" = 1
