@@ -109,3 +109,5 @@ If TopNV is useful to you, you can [buy me a coffee](https://github.com/sponsors
 ## Author
 
 Created by Samuele Martinalli.
+
+Copyright (c) 2026 Samuele Martinalli. All rights reserved.

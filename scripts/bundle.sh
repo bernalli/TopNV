@@ -69,7 +69,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key>
   <string>$BUILD_NUMBER</string>
   <key>NSHumanReadableCopyright</key>
-  <string>© 2026 $AUTHOR_XML</string>
+  <string>Copyright (c) 2026 $AUTHOR_XML. All rights reserved.</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_MACOS</string>
   <key>LSUIElement</key>
