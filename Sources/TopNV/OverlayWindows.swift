@@ -11,7 +11,10 @@ enum OverlayLevel {
 
 /// A borderless, click-through window that is present on every Space and never takes focus.
 class OverlayWindow: NSWindow {
-  init(frame: CGRect, level: NSWindow.Level, isOpaque opaque: Bool) {
+  init(
+    frame: CGRect, level: NSWindow.Level, isOpaque opaque: Bool,
+    behavior: NSWindow.CollectionBehavior
+  ) {
     super.init(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
     isReleasedWhenClosed = false
     isOpaque = opaque
@@ -21,7 +24,7 @@ class OverlayWindow: NSWindow {
     animationBehavior = .none
     isExcludedFromWindowsMenu = true
     self.level = level
-    collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+    collectionBehavior = behavior
   }
 
   override var canBecomeKey: Bool { false }
@@ -36,14 +39,15 @@ class OverlayWindow: NSWindow {
 /// The opaque black strip behind the menu bar of a notched screen.
 final class BarWindow: OverlayWindow {
   init(frame: CGRect) {
-    super.init(frame: frame, level: OverlayLevel.bar, isOpaque: true)
+    super.init(frame: frame, level: OverlayLevel.bar, isOpaque: true, behavior: OverlayBehavior.bar)
   }
 }
 
 /// One rounded screen corner: a black square with a quarter circle cut out of it.
 final class CornerWindow: OverlayWindow {
   init(corner: ScreenCorner, frame: CGRect) {
-    super.init(frame: frame, level: OverlayLevel.corner, isOpaque: false)
+    super.init(
+      frame: frame, level: OverlayLevel.corner, isOpaque: false, behavior: OverlayBehavior.corner)
     contentView = CornerView(corner: corner)
   }
 }
