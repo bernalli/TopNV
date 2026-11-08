@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TopNVCore
 
 @main
 struct TopNVApp: App {
@@ -8,11 +9,15 @@ struct TopNVApp: App {
 
   var body: some Scene {
     MenuBarExtra(isInserted: $showMenuBarIcon) {
-      SettingsMenu(settings: appDelegate.settings, loginItem: appDelegate.loginItem)
+      SettingsMenu(settings: appDelegate.settings)
     } label: {
       MenuBarLabel()
     }
-    .menuBarExtraStyle(.window)
+    .menuBarExtraStyle(.menu)
+
+    Settings {
+      SettingsView(settings: appDelegate.settings, loginItem: appDelegate.loginItem)
+    }
   }
 }
 
@@ -56,65 +61,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 struct SettingsMenu: View {
   @ObservedObject var settings: AppSettings
-  @ObservedObject var loginItem: LoginItem
-  @AppStorage(AppSettings.showMenuBarIconKey) private var showMenuBarIcon = true
+  @Environment(\.openSettings) private var openSettings
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Toggle("Hide notch", isOn: $settings.hideNotch)
-      Toggle("Round corners", isOn: $settings.roundCorners)
+    Button("About topNV") { AboutPanel.show() }
 
-      VStack(alignment: .leading, spacing: 4) {
-        HStack {
-          Text("Corner radius")
-          Spacer()
-          Text("\(Int(settings.cornerRadius.rounded())) pt")
-            .monospacedDigit()
-            .foregroundStyle(.secondary)
+    Divider()
+
+    Toggle("Hide Notch", isOn: $settings.hideNotch)
+    Toggle("Round Corners", isOn: $settings.roundCorners)
+    Menu("Corner Radius") {
+      Picker("Corner Radius", selection: $settings.cornerRadius) {
+        ForEach(CornerRadiusOption.options(for: settings.cornerRadius)) { option in
+          Text(option.title).tag(option.value)
         }
-        Slider(value: $settings.cornerRadius, in: AppSettings.radiusRange, step: 1)
       }
+      .pickerStyle(.inline)
+    }
+    .disabled(!settings.roundCorners)
+    Toggle("Corners on All Displays", isOn: $settings.cornersOnAllDisplays)
       .disabled(!settings.roundCorners)
 
-      Toggle("Corners on all displays", isOn: $settings.cornersOnAllDisplays)
-        .disabled(!settings.roundCorners)
+    Divider()
 
-      Divider()
-
-      Toggle(
-        "Launch at login",
-        isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.setEnabled($0) }))
-      if let message = loginItem.errorMessage {
-        Text(message)
-          .font(.caption)
-          .foregroundStyle(.red)
-          .fixedSize(horizontal: false, vertical: true)
-      } else if loginItem.needsApproval {
-        Text("Allow topNV in System Settings > General > Login Items.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
-
-      Divider()
-
-      VStack(alignment: .leading, spacing: 4) {
-        Toggle(
-          "Hide menu bar icon",
-          isOn: Binding(
-            get: { !showMenuBarIcon }, set: { showMenuBarIcon = !$0 }))
-        Text("Open topNV again to bring it back.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-
-      Button("Quit topNV") { NSApp.terminate(nil) }
-        .keyboardShortcut("q")
+    Button("Settings…") {
+      NSApp.activate()
+      openSettings()
     }
-    .toggleStyle(.switch)
-    .padding(14)
-    .frame(width: 260)
-    // Deferred: publishing while the menu window is being laid out is not allowed.
-    .onAppear { Task { @MainActor in loginItem.refresh() } }
+    .keyboardShortcut(",", modifiers: .command)
+
+    Divider()
+
+    Menu("Help") {
+      Button("topNV Help") { open(.help) }
+      Button("Release Notes") { open(.releaseNotes) }
+      Button("Report an Issue…") { open(.reportIssue) }
+      Button("View Source on GitHub") { open(.source) }
+    }
+
+    Divider()
+
+    Button("Quit topNV") { NSApp.terminate(nil) }
+      .keyboardShortcut("q", modifiers: .command)
+  }
+
+  private func open(_ link: AppLink) {
+    guard let url = link.url else { return }
+    NSWorkspace.shared.open(url)
   }
 }

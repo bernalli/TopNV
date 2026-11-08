@@ -26,18 +26,30 @@ wake from sleep, and when a setting changes.
 
 ## Settings
 
-Click the menu-bar icon:
+Click the menu-bar icon to open the native menu:
 
-- **Hide notch**: black menu bar on notched displays (default on).
-- **Round corners**: rounded screen corners (default on).
-- **Corner radius**: 0 to 30 points, applied live (default 15).
-- **Corners on all displays**: round corners on external displays too (default: built-in
+- **About topNV**: the standard About panel with the app icon, version, build, copyright
+  and a link to the repository.
+- **Hide Notch**: black menu bar on notched displays (default on).
+- **Round Corners**: rounded screen corners (default on).
+- **Corner Radius**: choose 5, 10, 15, 20, 25 or 30 points (default 15). Other values
+  appear as a selected **Custom** row, such as **Custom (13 pt)**.
+- **Corners on All Displays**: round corners on external displays too (default: built-in
   display only).
-- **Launch at login**: registers the app as a login item. If macOS asks for approval, allow
-  it in System Settings > General > Login Items.
-- **Hide menu bar icon**: hide the icon while topNV keeps running. Open topNV again to
-  bring it back.
-- **Quit topNV**.
+- **Settings…** (Command-comma): open the Settings window.
+- **Help**: open this README, release notes, a new GitHub issue or the source repository.
+- **Quit topNV** (Command-Q).
+
+The Settings window has two sections:
+
+- **Display**: Hide Notch, Round Corners, a **Corner Radius** slider from 0 to 30 points
+  in one-point steps, and Corners on All Displays. Changes apply live and stay in sync
+  with the menu. Corner Radius and Corners on All Displays remain visible but disabled
+  in both places while Round Corners is off.
+- **General**: **Launch at Login** registers the app as a login item. If macOS asks for
+  approval, allow it in System Settings > General > Login Items; approval requests and
+  registration errors appear here. Turn off **Show in Menu Bar** to hide the icon while
+  topNV keeps running. Open topNV again to bring the icon back.
 
 ## Download
 

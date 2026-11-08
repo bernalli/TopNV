@@ -11,7 +11,7 @@ set -euo pipefail
 readonly ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly APP_NAME="topNV"
 readonly BUNDLE_ID="io.github.bernalli.topnv"
-readonly VERSION="${TOPNV_VERSION:-1.0.0}"
+readonly VERSION="${TOPNV_VERSION:-1.1.0}"
 readonly BUILD_NUMBER="${TOPNV_BUILD_NUMBER:-1}"
 readonly MIN_MACOS="14.0"
 readonly APP_DIR="$ROOT/build/$APP_NAME.app"
@@ -59,6 +59,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <string>$VERSION</string>
   <key>CFBundleVersion</key>
   <string>$BUILD_NUMBER</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>© 2026 bernalli</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_MACOS</string>
   <key>LSUIElement</key>
