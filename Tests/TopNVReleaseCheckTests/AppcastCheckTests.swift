@@ -93,7 +93,7 @@ final class AppcastCheckTests: XCTestCase {
     let source = try xml()
     for field in plist().keys { var p=plist(); p.removeValue(forKey: field); XCTAssertThrowsError(try check(source, info: p)) }
     for field in ["SUEnableAutomaticChecks", "SUAllowsAutomaticUpdates", "SUVerifyUpdateBeforeExtraction"] {
-      for invalid: Any in [NSNumber(value: 0), NSNumber(value: 1), "false", NSNull()] {
+      for invalid in [NSNumber(value: 0), NSNumber(value: 1), "false", NSNull()] as [Any] {
         var p=plist(); p[field]=invalid; XCTAssertThrowsError(try check(source, info: p))
       }
     }

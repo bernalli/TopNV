@@ -9,6 +9,9 @@ let package = Package(
   ],
   targets: [
     .target(name: "TopNVCore"),
+    .target(name: "TopNVReleaseCheck"),
+    .executableTarget(name: "release-check", dependencies: ["TopNVReleaseCheck"]),
+    .testTarget(name: "TopNVReleaseCheckTests", dependencies: ["TopNVReleaseCheck"]),
     .executableTarget(name: "TopNV", dependencies: ["TopNVCore", .product(name: "Sparkle", package: "Sparkle")]),
     .testTarget(name: "TopNVCoreTests", dependencies: ["TopNVCore"]),
   ]
