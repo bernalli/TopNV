@@ -21,6 +21,7 @@ concurrency:
 jobs:
   release:
     runs-on: macos-15
+    timeout-minutes: 90
     env:
       INPUT_VERSION: ${{ inputs.version }}
       INPUT_CHANNEL: ${{ inputs.channel || 'stable' }}

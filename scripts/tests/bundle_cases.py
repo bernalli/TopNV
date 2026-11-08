@@ -11,7 +11,7 @@ import tempfile
 REPO = Path(__file__).resolve().parents[2]
 
 def run_tests(kind):
-    with tempfile.TemporaryDirectory(prefix='bundle-', dir=REPO / '.work-evidence') as tmp:
+    with tempfile.TemporaryDirectory(prefix='bundle-', dir=REPO / 'build/test-tmp') as tmp:
         root = Path(tmp)
         for name in ('AUTHORS', 'LICENSE'):
             shutil.copy2(REPO / name, root / name)
@@ -96,6 +96,15 @@ def run_tests(kind):
             changed = dict(plist); del changed[field]; info.write_bytes(plistlib.dumps(changed)); verify(code)
         for value in (0, 1, 'false', True):
             changed = dict(plist, SUEnableAutomaticChecks=value); info.write_bytes(plistlib.dumps(changed)); verify('V3')
+        for changes, code in [({'SUFeedURL': 'https://github.com/bernalli/TopNV/releases/download/update-proof/appcast.xml'}, 'V1'),
+                              ({'LSUIElement': False}, 'V1'), ({'SURequireSignedFeed': True}, 'V1'),
+                              ({'SUEnableInstallerLauncherService': True}, 'V1'), ({'SUEnableDownloaderService': True}, 'V1'),
+                              ({'SUEnableInstallerConnectionService': True}, 'V1'), ({'SUEnableInstallerStatusService': True}, 'V1'),
+                              ({'SUPublicEDKey': base64.b64encode(b'\x01' * 32).decode()}, 'V2'),
+                              ({'SUVerifyUpdateBeforeExtraction': False}, 'V3'), ({'CFBundleIdentifier': 'example.other'}, 'V4'),
+                              ({'CFBundleShortVersionString': '1.1'}, 'V4'), ({'CFBundleVersion': '0'}, 'V4'),
+                              ({'LSMinimumSystemVersion': '13.0'}, 'V4')]:
+            info.write_bytes(plistlib.dumps(dict(plist, **changes))); verify(code)
         info.write_bytes(plistlib.dumps(dict(plist, NSHumanReadableCopyright='All rights reserved'))); verify('V13')
         info.write_bytes(plistlib.dumps(plist))
         for name in ('Current', 'Sparkle', 'Autoupdate', 'Updater.app', 'XPCServices', 'Resources', 'Headers', 'Modules', 'PrivateHeaders'):

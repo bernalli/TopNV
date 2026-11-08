@@ -15,7 +15,7 @@ result=call('require-signing-key.sh',{'SPARKLE_ED_PRIVATE_KEY':value}); assert r
 for value in ['', '1', '1.0', 'v1.1.0', '1.1.0\n', '1.0.0-beta', '9223372036854775808.0.0']:
     assert call('validate-version.sh',{'TOPNV_VERSION':value}).returncode != 0
 assert call('validate-version.sh',{'TOPNV_VERSION':'1.1.0'}).returncode == 0
-with tempfile.TemporaryDirectory(dir=root/'.work-evidence') as tmp:
+with tempfile.TemporaryDirectory(dir=root/'build/test-tmp') as tmp:
     path=pathlib.Path(tmp)/'notes.md'
     assert call('require-release-notes.sh',{'TOPNV_RELEASE_NOTES':str(path)}).returncode != 0
     for text in ['', ' \n\t', 'Valid notes']:

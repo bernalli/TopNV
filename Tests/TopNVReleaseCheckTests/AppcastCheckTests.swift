@@ -172,6 +172,49 @@ final class AppcastCheckTests: XCTestCase {
         prefix: Self.prefix, version: "1.1.0", build: "2", feed: Self.feed,
         publicKey: key.publicKey.rawRepresentation.base64EncodedString()))
   }
+  func testValuesMustMatchArtifactsAndStructureIsClosed() throws {
+    let source = try xml()
+    let mutations: [(String, String)] = [
+      (">2</sparkle:version>", ">3</sparkle:version>"),
+      (">1.1.0</sparkle:shortVersionString>", ">1.1.1</sparkle:shortVersionString>"),
+      ("length=\"\(payload.count)\"", "length=\"\(payload.count - 1)\""),
+      ("length=\"\(payload.count)\"", "length=\"\(payload.count + 1)\""),
+      (">14.0</sparkle:minimumSystemVersion>", ">15.0</sparkle:minimumSystemVersion>"),
+      ("<rss version=\"2.0\"", "<rss version=\"1.0\""), ("<rss version=\"2.0\" ", "<rss "),
+      ("<title>TopNV</title>", ""), ("<rss ", "<rss xmlns=\"urn:wrong\" "),
+      (" xmlns:sparkle=\"\(Self.ns)\"", ""),
+      (" type=\"application/octet-stream\"", ""), (" length=\"\(payload.count)\"", ""),
+      (" sparkle:format=\"markdown\"", ""),
+      ("sparkle:format=\"markdown\"", "sparkle:format=\"markdown\" xml:lang=\"en\""),
+      ("https://github.com/bernalli", "http://github.com/bernalli"),
+      ("https://github.com/bernalli", "https://user:pass@github.com/bernalli"),
+      ("TopNV-1.1.0.dmg\"", "TopNV-1.1.0.dmg#fragment\""),
+      ("/v1.1.0/TopNV", "/update-proof/TopNV"), ("/v1.1.0/TopNV", "/v1.1.0/../TopNV"),
+    ]
+    for (old, new) in mutations {
+      let mutated = source.replacingOccurrences(of: old, with: new)
+      XCTAssertNotEqual(mutated, source, old)
+      XCTAssertThrowsError(try check(mutated), old)
+    }
+    let plistValues: [(String, String)] = [
+      ("CFBundleVersion", "3"), ("CFBundleShortVersionString", "1.1.1"),
+      ("LSMinimumSystemVersion", "15.0"), ("SUFeedURL", ReleaseValidator.proofFeed),
+      ("SUPublicEDKey", Data(repeating: 1, count: 32).base64EncodedString()),
+    ]
+    for (field, value) in plistValues {
+      var changed = plist()
+      changed[field] = value
+      XCTAssertThrowsError(try check(source, info: changed), field)
+    }
+  }
+  func testPermutationAndOuterWhitespacePreserveMetadata() throws {
+    let source = try xml()
+    let expected = try ReleaseValidator.parse(Data(source.utf8))
+    let permuted = source.replacingOccurrences(of: "<title>1.1.0</title>", with: "")
+      .replacingOccurrences(of: "</item>", with: "<title>1.1.0</title></item>")
+    XCTAssertEqual(try ReleaseValidator.parse(Data(permuted.utf8)), expected)
+    XCTAssertEqual(try ReleaseValidator.parse(Data((source + "\n \n").utf8)), expected)
+  }
   func testCLIRejectsAmbiguity() throws {
     XCTAssertThrowsError(
       try ReleaseArguments([

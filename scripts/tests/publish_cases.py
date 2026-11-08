@@ -1,5 +1,6 @@
 """Test the same Publisher orchestration used by the workflow with a fake transport."""
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -11,9 +12,10 @@ module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 class Fake:
     def __init__(self):
         self.releases=[]; self.tag=None; self.sha='a'*40; self.events=[]; self.fail=None; self.public=False; self.downloads={}; self.status=404
-        self.api_status=None; self.api_transport=False; self.deleted=[]
+        self.api_status=None; self.api_transport=False; self.deleted=[]; self.off_main=False; self.peeled=None
         self.latest={'tag_name':'v1.0.0','assets':[]}; self.order_failed=False; self.different=None; self.rollback_fails=False
     def git(self, *args):
+        if args[0]=='merge-base' and self.off_main: raise module.ReleaseError('Git source validation failed')
         if args[0]=='rev-parse': return self.sha
         return ''
     def api(self, method, path, body=None, file=None, binary=False):
@@ -22,7 +24,7 @@ class Fake:
         if self.api_status is not None: return self.api_status,{}
         if method=='GET' and '/git/ref/tags/' in path:
             return (404,{}) if self.tag is None else (200, {'object':self.tag})
-        if method=='GET' and '/git/tags/' in path: return 200,{'object':{'type':'commit','sha':self.sha}}
+        if method=='GET' and '/git/tags/' in path: return 200,{'object':{'type':'commit','sha':self.peeled or self.sha}}
         if method=='GET' and path.endswith('/releases/latest'): return 200,self.latest
         if method=='GET' and '/releases?per_page=' in path: return 200,self.releases
         if method=='POST' and path.endswith('/releases'):
@@ -45,6 +47,7 @@ class Fake:
             name=path.split('name=')[1]
             assert not self.public
             if self.fail==name: raise module.ReleaseError('upload failed')
+            if self.fail=='tag-moves' and name=='appcast.xml': self.tag={'type':'commit','sha':'b'*40}
             asset_id=len(self.downloads)+1; self.downloads[asset_id]=Path(file).read_bytes()
             return 201,{'id':asset_id}
         if method=='GET' and '/releases/assets/' in path:
@@ -73,7 +76,7 @@ class Fake:
 
 class Cases(unittest.TestCase):
     def setUp(self):
-        self.temp=tempfile.TemporaryDirectory(dir=ROOT/'.work-evidence'); self.root=Path(self.temp.name)
+        self.temp=tempfile.TemporaryDirectory(dir=ROOT/'build/test-tmp'); self.root=Path(self.temp.name)
         (self.root/'release-notes').mkdir(); (self.root/'release-notes/1.1.0.md').write_text('Notes'); (self.root/'release-notes/proof.md').write_text('Proof')
         self.env={'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':'a'*40,'INPUT_VERSION':'1.1.0','INPUT_CHANNEL':'stable','GITHUB_RUN_NUMBER':'2','GITHUB_RUN_ID':'7'}
         self.transport=Fake()
@@ -174,9 +177,48 @@ class Cases(unittest.TestCase):
         with self.assertRaises(module.ReleaseError): p.publish()
         self.transport.fail=None
         with self.assertRaises(module.ReleaseError): self.publisher().resolve()
+    def test_stable_requires_commit_on_main(self):
+        for changes in [{},{'GITHUB_EVENT_NAME':'push','GITHUB_REF':'refs/tags/v1.1.0'}]:
+            with self.subTest(changes=changes):
+                self.env.update(changes); self.transport.tag={'type':'commit','sha':'a'*40}; self.transport.off_main=True
+                with self.assertRaises(module.ReleaseError): self.publisher().resolve()
+    def test_proof_requires_its_exact_tag(self):
+        self.env.update(INPUT_CHANNEL='proof')
+        self.transport.tag={'type':'commit','sha':'a'*40}
+        with self.assertRaises(module.ReleaseError): self.publisher().resolve()
+        self.env.update(GITHUB_REF='refs/tags/update-proof'); self.transport.tag=None
+        with self.assertRaises(module.ReleaseError): self.publisher().resolve()
+    def test_annotated_tag_peels_to_the_built_commit(self):
+        self.transport.tag={'type':'tag','sha':'c'*40}; self.transport.peeled='b'*40
+        with self.assertRaises(module.ReleaseError): self.publisher().resolve()
+    def test_tag_moved_during_upload_blocks_publication(self):
+        p=self.prepared(); self.transport.fail='tag-moves'
+        with self.assertRaises(module.ReleaseError): p.publish()
+        self.assertFalse(any(m=='PATCH' and b.get('draft') is False for m,_,b in self.transport.events))
+    def test_any_residual_stable_draft_blocks(self):
+        self.transport.releases=[{'tag_name':'v1.0.9','draft':True,'id':9}]
+        with self.assertRaises(module.ReleaseError): self.publisher().resolve()
     def test_proof_404_rejects_existing_draft(self):
         self.env.update(INPUT_CHANNEL='proof',GITHUB_REF='refs/tags/update-proof')
         self.transport.releases=[{'tag_name':'update-proof','draft':True,'id':5}]
         with self.assertRaises(module.ReleaseError): self.publisher().order()
+
+class RealTransport(unittest.TestCase):
+    def api(self,script,**options):
+        with tempfile.TemporaryDirectory(dir=ROOT/'build/test-tmp') as tmp:
+            gh=Path(tmp)/'gh'; gh.write_text('#!/bin/bash\n'+script+'\n'); gh.chmod(0o755)
+            saved=os.environ['PATH']; os.environ['PATH']=tmp+':'+saved
+            try: return module.Transport(Path(tmp)).api('GET','repos/x',**options)
+            finally: os.environ['PATH']=saved
+    def test_status_and_body_survive_the_real_parser(self):
+        self.assertEqual(self.api("printf 'HTTP/2.0 200 OK\\nA: b\\r\\n\\r\\n{\"k\":1}'"),(200,{'k':1}))
+        self.assertEqual(self.api("printf 'HTTP/2.0 404 Not Found\\nA: b\\r\\n\\r\\n{}'; exit 1"),(404,{}))
+        self.assertEqual(self.api("printf 'HTTP/2.0 403 Forbidden\\nA: b\\r\\n\\r\\n{}'; exit 1")[0],403)
+        self.assertEqual(self.api("printf 'HTTP/2.0 204 No Content\\nA: b\\r\\n\\r\\n'"),(204,{}))
+        self.assertEqual(self.api("printf 'HTTP/2.0 200 OK\\nA: b\\r\\n\\r\\n\\xff\\x00'",binary=True),(200,b'\xff\x00'))
+    def test_transport_failures_never_become_a_status(self):
+        for script in ['exit 1',"printf 'garbage'; exit 1","printf 'HTTP/2.0 200 OK\\nA: b\\r\\n\\r\\n{}'; exit 1","printf 'HTTP/2.0 200 OK\\nA: b\\r\\n\\r\\nnot json'"]:
+            with self.subTest(script=script):
+                with self.assertRaises(module.ReleaseError): self.api(script)
 
 unittest.main()

@@ -10,6 +10,14 @@ final class OrderCheckTests: XCTestCase {
       }
     }
   }
+  func testVersionsCompareNumericallyByComponent() throws {
+    let source = try AppcastCheckTests().xml()
+      .replacingOccurrences(of: ">1.1.0</sparkle:shortVersionString>", with: ">1.9.0</sparkle:shortVersionString>")
+      .replacingOccurrences(of: "v1.1.0/TopNV-1.1.0.dmg", with: "v1.9.0/TopNV-1.9.0.dmg")
+    let current = Data(source.utf8)
+    XCTAssertNoThrow(try ReleaseValidator.order(build: "3", version: "1.10.0", current: current))
+    XCTAssertThrowsError(try ReleaseValidator.order(build: "3", version: "1.8.99", current: current))
+  }
   func testCurrentFeedMustBeUnambiguousAndStrictlyOlder() throws {
     let source = try AppcastCheckTests().xml()
     let data = Data(source.utf8)

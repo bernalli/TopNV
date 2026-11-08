@@ -43,7 +43,7 @@ def main():
         except Exception: print('V0: unreadable plist', file=sys.stderr); return 1
         resources = app/'Contents/Resources/Licenses'
         checks = [
-            ('V1: feed or application mode invalid', lambda: p.get('SUFeedURL') == os.environ.get('TOPNV_EXPECT_FEED_URL', STABLE) and p.get('LSUIElement') is True and not p.get('SURequireSignedFeed', False) and not p.get('SUEnableInstallerLauncherService', False) and not p.get('SUEnableDownloaderService', False)),
+            ('V1: feed or application mode invalid', lambda: p.get('SUFeedURL') == os.environ.get('TOPNV_EXPECT_FEED_URL', STABLE) and p.get('LSUIElement') is True and not p.get('SURequireSignedFeed', False) and not any(p.get(k, False) for k in ('SUEnableInstallerLauncherService', 'SUEnableDownloaderService', 'SUEnableInstallerConnectionService', 'SUEnableInstallerStatusService'))),
             ('V2: public key mismatch', lambda: key(p.get('SUPublicEDKey')) and p['SUPublicEDKey'] == (root/'Assets/SparklePublicEDKey.txt').read_text().rstrip()),
             ('V3: updater flags must be booleans', lambda: all(type(p.get(k)) is bool and p[k] == v for k,v in [('SUEnableAutomaticChecks',False),('SUAllowsAutomaticUpdates',False),('SUVerifyUpdateBeforeExtraction',True)])),
             ('V4: invalid identity or version', lambda: version(p.get('CFBundleShortVersionString')) and build(p.get('CFBundleVersion')) and p.get('CFBundleIdentifier') == 'io.github.bernalli.topnv' and p.get('LSMinimumSystemVersion') == '14.0'),

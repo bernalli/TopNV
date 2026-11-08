@@ -41,7 +41,7 @@ class Transport:
         try: return status,json.loads(raw) if raw.strip() else {}
         except ValueError: raise ReleaseError('GitHub returned invalid JSON') from None
     def download(self,url,path):
-        result=subprocess.run(['curl','--silent','--show-error','--location','--proto','=https','--proto-redir','=https','--output',str(path),'--write-out','%{http_code}',url],capture_output=True,text=True)
+        result=subprocess.run(['curl','--silent','--show-error','--location','--proto','=https','--proto-redir','=https','--connect-timeout','30','--max-time','600','--output',str(path),'--write-out','%{http_code}',url],capture_output=True,text=True)
         require(result.returncode==0,'download transport error')
         require(re.fullmatch(r'[0-9]{3}',result.stdout) is not None,'invalid download status')
         return int(result.stdout)
@@ -113,7 +113,9 @@ class Publisher:
             self.io.git('merge-base','--is-ancestor',self.sha,'origin/main')
     def resolve(self):
         self.source()
-        if not self.proof: require(self.existing() is None,'stable release already exists, including draft')
+        if not self.proof:
+            require(self.existing() is None,'stable release already exists, including draft')
+            require(not any(r.get('draft') and r.get('tag_name')!='update-proof' for r in self.releases()),'residual stable draft must be recovered first')
         try: require(bool(self.notes.read_text().strip()),'empty release notes')
         except OSError: raise ReleaseError('missing release notes') from None
         (self.root/'build').mkdir(exist_ok=True)
