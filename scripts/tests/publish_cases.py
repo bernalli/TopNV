@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('publisher',ROOT/'scripts/publish-release.py')
@@ -14,6 +15,7 @@ class Fake:
         self.releases=[]; self.tag=None; self.sha='a'*40; self.events=[]; self.fail=None; self.public=False; self.downloads={}; self.status=404
         self.api_status=None; self.api_transport=False; self.deleted=[]; self.off_main=False; self.peeled=None
         self.latest={'tag_name':'v1.0.0','assets':[]}; self.order_failed=False; self.different=None; self.rollback_fails=False
+        self.response_tag=None; self.public_delay=0; self.public_statuses=[]
     def git(self, *args):
         if args[0]=='merge-base' and self.off_main: raise module.ReleaseError('Git source validation failed')
         if args[0]=='rev-parse': return self.sha
@@ -42,7 +44,11 @@ class Fake:
             if self.fail=='interrupt' and self.public: raise KeyboardInterrupt()
             if self.fail=='draft' and body.get('draft'): raise module.ReleaseError('draft response lost')
             if self.fail=='publish' and self.public: raise module.ReleaseError('injected publish response loss')
-            return 200,dict(id=5,**body)
+            release=next(r for r in self.releases if path.endswith(f"/releases/{r['id']}"))
+            # GitHub detaches the tag when an edit omits tag_name (live run 42518681929).
+            release.update(body); release['tag_name']=body.get('tag_name','untagged-eb031defd646332f7d14')
+            if self.response_tag and body.get('draft') is False: return 200,dict(release,tag_name=self.response_tag)
+            return 200,dict(release)
         if method=='POST' and '/assets?' in path:
             name=path.split('name=')[1]
             assert not self.public
@@ -63,7 +69,10 @@ class Fake:
         if not self.public:
             if self.status==200: Path(path).write_bytes(b'current')
             return self.status
-        name=url.rsplit('/',1)[1]
+        tag,name=url.rsplit('/',2)[1:]
+        if not any(r.get('tag_name')==tag and not r.get('draft') for r in self.releases): return 404
+        if self.public_delay>0:
+            self.public_delay-=1; self.public_statuses.append(404); return 404
         content=b'feed' if name=='appcast.xml' else b'dmg'
         if self.different=='public': content+=b'bad'
         Path(path).write_bytes(content)
@@ -80,6 +89,7 @@ class Cases(unittest.TestCase):
         (self.root/'release-notes').mkdir(); (self.root/'release-notes/1.1.0.md').write_text('Notes'); (self.root/'release-notes/proof.md').write_text('Proof')
         self.env={'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':'a'*40,'INPUT_VERSION':'1.1.0','INPUT_CHANNEL':'stable','GITHUB_RUN_NUMBER':'2','GITHUB_RUN_ID':'7'}
         self.transport=Fake()
+        sleep=mock.patch.object(module.time,'sleep'); self.sleep=sleep.start(); self.addCleanup(sleep.stop)
     def tearDown(self): self.temp.cleanup()
     def publisher(self): return module.Publisher(self.root,self.env,self.transport)
     def prepared(self):
@@ -202,6 +212,30 @@ class Cases(unittest.TestCase):
         self.env.update(INPUT_CHANNEL='proof',GITHUB_REF='refs/tags/update-proof')
         self.transport.releases=[{'tag_name':'update-proof','draft':True,'id':5}]
         with self.assertRaises(module.ReleaseError): self.publisher().order()
+    def proof(self):
+        self.env.update(INPUT_CHANNEL='proof',GITHUB_REF='refs/tags/update-proof')
+        self.transport.tag={'type':'commit','sha':'a'*40}
+    def test_publication_keeps_the_release_on_its_tag(self):
+        self.proof(); p=self.prepared(); p.publish()
+        self.assertTrue(self.transport.public); self.assertEqual(self.transport.releases[0]['tag_name'],'update-proof')
+        for method,path,body in self.transport.events:
+            if method=='PATCH': self.assertEqual(body['tag_name'],'update-proof')
+    def test_rollback_keeps_the_draft_on_its_tag(self):
+        self.proof(); p=self.prepared(); self.transport.fail='publish'
+        with self.assertRaises(module.ReleaseError): p.publish()
+        self.assertFalse(self.transport.public); self.assertEqual(self.transport.releases[0]['tag_name'],'update-proof')
+    def test_publish_response_on_another_tag_is_rolled_back(self):
+        self.proof(); p=self.prepared(); self.transport.response_tag='untagged-0'
+        with self.assertRaisesRegex(module.ReleaseError,'tag'): p.publish()
+        self.assertFalse(self.transport.public)
+    def test_public_readback_waits_for_propagation(self):
+        self.proof(); p=self.prepared(); self.transport.public_delay=5
+        p.publish()
+        self.assertTrue(self.transport.public); self.assertEqual(self.transport.public_statuses,[404]*5)
+    def test_public_readback_gives_up_and_rolls_back(self):
+        self.proof(); p=self.prepared(); self.transport.public_delay=100
+        with self.assertRaisesRegex(module.ReleaseError,'public readback'): p.publish()
+        self.assertFalse(self.transport.public)
 
 class RealTransport(unittest.TestCase):
     def api(self,script,**options):

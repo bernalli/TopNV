@@ -12,6 +12,7 @@ import time
 REPO='repos/bernalli/TopNV'
 STABLE='https://github.com/bernalli/TopNV/releases/latest/download/appcast.xml'
 PROOF='https://github.com/bernalli/TopNV/releases/download/update-proof/appcast.xml'
+READBACK_DELAYS=(1,2,4,8,15,30) # Seconds between public download attempts after publication.
 
 class ReleaseError(Exception): pass
 
@@ -137,8 +138,9 @@ class Publisher:
         self.io.order(self.build,self.version,current)
     def rollback(self):
         if self.release_id is None: return
-        status,_=self.io.api('PATCH',f'{REPO}/releases/{self.release_id}',{'draft':True})
-        require(status==200,'rollback failed')
+        # GitHub detaches the tag (untagged-*) when an edit omits tag_name.
+        status,release=self.io.api('PATCH',f'{REPO}/releases/{self.release_id}',{'draft':True,'tag_name':self.tag})
+        require(status==200 and release.get('draft') is True and release.get('tag_name')==self.tag,'rollback failed')
     def publish(self):
         try:
             self.resolve(); self.order() # Recheck sources, references and old proof before any mutation.
@@ -168,16 +170,20 @@ class Publisher:
             self.io.verify(downloaded[dmg.name],downloaded[feed.name],self)
             self.source() # Tag may have changed while uploading.
             self.publishing=True # Before PATCH: a lost response may still have published.
-            status,_=self.io.api('PATCH',f'{REPO}/releases/{self.release_id}',{'draft':False,'prerelease':self.proof,'make_latest':'false' if self.proof else 'true'})
+            status,release=self.io.api('PATCH',f'{REPO}/releases/{self.release_id}',{'tag_name':self.tag,'draft':False,'prerelease':self.proof,'make_latest':'false' if self.proof else 'true'})
             require(status==200,'publish failed or response lost')
+            require(release.get('draft') is False and release.get('tag_name')==self.tag,'published release is not on its tag')
             for path in [feed,dmg]:
                 fetched=self.root/'build'/('public-'+path.name)
-                for attempt in range(3):
+                for attempt,delay in enumerate((*READBACK_DELAYS,None),1):
+                    status=None
                     try:
                         status=self.io.download(self.prefix+path.name,fetched)
                         if status==200 and fetched.read_bytes()==path.read_bytes(): break
                     except (ReleaseError,OSError): pass
-                    if attempt<2: time.sleep(1)
+                    outcome='transport error' if status is None else f'HTTP {status}'+(', content differs' if status==200 else '')
+                    print(f'Public readback {path.name}: attempt {attempt}, {outcome}',flush=True)
+                    if delay is not None: time.sleep(delay)
                 else: raise ReleaseError('public readback differs or unavailable')
             if not self.proof: require(self.tag_commit()==self.sha,'stable tag changed after publication')
             self.publishing=False
