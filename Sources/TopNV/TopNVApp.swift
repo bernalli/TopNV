@@ -21,7 +21,7 @@ private struct TopNVMenuScene: Scene {
       set: { visibility.requestMenuVisible($0) }
     )) {
       SettingsMenu(
-        settings: delegate.settings, loginItem: delegate.loginItem, visibility: visibility)
+        settings: delegate.settings, loginItem: delegate.loginItem, visibility: visibility, updates: delegate.updates)
         .labelStyle(.titleAndIcon)
     } label: {
       MenuBarLabel()
@@ -55,8 +55,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   let menuVisibility = MenuVisibility(
     defaults: .standard, key: AppSettings.showMenuBarIconKey)
   private var overlay: OverlayController?
+  private let updateConfiguration = UpdateConfiguration(infoDictionary: Bundle.main.infoDictionary)
+  private lazy var sparkleUpdater: SparkleUpdater? = {
+    guard Bundle.main.bundleURL.pathExtension == "app", updateConfiguration.isValid else { return nil }
+    return SparkleUpdater()
+  }()
+  lazy var updates = UpdateMenuModel(updater: sparkleUpdater)
+  private lazy var updateCoordinator = UpdateCoordinator(
+    configuration: updateConfiguration, updater: sparkleUpdater, defaults: .standard,
+    ask: AutomaticUpdateQuestion.ask, onReady: { [weak self] in self?.updates.updaterDidStart() })
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+    if sparkleUpdater?.reopenPendingUpdate() == true { return true }
     menuVisibility.setMenuVisible(true)
     return true
   }
@@ -70,6 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = OverlayController(settings: settings)
     controller.start()
     overlay = controller
+    sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }
+    updateCoordinator.start()
   }
 
   @objc private func menuDidBeginTracking(_ notification: Notification) {
@@ -83,6 +95,7 @@ struct SettingsMenu: View {
   @ObservedObject var settings: AppSettings
   @ObservedObject var loginItem: LoginItem
   @ObservedObject var visibility: MenuVisibility
+  @ObservedObject var updates: UpdateMenuModel
   private let version = AppVersion(
     shortVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
     build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
@@ -135,6 +148,12 @@ struct SettingsMenu: View {
       } else if loginItem.needsApproval {
         info("Allow TopNV in System Settings > General > Login Items.")
       }
+      Toggle(isOn: Binding(
+        get: { updates.automaticallyChecksForUpdates }, set: { updates.setAutomaticallyChecks($0) }
+      )) {
+        Label("Automatically Check for Updates", systemImage: "arrow.triangle.2.circlepath")
+      }
+      .disabled(!updates.isAvailable)
       Divider()
       Toggle(isOn: Binding(
         get: { !visibility.isVisible }, set: { visibility.setMenuVisible(!$0) }
@@ -147,6 +166,8 @@ struct SettingsMenu: View {
     }
     Divider()
     info(version.title)
+    Button("Check for Updates…") { updates.checkForUpdates() }
+      .disabled(!updates.canCheckForUpdates)
     Button("About TopNV") { AboutWindowController.shared.show() }
     Divider()
     Button("Quit TopNV") { NSApp.terminate(nil) }
