@@ -1,7 +1,8 @@
 // render-assets.swift
 //
-// Renders every visual asset of TopNV from AppIconMaster.png in the output
-// directory, using CoreGraphics, ImageIO and CoreText (no AppKit, no WindowServer).
+// Renders every visual asset of TopNV with CoreGraphics, ImageIO and CoreText
+// (no AppKit, no WindowServer). The app icon and the cover derive from
+// AppIconMaster.png in the output directory; the menu bar icon is drawn directly.
 // AppIcon.icon is the editable design source; the master is its full-canvas render.
 //
 // Usage:
@@ -35,7 +36,9 @@ enum RenderError: Error, CustomStringConvertible {
     case .colorSpace: return "cannot create the sRGB color space"
     case .context(let w, let h): return "cannot create a \(w)x\(h) bitmap context"
     case .image(let name): return "cannot create the image for \(name)"
-    case .master(let path): return "cannot load app icon master at \(path); provide AppIconMaster.png in the output directory"
+    case .master(let path):
+      return
+        "cannot load app icon master at \(path); provide AppIconMaster.png in the output directory"
     case .destination(let path): return "cannot create an image destination at \(path)"
     case .write(let path): return "cannot write \(path)"
     }
