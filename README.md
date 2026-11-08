@@ -41,7 +41,7 @@ Click the menu-bar icon to see the current configuration and change it directly.
 | Corner Radius | Select a preset. A stored non-preset value remains selected as **Custom**, without rounding it to a preset. |
 | Details | Show the stored radius, selected display scope and system requirements; open the source, release notes or issue tracker. |
 | Options | Set **Corners on All Displays**, **Launch at Login** and **Hide Menu Bar Icon**. |
-| Version / About TopNV | Show the installed version and the standard macOS About panel. |
+| Version / About TopNV | Show the installed version and the About window with a Buy Me a Coffee button. |
 | Quit TopNV · ⌘Q | Stop the app and remove its overlays. |
 
 Corner Radius and Corners on All Displays are disabled while Round Corners is off.

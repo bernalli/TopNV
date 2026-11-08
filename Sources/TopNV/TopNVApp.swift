@@ -91,7 +91,6 @@ struct SettingsMenu: View {
     Section("TopNV") {
       let status = MenuStatus(hideNotch: settings.hideNotch, roundCorners: settings.roundCorners)
       Label(status.title, systemImage: status.symbol)
-        .foregroundStyle(.secondary)
       Toggle(isOn: $settings.hideNotch) {
         Label("Hide Notch", systemImage: "menubar.rectangle")
       }
@@ -123,8 +122,10 @@ struct SettingsMenu: View {
       Label("Details", systemImage: "info.circle")
     }
     Menu {
-      Toggle("Corners on All Displays", isOn: $settings.cornersOnAllDisplays)
-        .disabled(!settings.roundCorners)
+      Toggle(isOn: $settings.cornersOnAllDisplays) {
+        Label("Corners on All Displays", systemImage: "display.2")
+      }
+      .disabled(!settings.roundCorners)
       Divider()
       Toggle(isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.setEnabled($0) })) {
         Label("Launch at Login", systemImage: "power")
@@ -146,7 +147,7 @@ struct SettingsMenu: View {
     }
     Divider()
     info(version.title)
-    Button("About TopNV") { AboutPanel.show() }
+    Button("About TopNV") { AboutWindowController.shared.show() }
     Divider()
     Button("Quit TopNV") { NSApp.terminate(nil) }
       .keyboardShortcut("q", modifiers: .command)
@@ -154,7 +155,7 @@ struct SettingsMenu: View {
 
   @ViewBuilder private func info(_ text: String) -> some View {
     ForEach(Array(MenuText.lines(text).enumerated()), id: \.offset) { _, line in
-      Text(line).foregroundStyle(.secondary)
+      Text(line)
     }
   }
 
