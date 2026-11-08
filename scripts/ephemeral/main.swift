@@ -54,11 +54,18 @@ func scan(_ root: URL, forbidden: Data) throws {
 do {
   let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
   let tool = root.appendingPathComponent(".build/artifacts/sparkle/Sparkle/bin/generate_appcast")
-  let testRoot = root.appendingPathComponent("build/ephemeral-roundtrip")
+  let testRoot = root.appendingPathComponent("build/ephemeral-roundtrip-\(UUID().uuidString)")
   try FileManager.default.createDirectory(at: testRoot, withIntermediateDirectories: true)
+  defer {
+    do {
+      try FileManager.default.removeItem(at: testRoot)
+    } catch {
+      FileHandle.standardError.write(Data("Ephemeral cleanup failed; output withheld\n".utf8))
+      exit(1)
+    }
+  }
   let input = testRoot.appendingPathComponent("input")
   try FileManager.default.createDirectory(at: input, withIntermediateDirectories: false)
-  defer { try? FileManager.default.removeItem(at: testRoot) }
   try Data("Ephemeral signing round trip. Do not install.\n".utf8).write(
     to: input.appendingPathComponent("TopNV-0.0.1.md"))
   let key = Curve25519.Signing.PrivateKey()
@@ -73,9 +80,13 @@ do {
   try FileManager.default.copyItem(
     at: root.appendingPathComponent("build/TopNV.app"), to: app)
   let plist = app.appendingPathComponent("Contents/Info.plist")
-  var info =
-    try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil)
-    as! [String: Any]
+  guard
+    var info =
+      try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil)
+      as? [String: Any]
+  else {
+    throw ReleaseViolation("EPHEMERAL", "bundle plist must be a dictionary")
+  }
   info["SUPublicEDKey"] = publicKey
   try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(
     to: plist)
@@ -135,15 +146,37 @@ do {
   let mismatchOutput = testRoot.appendingPathComponent("mismatch.xml")
   var mismatchArgs = args
   mismatchArgs[mismatchArgs.firstIndex(of: appcast.path)!] = mismatchOutput.path
+  try require(
+    !FileManager.default.fileExists(atPath: mismatchOutput.path), "stale mismatch output")
   let (mismatchStatus, mismatchLog) = try run(tool, mismatchArgs, input: otherKey + Data([10]))
   try require(
     mismatchLog.range(of: otherKey) == nil,
     "tool output contains the disposable key; output withheld")
-  rejected = mismatchStatus != 0
-  if !rejected {
-    do { try validate(Data(contentsOf: mismatchOutput), publicKey) } catch { rejected = true }
+  try require(mismatchStatus == 0, "unexpected mismatch tool failure; output withheld")
+  let mismatchFeed = try Data(contentsOf: mismatchOutput)
+  rejected = false
+  do {
+    try validate(mismatchFeed, publicKey)
+  } catch let violation as ReleaseViolation {
+    try require(
+      violation == ReleaseViolation("A15", "missing attribute"),
+      "unexpected mismatch rejection")
+    rejected = true
   }
   try require(rejected, "mismatched signing key accepted")
+  // Restoring only the known-good signature must make this feed valid.
+  let mismatchDocument = try XMLDocument(
+    data: mismatchFeed, options: [.nodeLoadExternalEntitiesNever, .nodePreserveAll])
+  let enclosures = try mismatchDocument.nodes(forXPath: "/rss/channel/item/enclosure")
+  guard enclosures.count == 1, let enclosure = enclosures[0] as? XMLElement else {
+    throw ReleaseViolation("EPHEMERAL", "unexpected mismatch enclosure")
+  }
+  let signatureAttribute = XMLNode(kind: .attribute)
+  signatureAttribute.name = "sparkle:edSignature"
+  signatureAttribute.uri = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+  signatureAttribute.stringValue = metadata.signature.base64EncodedString()
+  enclosure.addAttribute(signatureAttribute)
+  try validate(mismatchDocument.xmlData, publicKey)
   let emptyOutput = testRoot.appendingPathComponent("empty.xml")
   var emptyArgs = args
   emptyArgs[emptyArgs.firstIndex(of: appcast.path)!] = emptyOutput.path
@@ -153,10 +186,10 @@ do {
   for secret in [encoded, otherKey] {
     try scan(root.appendingPathComponent("build"), forbidden: secret)
     try scan(root.appendingPathComponent(".build"), forbidden: secret)
+    try scan(
+      FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Sparkle_generate_appcast"), forbidden: secret)
   }
-  print(
-    "PASS ephemeral stdin signing, CryptoKit verification, negative inputs and secret non-persistence"
-  )
 } catch let violation as ReleaseViolation {
   // Violations carry fixed text and never echo values from the feed or the key.
   FileHandle.standardError.write(
@@ -167,3 +200,6 @@ do {
     Data("Ephemeral signing check failed: \(type(of: error))\n".utf8))
   exit(1)
 }
+print(
+  "PASS ephemeral stdin signing, CryptoKit verification, negative inputs and secret non-persistence"
+)
