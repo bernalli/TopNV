@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="Assets/cover.png" alt="topNV" width="800">
-  <h1>topNV</h1>
+  <img src="Assets/cover.png" alt="TopNV" width="800">
+  <h1>TopNV</h1>
   <p>Blend the MacBook notch into a black menu bar and give your display rounded corners.</p>
   <p>
     <a href="https://github.com/bernalli/topNV/releases/latest"><img src="https://img.shields.io/github/v/release/bernalli/topNV?label=release" alt="Latest release"></a>
@@ -12,9 +12,9 @@
 
 **[Download the latest release](https://github.com/bernalli/topNV/releases/latest)** · macOS 14 or later
 
-Open `topNV-<version>.dmg` and drag **topNV** into **Applications**.
+Open `TopNV-<version>.dmg` and drag **TopNV** into **Applications**.
 
-topNV is signed ad hoc, not notarized. On first launch, right-click the app in
+TopNV is signed ad hoc, not notarized. On first launch, right-click the app in
 Applications and choose **Open**, then confirm. If macOS blocks it, allow it in
 **System Settings > Privacy & Security**.
 
@@ -41,18 +41,18 @@ Click the menu-bar icon to see the current configuration and change it directly.
 | Corner Radius | Select a preset. A stored non-preset value remains selected as **Custom**, without rounding it to a preset. |
 | Details | Show the stored radius, selected display scope and system requirements; open the source, release notes or issue tracker. |
 | Options | Set **Corners on All Displays**, **Launch at Login** and **Hide Menu Bar Icon**. |
-| Version / About topNV | Show the installed version and the standard macOS About panel. |
-| Quit topNV · ⌘Q | Stop the app and remove its overlays. |
+| Version / About TopNV | Show the installed version and the standard macOS About panel. |
+| Quit TopNV · ⌘Q | Stop the app and remove its overlays. |
 
 Corner Radius and Corners on All Displays are disabled while Round Corners is off.
 If Launch at Login needs approval, Options tells you to allow it in
 **System Settings > General > Login Items**; registration errors appear there too.
 
-To restore a hidden menu-bar icon, **open topNV again from Applications**.
+To restore a hidden menu-bar icon, **open TopNV again from Applications**.
 
 ## How it works
 
-topNV places a black, click-through window behind the menu bar on each notched display.
+TopNV places a black, click-through window behind the menu bar on each notched display.
 The system menu bar draws above it, keeping its items readable and clickable.
 It neither reads nor changes the wallpaper.
 
@@ -79,10 +79,10 @@ Install Xcode 16 or later with its macOS SDK and command-line tools selected, th
 git clone https://github.com/bernalli/topNV.git
 cd topNV
 scripts/bundle.sh
-open build/topNV.app
+open build/TopNV.app
 ```
 
-The script builds the release executable, assembles `build/topNV.app` and signs it ad hoc.
+The script builds the release executable, assembles `build/TopNV.app` and signs it ad hoc.
 Move the app to Applications to keep it installed. To bundle an existing executable,
 set `TOPNV_EXECUTABLE` to its path when running the script.
 
@@ -100,7 +100,11 @@ and publishes a versioned DMG. It runs on a `v*` tag or through **Actions > Rele
 Run workflow** with a version number.
 
 For a local disk image, run `scripts/make-dmg.sh` after `scripts/bundle.sh`;
-the result is `build/topNV.dmg`.
+the result is `build/TopNV.dmg`.
+
+## Support
+
+If TopNV is useful to you, you can [buy me a coffee](https://github.com/sponsors/bernalli).
 
 ## Author
 

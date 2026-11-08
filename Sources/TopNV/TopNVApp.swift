@@ -41,9 +41,9 @@ private struct MenuBarLabel: View {
 
   var body: some View {
     if let icon = Self.icon {
-      Image(nsImage: icon).accessibilityLabel("topNV")
+      Image(nsImage: icon).accessibilityLabel("TopNV")
     } else {
-      Image(systemName: "menubar.rectangle").accessibilityLabel("topNV")
+      Image(systemName: "menubar.rectangle").accessibilityLabel("TopNV")
     }
   }
 }
@@ -88,7 +88,7 @@ struct SettingsMenu: View {
     build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
 
   var body: some View {
-    Section("topNV") {
+    Section("TopNV") {
       let status = MenuStatus(hideNotch: settings.hideNotch, roundCorners: settings.roundCorners)
       Label(status.title, systemImage: status.symbol)
         .foregroundStyle(.secondary)
@@ -132,7 +132,7 @@ struct SettingsMenu: View {
       if let message = loginItem.errorMessage {
         info(message)
       } else if loginItem.needsApproval {
-        info("Allow topNV in System Settings > General > Login Items.")
+        info("Allow TopNV in System Settings > General > Login Items.")
       }
       Divider()
       Toggle(isOn: Binding(
@@ -140,15 +140,15 @@ struct SettingsMenu: View {
       )) {
         Label("Hide Menu Bar Icon", systemImage: "menubar.rectangle")
       }
-      info("Open topNV again to bring it back.")
+      info("Open TopNV again to bring it back.")
     } label: {
       Label("Options", systemImage: "gearshape")
     }
     Divider()
     info(version.title)
-    Button("About topNV") { AboutPanel.show() }
+    Button("About TopNV") { AboutPanel.show() }
     Divider()
-    Button("Quit topNV") { NSApp.terminate(nil) }
+    Button("Quit TopNV") { NSApp.terminate(nil) }
       .keyboardShortcut("q", modifiers: .command)
   }
 

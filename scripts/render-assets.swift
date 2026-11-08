@@ -1,6 +1,6 @@
 // render-assets.swift
 //
-// Renders every visual asset of topNV from AppIconMaster.png in the output
+// Renders every visual asset of TopNV from AppIconMaster.png in the output
 // directory, using CoreGraphics, ImageIO and CoreText (no AppKit, no WindowServer).
 // AppIcon.icon is the editable design source; the master is its full-canvas render.
 //
@@ -249,7 +249,7 @@ func renderCover(icon: CGImage) throws -> CGImage {
   let textX: CGFloat = 590
   let maxWidth = W - textX - 96
   let (title, _) = fittedLine(
-    "topNV", size: 132, maxWidth: maxWidth, color: color(0xFFFFFF), kern: -2.5, font: titleFont)
+    "TopNV", size: 132, maxWidth: maxWidth, color: color(0xFFFFFF), kern: -2.5, font: titleFont)
   let (tag1, tagSize) = fittedLine(
     "Hide the notch.", size: 44, maxWidth: maxWidth, color: color(0xEEEEEE, 0.95), font: bodyFont)
   let (tag2, _) = fittedLine(

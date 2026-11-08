@@ -30,13 +30,13 @@ final class MenuPresentationTests: XCTestCase {
   }
 
   func testInformationWrapsAtWordsWithoutLosingTheNotice() {
-    let notice = "Allow topNV in System Settings > General > Login Items."
+    let notice = "Allow TopNV in System Settings > General > Login Items."
     XCTAssertEqual(MenuText.lines(notice), [
-      "Allow topNV in System Settings > General >", "Login Items.",
+      "Allow TopNV in System Settings > General >", "Login Items.",
     ])
     XCTAssertEqual(MenuText.lines(notice).joined(separator: " "), notice)
-    XCTAssertEqual(MenuText.lines("Open topNV again to bring it back."), [
-      "Open topNV again to bring it back.",
+    XCTAssertEqual(MenuText.lines("Open TopNV again to bring it back."), [
+      "Open TopNV again to bring it back.",
     ])
   }
 

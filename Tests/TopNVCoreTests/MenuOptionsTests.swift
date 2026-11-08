@@ -25,7 +25,8 @@ final class MenuOptionsTests: XCTestCase {
   }
 
   func testFractionalRadiiAreNotRoundedToPresets() {
-    let values = (0..<30).map { Double($0) + 0.5 }
+    let values =
+      (0..<30).map { Double($0) + 0.5 }
       + [Double(5).nextDown, Double(5).nextUp, 13.25, 29.999]
     for value in values {
       let options = CornerRadiusOption.options(for: value)
@@ -57,8 +58,9 @@ final class MenuOptionsTests: XCTestCase {
       .releaseNotes: "/bernalli/topNV/releases",
       .reportIssue: "/bernalli/topNV/issues/new",
       .source: "/bernalli/topNV",
+      .sponsor: "/sponsors/bernalli",
     ]
-    XCTAssertEqual(AppLink.allCases.count, 3)
+    XCTAssertEqual(AppLink.allCases.count, 4)
     for link in AppLink.allCases {
       let url = try XCTUnwrap(link.url)
       XCTAssertEqual(url.scheme, "https")
