@@ -15,6 +15,12 @@ readonly VERSION="${TOPNV_VERSION:-1.1.0}"
 readonly BUILD_NUMBER="${TOPNV_BUILD_NUMBER:-1}"
 readonly MIN_MACOS="14.0"
 readonly APP_DIR="$ROOT/build/$APP_NAME.app"
+# The author's name lives only in AUTHORS, the single source of attribution.
+readonly AUTHOR="$(head -n 1 "$ROOT/AUTHORS")"
+if [[ -z "$AUTHOR" ]]; then
+  echo "error: AUTHORS is empty" >&2
+  exit 1
+fi
 
 cd "$ROOT"
 if [[ -n "${TOPNV_EXECUTABLE:-}" ]]; then
@@ -60,7 +66,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key>
   <string>$BUILD_NUMBER</string>
   <key>NSHumanReadableCopyright</key>
-  <string>© 2026 bernalli</string>
+  <string>© 2026 $AUTHOR</string>
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_MACOS</string>
   <key>LSUIElement</key>

@@ -101,3 +101,7 @@ Run workflow** with a version number.
 
 For a local disk image, run `scripts/make-dmg.sh` after `scripts/bundle.sh`;
 the result is `build/topNV.dmg`.
+
+## Author
+
+Created by Samuele Martinalli.
