@@ -18,6 +18,16 @@ struct AboutView: View {
       Text(information.version.title)
         .font(.system(size: NSFont.smallSystemFontSize))
         .foregroundStyle(.secondary)
+      if let url = AppLink.source.url {
+        Link("View Source on GitHub", destination: url)
+          .font(.system(size: NSFont.smallSystemFontSize))
+          .focusEffectDisabled()
+      }
+      if let copyright = information.copyright {
+        Text(copyright)
+          .font(.system(size: NSFont.smallSystemFontSize))
+          .foregroundStyle(.secondary)
+      }
       Button {
         guard let url = AppLink.sponsor.url else { return }
         NSWorkspace.shared.open(url)
@@ -26,12 +36,7 @@ struct AboutView: View {
       }
       .buttonStyle(CoffeeButtonStyle())
       .focusEffectDisabled()
-      .padding(.vertical, 4)
-      if let copyright = information.copyright {
-        Text(copyright)
-          .font(.system(size: NSFont.smallSystemFontSize))
-          .foregroundStyle(.secondary)
-      }
+      .padding(.top, 8)
     }
     .multilineTextAlignment(.center)
     .fixedSize(horizontal: false, vertical: true)
