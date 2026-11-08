@@ -64,7 +64,8 @@ Requires macOS 14 or later.
 
 ## Build and install
 
-Requirements: macOS 14 or later, Xcode command-line tools with Swift 5.9 or later.
+Requirements: Xcode 16 or later, with its macOS SDK and command-line tools selected.
+The built app requires macOS 14 or later.
 
 ```sh
 scripts/bundle.sh

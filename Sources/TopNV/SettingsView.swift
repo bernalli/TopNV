@@ -5,6 +5,12 @@ struct SettingsView: View {
   @ObservedObject var loginItem: LoginItem
   @AppStorage(AppSettings.showMenuBarIconKey) private var showMenuBarIcon = true
 
+  private var cornerRadiusText: String {
+    let value = String(settings.cornerRadius)
+    let points = value.hasSuffix(".0") ? String(value.dropLast(2)) : value
+    return "\(points) pt"
+  }
+
   var body: some View {
     Form {
       Section("Display") {
@@ -14,7 +20,7 @@ struct SettingsView: View {
           HStack {
             Text("Corner Radius")
             Spacer()
-            Text("\(Int(settings.cornerRadius.rounded())) pt")
+            Text(cornerRadiusText)
               .monospacedDigit()
               .foregroundStyle(.secondary)
           }
