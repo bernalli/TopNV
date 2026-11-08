@@ -24,6 +24,12 @@ func run(_ tool: URL, _ args: [String], input: Data) throws -> (Int32, Data) {
   process.waitUntilExit()
   return (process.terminationStatus, text)
 }
+// Packaging commands never receive a key, so their output is safe to print.
+func runPackaging(_ path: String, _ args: [String]) throws {
+  let (status, output) = try run(URL(fileURLWithPath: path), args, input: Data())
+  if status != 0 { FileHandle.standardError.write(output) }
+  try require(status == 0, "\(path) exited with status \(status)")
+}
 func scan(_ root: URL, forbidden: Data) throws {
   guard
     let iterator = FileManager.default.enumerator(
@@ -53,12 +59,38 @@ do {
   let input = testRoot.appendingPathComponent("input")
   try FileManager.default.createDirectory(at: input, withIntermediateDirectories: false)
   defer { try? FileManager.default.removeItem(at: testRoot) }
-  let dmg = root.appendingPathComponent("build/TopNV-0.0.1.dmg")
-  try FileManager.default.copyItem(at: dmg, to: input.appendingPathComponent("TopNV-0.0.1.dmg"))
   try Data("Ephemeral signing round trip. Do not install.\n".utf8).write(
     to: input.appendingPathComponent("TopNV-0.0.1.md"))
   let key = Curve25519.Signing.PrivateKey()
   let encoded = Data(key.rawRepresentation.base64EncodedString().utf8)
+  let publicKey = key.publicKey.rawRepresentation.base64EncodedString()
+  // generate_appcast signs only when the key matches SUPublicEDKey inside the archive. On a
+  // mismatch it exits 0 with an unsigned feed, so the round trip packages a copy of the app that
+  // carries the disposable public key. The production key takes no part in this check.
+  let stage = testRoot.appendingPathComponent("stage")
+  try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
+  let app = stage.appendingPathComponent("TopNV.app")
+  try FileManager.default.copyItem(
+    at: root.appendingPathComponent("build/TopNV.app"), to: app)
+  let plist = app.appendingPathComponent("Contents/Info.plist")
+  var info =
+    try PropertyListSerialization.propertyList(from: Data(contentsOf: plist), format: nil)
+    as! [String: Any]
+  info["SUPublicEDKey"] = publicKey
+  try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(
+    to: plist)
+  try FileManager.default.createSymbolicLink(
+    at: stage.appendingPathComponent("Applications"),
+    withDestinationURL: URL(fileURLWithPath: "/Applications"))
+  try runPackaging(
+    "/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", app.path])
+  let dmg = input.appendingPathComponent("TopNV-0.0.1.dmg")
+  try runPackaging(
+    "/usr/bin/hdiutil",
+    [
+      "create", "-volname", "TopNV", "-srcfolder", stage.path, "-fs", "HFS+", "-format", "UDZO",
+      dmg.path,
+    ])
   let appcast = testRoot.appendingPathComponent("appcast.xml")
   let prefix = "https://github.com/bernalli/TopNV/releases/download/v0.0.1/"
   let args = [
@@ -73,15 +105,7 @@ do {
     output.range(of: encoded) == nil, "tool output contains the disposable key; output withheld")
   if status != 0 { FileHandle.standardError.write(output) }
   try require(status == 0, "generate_appcast exited with status \(status)")
-  var info =
-    try PropertyListSerialization.propertyList(
-      from: Data(contentsOf: root.appendingPathComponent("build/TopNV.app/Contents/Info.plist")),
-      format: nil) as! [String: Any]
-  let publicKey = key.publicKey.rawRepresentation.base64EncodedString()
-  info["SUPublicEDKey"] = publicKey
   let feed = try Data(contentsOf: appcast)
-  // The feed holds only a signature from the disposable key: show it to diagnose format changes.
-  FileHandle.standardError.write(feed)
   let payload = try Data(contentsOf: dmg)
   func validate(_ feed: Data, _ publicKey: String) throws {
     try ReleaseValidator.feed(
@@ -105,14 +129,31 @@ do {
   rejected = false
   do { try validate(badFeed, publicKey) } catch { rejected = true }
   try require(rejected, "altered signature accepted")
+  // A key that does not match the packaged public key must never produce an accepted feed.
+  let otherKey = Data(
+    Curve25519.Signing.PrivateKey().rawRepresentation.base64EncodedString().utf8)
+  let mismatchOutput = testRoot.appendingPathComponent("mismatch.xml")
+  var mismatchArgs = args
+  mismatchArgs[mismatchArgs.firstIndex(of: appcast.path)!] = mismatchOutput.path
+  let (mismatchStatus, mismatchLog) = try run(tool, mismatchArgs, input: otherKey + Data([10]))
+  try require(
+    mismatchLog.range(of: otherKey) == nil,
+    "tool output contains the disposable key; output withheld")
+  rejected = mismatchStatus != 0
+  if !rejected {
+    do { try validate(Data(contentsOf: mismatchOutput), publicKey) } catch { rejected = true }
+  }
+  try require(rejected, "mismatched signing key accepted")
   let emptyOutput = testRoot.appendingPathComponent("empty.xml")
   var emptyArgs = args
   emptyArgs[emptyArgs.firstIndex(of: appcast.path)!] = emptyOutput.path
   let (emptyStatus, emptyLog) = try run(tool, emptyArgs, input: Data())
   try require(emptyStatus != 0 && emptyLog.range(of: encoded) == nil, "missing stdin key accepted")
   // Includes artifact candidates, build outputs and SwiftPM cache; report no secret bytes.
-  try scan(root.appendingPathComponent("build"), forbidden: encoded)
-  try scan(root.appendingPathComponent(".build"), forbidden: encoded)
+  for secret in [encoded, otherKey] {
+    try scan(root.appendingPathComponent("build"), forbidden: secret)
+    try scan(root.appendingPathComponent(".build"), forbidden: secret)
+  }
   print(
     "PASS ephemeral stdin signing, CryptoKit verification, negative inputs and secret non-persistence"
   )
