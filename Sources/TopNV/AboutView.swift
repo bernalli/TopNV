@@ -15,13 +15,19 @@ struct AboutView: View {
         .padding(.bottom, 4)
       Text(information.name)
         .font(.system(size: 16, weight: .bold))
-      Text(information.version.title)
-        .font(.system(size: NSFont.smallSystemFontSize))
-        .foregroundStyle(.secondary)
-      if let url = AppLink.source.url {
-        Link("View Source on GitHub", destination: url)
+      HStack(spacing: 6) {
+        Text(information.version.title)
           .font(.system(size: NSFont.smallSystemFontSize))
-          .focusEffectDisabled()
+          .foregroundStyle(.secondary)
+        Button {
+          open(.source)
+        } label: {
+          GitHubMark()
+        }
+        .buttonStyle(.plain)
+        .focusEffectDisabled()
+        .help("View Source on GitHub")
+        .accessibilityLabel("View Source on GitHub")
       }
       if let copyright = information.copyright {
         Text(copyright)
@@ -29,8 +35,7 @@ struct AboutView: View {
           .foregroundStyle(.secondary)
       }
       Button {
-        guard let url = AppLink.sponsor.url else { return }
-        NSWorkspace.shared.open(url)
+        open(.sponsor)
       } label: {
         Label("Buy Me a Coffee", systemImage: "cup.and.saucer.fill")
       }
@@ -42,6 +47,32 @@ struct AboutView: View {
     .fixedSize(horizontal: false, vertical: true)
     .padding(20)
     .frame(width: 280)
+  }
+
+  private func open(_ link: AppLink) {
+    guard let url = link.url else { return }
+    NSWorkspace.shared.open(url)
+  }
+}
+
+/// The GitHub mark from the app bundle, or an SF Symbol when run unbundled.
+private struct GitHubMark: View {
+  private static let image: NSImage? = {
+    guard let image = Bundle.main.image(forResource: "GitHubMark") else { return nil }
+    image.isTemplate = true
+    image.size = NSSize(width: 12, height: 12)
+    return image
+  }()
+
+  var body: some View {
+    Group {
+      if let image = Self.image {
+        Image(nsImage: image)
+      } else {
+        Image(systemName: "link")
+      }
+    }
+    .foregroundStyle(.secondary)
   }
 }
 
