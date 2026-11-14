@@ -2,19 +2,19 @@ public struct MenuStatus {
   public let title: String
   public let symbol: String
 
-  public init(hideNotch: Bool, roundCorners: Bool) {
+  public init(hideNotch: Bool, roundCorners: Bool, localizer: Localizer = .main) {
     switch (hideNotch, roundCorners) {
     case (true, true):
-      title = "Notch Hidden, Corners Rounded"
+      title = localizer(.notchHiddenCornersRounded)
       symbol = "display"
     case (true, false):
-      title = "Notch Hidden"
+      title = localizer(.notchHidden)
       symbol = "menubar.rectangle"
     case (false, true):
-      title = "Corners Rounded"
+      title = localizer(.cornersRounded)
       symbol = "rectangle"
     case (false, false):
-      title = "Inactive"
+      title = localizer(.inactive)
       symbol = "power"
     }
   }

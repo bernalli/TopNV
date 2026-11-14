@@ -20,7 +20,7 @@ final class MenuPresentationTests: XCTestCase {
   func testVersionIncludesAvailableBundleFields() {
     XCTAssertEqual(AppVersion(shortVersion: "1.1.0", build: "1").title, "Version 1.1.0 (1)")
     XCTAssertEqual(AppVersion(shortVersion: "2.0", build: nil).title, "Version 2.0")
-    XCTAssertEqual(AppVersion(shortVersion: nil, build: "7").title, "Version Unavailable (7)")
+    XCTAssertEqual(AppVersion(shortVersion: nil, build: "7").title, "Version Unavailable (Build 7)")
     XCTAssertEqual(AppVersion(shortVersion: nil, build: nil).title, "Version Unavailable")
   }
 
@@ -31,13 +31,17 @@ final class MenuPresentationTests: XCTestCase {
 
   func testInformationWrapsAtWordsWithoutLosingTheNotice() {
     let notice = "Allow TopNV in System Settings > General > Login Items."
-    XCTAssertEqual(MenuText.lines(notice), [
-      "Allow TopNV in System Settings > General >", "Login Items.",
-    ])
+    XCTAssertEqual(
+      MenuText.lines(notice),
+      [
+        "Allow TopNV in System Settings > General >", "Login Items.",
+      ])
     XCTAssertEqual(MenuText.lines(notice).joined(separator: " "), notice)
-    XCTAssertEqual(MenuText.lines("Open TopNV again to bring it back."), [
-      "Open TopNV again to bring it back.",
-    ])
+    XCTAssertEqual(
+      MenuText.lines("Open TopNV again to bring it back."),
+      [
+        "Open TopNV again to bring it back."
+      ])
   }
 
   func testWrappingHandlesEmptyTextWhitespaceAndLongWords() {

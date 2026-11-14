@@ -37,7 +37,7 @@ struct ParsedEntry {
 }
 
 private let entryPattern = try! NSRegularExpression(
-  pattern: #"^(/\* PENDING-MONOPODS \*/ )?"((?:[^"\\]|\\.)*)" = "((?:[^"\\]|\\.)*)";$"#)
+  pattern: #"^(/\* PENDING-MONOPODS \*/ )?"((?:[^"\\]|\\.)*)" = "((?:[^"\\]|\\.)*)";\z"#)
 
 private func unescape(_ text: String) -> String {
   var result = ""
