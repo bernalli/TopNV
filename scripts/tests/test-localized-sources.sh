@@ -8,10 +8,10 @@ import re
 import sys
 
 CALLS = re.compile(
-    r'(?<![\w.])(?:Text|Label|Button|Toggle|Picker|Section|Menu|info)\(|'
-    r'\.(?:help|accessibilityLabel)\(|'
+    r'(?<![\w.])(?:Text|Label|Button|Toggle|Picker|Section|Menu|info)\s*\(|'
+    r'\.(?:help|accessibilityLabel)\s*\(|'
     r'\b(?:messageText|informativeText)\s*=|'
-    r'\baddButton\(withTitle:')
+    r'\baddButton\s*\(\s*withTitle\s*:')
 LABEL = re.compile(r'\s*[A-Za-z_]\w*\s*:(?!:)')
 ALLOWED = '"TopNV"'
 
@@ -57,25 +57,28 @@ def read_string(code, i):
 
 
 def argument(code, start, assignment):
-    """The first argument (or assigned value) text, and the literals at its top level."""
+    """The first argument/value and literals outside nested function calls."""
     label = LABEL.match(code, start)
     i = label.end() if label and not assignment else start
-    begin, depth, literals = i, 0, []
+    while i < len(code) and code[i].isspace():
+        i += 1
+    begin, nesting, literals = i, [], []
     while i < len(code):
         c = code[i]
         if c == '"' or code.startswith('#"', i):
             end = read_string(code, i)
-            if depth == 0:
+            if not any(nesting):
                 literals.append(code[i:end])
             i = end
             continue
         if c in '([{':
-            depth += 1
+            prefix = code[begin:i].rstrip()
+            nesting.append(c == '(' and bool(re.search(r'[\w.)\]]$', prefix)))
         elif c in ')]}':
-            if depth == 0:
+            if not nesting:
                 break
-            depth -= 1
-        elif depth == 0 and (c == ',' or (assignment and c in '\n;')):
+            nesting.pop()
+        elif not nesting and (c == ',' or (assignment and c in '\n;')):
             break
         i += 1
     return code[begin:i].strip(), literals
@@ -86,13 +89,21 @@ def violations(source):
     found = []
     for match in CALLS.finditer(code):
         text, literals = argument(code, match.end(), match.group(0).endswith('='))
-        if literals and text != ALLOWED:
+        allowed_name = re.fullmatch(r'\(*\s*"TopNV"\s*\)*', text) is not None
+        if literals and not allowed_name:
             found.append((code.count('\n', 0, match.start()) + 1, match.group(0), text))
     return found
 
 
 cases = [
     ('Text("Hello")', True),
+    ('Text ( "Hello" )', True),
+    ('Text(("Hello"))', True),
+    ('Text( ( "Hello" ) )', True),
+    ('info(flag ? ("All") : ("Built-in"))', True),
+    ('view.help ("Hello")', True),
+    ('alert.addButton (withTitle: "Hello")', True),
+    ('alert.messageText =\n  "Hello"', True),
     ('Label("Hide Notch", systemImage: "rectangle")', True),
     ('Button("Quit") { }', True),
     ('Toggle("Flag", isOn: $x)', True),
@@ -114,6 +125,8 @@ cases = [
     ('info(flag ? "All" : "Built-in")', True),
     ('Text(\n  verbatim:\n  "Hello")', True),
     ('Text(localizer(.hideNotch))', False),
+    ('Text((localizer(.hideNotch)))', False),
+    ('Text(("TopNV"))', False),
     ('Label(localizer(.details), systemImage: "info.circle")', False),
     ('alert.messageText = localizer(.updateQuestionTitle)', False),
     ('alert.addButton(withTitle: localizer(.dontCheck))', False),

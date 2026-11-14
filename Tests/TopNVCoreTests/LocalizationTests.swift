@@ -45,20 +45,14 @@ private let entryPattern: NSRegularExpression = {
   }
 }()
 
-private func unescape(_ text: String) -> String {
-  var result = ""
-  var escaping = false
-  for character in text {
-    if escaping {
-      result.append(character == "n" ? "\n" : character)
-      escaping = false
-    } else if character == "\\" {
-      escaping = true
-    } else {
-      result.append(character)
-    }
-  }
-  return result
+private func unescape(_ text: String) -> String? {
+  let entry = "\"value\" = \"\(text)\";\n"
+  guard
+    let plist = try? PropertyListSerialization.propertyList(
+      from: Data(entry.utf8), options: [], format: nil),
+    let dictionary = plist as? [String: String]
+  else { return nil }
+  return dictionary["value"]
 }
 
 /// Parses the shared format: UTF-8 without BOM, one `"key" = "value";` per line, lines sorted
@@ -83,7 +77,9 @@ func parseTable(_ raw: String) -> (entries: [ParsedEntry], problems: [TableProbl
     let range = NSRange(line.startIndex..., in: line)
     guard let match = entryPattern.firstMatch(in: line, range: range),
       let keyRange = Range(match.range(at: 2), in: line),
-      let valueRange = Range(match.range(at: 3), in: line)
+      let valueRange = Range(match.range(at: 3), in: line),
+      let key = unescape(String(line[keyRange])),
+      let value = unescape(String(line[valueRange]))
     else {
       problems.append(
         line.contains("/*") || line.contains("//")
@@ -98,8 +94,8 @@ func parseTable(_ raw: String) -> (entries: [ParsedEntry], problems: [TableProbl
     previous = sortable
     entries.append(
       ParsedEntry(
-        line: number, key: unescape(String(line[keyRange])),
-        value: unescape(String(line[valueRange])),
+        line: number, key: key,
+        value: value,
         hasMarker: hasMarker))
   }
   return (entries, problems)
@@ -339,6 +335,27 @@ final class LocalizationTests: XCTestCase {
     lines = sampleLines
     lines[1] += "\r"
     XCTAssertTrue(problems(lines).contains(.malformedLine(2)))
+  }
+
+  func testValidatorUsesFoundationEscapeRules() {
+    var lines = sampleLines
+    for blank in [#"\t"#, #"\r"#, #"\U0020"#] {
+      lines[1] = #""Hide Notch" = ""# + blank + #"";"#
+      XCTAssertTrue(problems(lines).contains(.emptyValue("Hide Notch")), blank)
+    }
+    for invalid in [#""Hide Notch" = "\UZZZZ";"#, #""Hide Notch" = 7;"#,
+      sampleLines[1] + " extra"]
+    {
+      lines = sampleLines
+      lines[1] = invalid
+      XCTAssertTrue(problems(lines).contains(.malformedLine(2)), invalid)
+    }
+    let base = ["%@ pt": BaseKey(isShared: false, value: "%@ pt")]
+    XCTAssertTrue(
+      tableProblems(base: base, raw: #""%@ pt" = "\U0025d %@";"# + "\n")
+        .contains(.placeholderMismatch("%@ pt")))
+    XCTAssertEqual(
+      tableProblems(base: base, raw: #""%@ pt" = "\U0025@ pt";"# + "\n"), [])
   }
 
   func testValidatorReportsPlaceholderDefects() {
