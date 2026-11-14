@@ -80,11 +80,39 @@ notary_status=0
 NOTARY_JSON="$(xcrun notarytool submit "$DMG" --keychain-profile notary --wait --output-format json)" || notary_status=$?
 echo "$NOTARY_JSON"
 NOTARY_FIELDS="$(printf '%s' "$NOTARY_JSON" | python3 -c '
-import json, sys
-try: data = json.load(sys.stdin)
-except ValueError: data = {}
-if not isinstance(data, dict): data = {}
-print(str(data.get("id", "")) + "\t" + str(data.get("status", "")))')"
+import json, re, sys
+
+def unique(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate field")
+        result[key] = value
+    return result
+
+def invalid_constant(value):
+    raise ValueError("invalid JSON constant")
+
+try:
+    data = json.load(sys.stdin, object_pairs_hook=unique,
+                     parse_constant=invalid_constant)
+    if not isinstance(data, dict):
+        raise ValueError("expected object")
+    identifier = data.get("id")
+    status = data.get("status")
+    if not isinstance(identifier, str) or not re.fullmatch(
+        r"[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}",
+        identifier
+    ):
+        raise ValueError("invalid submission id")
+    if not isinstance(status, str) or status not in (
+        "Accepted", "Invalid", "Rejected", "In Progress"
+    ):
+        raise ValueError("invalid status")
+    print(identifier + "\t" + status)
+except (ValueError, TypeError):
+    sys.exit("error: malformed notarytool response")
+')" || die 'cannot validate notarization response'
 NOTARY_ID="${NOTARY_FIELDS%%$'\t'*}"
 NOTARY_RESULT="${NOTARY_FIELDS#*$'\t'}"
 if [[ $notary_status != 0 || $NOTARY_RESULT != Accepted ]]; then
@@ -122,8 +150,10 @@ TOPNV_SPARKLE_KEY=keychain TOPNV_VERSION="$VERSION" \
 
 step '10 publish'
 # The publisher runs as a workflow_dispatch from main would.
+LOCAL_RUN_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+readonly LOCAL_RUN_ID
 PUBLISH_ENV=(GITHUB_EVENT_NAME=workflow_dispatch GITHUB_REF=refs/heads/main INPUT_VERSION="$VERSION" INPUT_CHANNEL=stable
-  GITHUB_SHA="$(git rev-parse --verify HEAD)" GITHUB_RUN_NUMBER="$BUILD" GITHUB_RUN_ID="local-$VERSION-$BUILD")
+  GITHUB_SHA="$(git rev-parse --verify HEAD)" GITHUB_RUN_NUMBER="$BUILD" GITHUB_RUN_ID="local-$VERSION-$BUILD-$LOCAL_RUN_ID")
 if ! env "${PUBLISH_ENV[@]}" scripts/publish-release.sh publish; then
   echo 'error: publication failed; recovering this run' >&2
   env "${PUBLISH_ENV[@]}" scripts/publish-release.sh recover || echo 'error: recovery failed; check the draft release on GitHub' >&2

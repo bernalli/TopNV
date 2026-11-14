@@ -27,9 +27,43 @@ load_commands="$(otool -l "$APP/Contents/MacOS/TopNV" 2>/dev/null)" || load_comm
 codesign --verify --deep --strict "$APP" >/dev/null 2>&1 || fail 'V8: signature verification failed'
 SIGNATURE=$(codesign -dv --verbose=4 "$APP" 2>&1) || fail 'V9: signature metadata unavailable'
 # Line-anchored reads of codesign -dv output.
-has_line() { [[ $'\n'"$1" == *$'\n'"$2"* ]]; }
-has_runtime() { [[ $1 =~ flags=0x[0-9a-fA-F]+\(([^\)]*)\) && ",${BASH_REMATCH[1]}," == *,runtime,* ]]; }
-team_of() { local pattern=$'(^|\n)TeamIdentifier=([A-Z0-9]{10})(\n|$)'; [[ $1 =~ $pattern ]] && printf '%s' "${BASH_REMATCH[2]}"; }
+has_line() {
+  printf '%s\n' "$1" | python3 -c '
+import sys
+prefix = sys.argv[1]
+values = [line[len(prefix):] for line in sys.stdin.read().splitlines()
+          if line.startswith(prefix)]
+sys.exit(0 if len(values) == 1 and values[0].strip() else 1)
+' "$2"
+}
+has_runtime() {
+  printf '%s\n' "$1" | python3 -c '
+import re, sys
+rows = [line for line in sys.stdin.read().splitlines()
+        if line.startswith("CodeDirectory ")]
+if len(rows) != 1:
+    sys.exit(1)
+flags = re.findall(
+    r"(?:^|\s)flags=0x([0-9a-fA-F]{1,8})\(([^)]*)\)(?=\s|$)",
+    rows[0])
+if len(flags) != 1:
+    sys.exit(1)
+number, labels = flags[0]
+sys.exit(0 if int(number, 16) & 0x10000
+         and labels.split(",").count("runtime") == 1 else 1)
+'
+}
+team_of() {
+  printf '%s\n' "$1" | python3 -c '
+import re, sys
+values = [line.partition("=")[2]
+          for line in sys.stdin.read().splitlines()
+          if line.startswith("TeamIdentifier=")]
+if len(values) != 1 or not re.fullmatch(r"[A-Z0-9]{10}", values[0]):
+    sys.exit(1)
+print(values[0], end="")
+'
+}
 # No default: the caller states which signature it built (DP-7).
 case "${TOPNV_EXPECT_SIGNATURE-}" in
   adhoc)

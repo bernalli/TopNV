@@ -218,12 +218,12 @@ def run_tests(kind):
         (bindir/'codesign').write_text('#!/bin/bash\n[[ "$1" == --verify ]] && exit 0\n'
                                        'cat "$FAKE_SIGNATURES/$(basename "${@: -1}")" >&2\n')
         env['FAKE_SIGNATURES'] = str(signatures)
-        def details(team='ABCDE12345', flags='0x10000(runtime)', drop=(), extra=()):
-            lines = ['Executable=/fixture', 'Identifier=io.github.bernalli.topnv', 'Format=app bundle with Mach-O universal (x86_64 arm64)',
+        def details(team='ABCDE12345', flags='0x10000(runtime)', drop=(), extra=(), executable='/fixture', timestamp='14 Nov 2026 at 22:00:00'):
+            lines = [f'Executable={executable}', 'Identifier=io.github.bernalli.topnv', 'Format=app bundle with Mach-O universal (x86_64 arm64)',
                      f'CodeDirectory v=20500 size=100 flags={flags} hashes=1+7 location=embedded',
                      'Authority=Developer ID Application: Example Developer (ABCDE12345)',
                      'Authority=Developer ID Certification Authority', 'Authority=Apple Root CA',
-                     'Timestamp=14 Nov 2026 at 22:00:00', f'TeamIdentifier={team}', 'Runtime Version=14.0.0', *extra]
+                     f'Timestamp={timestamp}', f'TeamIdentifier={team}', 'Runtime Version=14.0.0', *extra]
             return '\n'.join(l for l in lines if not l.startswith(drop) or not drop) + '\n'
         components = ('Installer.xpc', 'Downloader.xpc', 'Autoupdate', 'Updater.app', 'Sparkle.framework')
         def signed(**app_changes):
@@ -240,6 +240,21 @@ def run_tests(kind):
             for changes in ({'flags': '0x0(none)'}, {'flags': '0x2(adhoc)'}, {'team': 'ZYXWV98765'}, {'team': 'not set'}):
                 signed(); (signatures / name).write_text(details(**changes)); verify('V14')
             signed(); (signatures / name).unlink(); verify('V14')
+        # Ambiguous metadata: runtime flags outside the CodeDirectory line, contradictory teams, an empty timestamp.
+        def verdict():
+            result = subprocess.run(['bash', str(REPO / 'scripts/verify-bundle.sh'), str(app)], env=env, capture_output=True)
+            return result.returncode, (result.stdout + result.stderr).decode()
+        ambiguous = [('TopNV.app', {'executable': '/Applications/flags=0x10000(runtime)/TopNV', 'flags': '0x0(none)'}, 'V9'),
+                     ('TopNV.app', {'extra': ('TeamIdentifier=ZYXWV98765',)}, 'V9'),
+                     ('TopNV.app', {'timestamp': ''}, 'V9')]
+        ambiguous += [(name, {'extra': ('TeamIdentifier=ZYXWV98765',)}, 'V14') for name in components]
+        accepted = []
+        for target, changes, code in ambiguous:
+            signed(); (signatures / target).write_text(details(**changes))
+            status, output = verdict()
+            if status != 1 or code not in output: accepted.append((target, changes, code))
+        assert not accepted, accepted
+        signed(); verify()
         # Ad hoc mode never accepts a Developer ID signature, and never looks at the components.
         signed(); env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'; verify('V9')
         (bindir/'codesign').write_text('#!/bin/bash\n'+responses['codesign']+'\n')

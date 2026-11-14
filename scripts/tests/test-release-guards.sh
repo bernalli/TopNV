@@ -54,6 +54,19 @@ with tempfile.TemporaryDirectory(dir=root/'build/test-tmp') as tmp:
         assert seen['argv'][:len(tail)]==tail and len(seen['argv'])==len(tail)+1,seen
         assert seen['stdin']=='' and not seen['env'],seen
         assert key.encode() not in result.stdout+result.stderr
+    # keychain: an exported key reaches no child at all, not only generate_appcast.
+    spy=copy/'spy'; spy.mkdir(); children_log=copy/'children.log'; real_bash=shutil.which('bash')
+    for name in ('bash','dirname','python3'):
+        (spy/name).write_text('#!/bin/bash\nprintf "%s %s\\n" '+name+' "${SPARKLE_ED_PRIVATE_KEY+leaked}" >> "$FAKE_CHILDREN"\n'
+                              'exec '+shutil.which(name)+' "$@"\n')
+        (spy/name).chmod(0o755)
+    result=subprocess.run([real_bash,str(copy/'scripts/sign-release.sh')],stdin=subprocess.DEVNULL,capture_output=True,
+                          env=dict(base,PATH=str(spy)+':'+base['PATH'],FAKE_CHILDREN=str(children_log),
+                                   TOPNV_SPARKLE_KEY='keychain',SPARKLE_ED_PRIVATE_KEY=key))
+    assert result.returncode==0,result
+    children=children_log.read_text().splitlines()
+    assert {c.split()[0] for c in children}=={'bash','dirname','python3'},children
+    assert [c for c in children if c.endswith('leaked')]==[],children
     for mode in ('Keychain','file','keychain '):
         result,seen=sign(TOPNV_SPARKLE_KEY=mode,SPARKLE_ED_PRIVATE_KEY=key)
         assert result.returncode!=0 and seen is None and b'TOPNV_SPARKLE_KEY' in result.stderr,(mode,result)

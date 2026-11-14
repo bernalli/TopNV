@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set +x
 set -euo pipefail
+if [[ ${TOPNV_SPARKLE_KEY-} == keychain ]]; then
+  unset SPARKLE_ED_PRIVATE_KEY
+fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # TOPNV_SPARKLE_KEY=keychain: generate_appcast reads the EdDSA key from the login Keychain (local
