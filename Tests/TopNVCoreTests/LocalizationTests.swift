@@ -45,7 +45,19 @@ private let entryPattern: NSRegularExpression = {
   }
 }()
 
+/// The only escapes of the shared format. Checked before Foundation decodes the text, because
+/// Foundation's handling of other escapes differs between macOS versions.
+private let allowedEscape: NSRegularExpression = {
+  do {
+    return try NSRegularExpression(pattern: #"\A(?:[^\\]|\\[\\"ntr]|\\U[0-9A-Fa-f]{4})*\z"#)
+  } catch {
+    preconditionFailure("invalid escape pattern: \(error)")
+  }
+}()
+
 private func unescape(_ text: String) -> String? {
+  let whole = NSRange(text.startIndex..., in: text)
+  guard allowedEscape.firstMatch(in: text, range: whole) != nil else { return nil }
   let entry = "\"value\" = \"\(text)\";\n"
   guard
     let plist = try? PropertyListSerialization.propertyList(
@@ -343,9 +355,13 @@ final class LocalizationTests: XCTestCase {
       lines[1] = #""Hide Notch" = ""# + blank + #"";"#
       XCTAssertTrue(problems(lines).contains(.emptyValue("Hide Notch")), blank)
     }
-    for invalid in [#""Hide Notch" = "\UZZZZ";"#, #""Hide Notch" = 7;"#,
-      sampleLines[1] + " extra"]
-    {
+    // The shared format allows only \\ \" \n \t \r and \U followed by four hex digits, so the
+    // verdict does not depend on how a given macOS version's Foundation treats other escapes.
+    for invalid in [
+      #""Hide Notch" = "\UZZZZ";"#, #""Hide Notch" = "\U12";"#,
+      #""Hide Notch" = "\q";"#, #""Hide Notch" = "\012";"#, #""Hide Notch" = 7;"#,
+      sampleLines[1] + " extra",
+    ] {
       lines = sampleLines
       lines[1] = invalid
       XCTAssertTrue(problems(lines).contains(.malformedLine(2)), invalid)
