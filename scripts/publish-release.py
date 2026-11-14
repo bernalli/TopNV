@@ -57,7 +57,7 @@ class Transport:
         try:
             require(subprocess.run(['hdiutil','attach','-nobrowse','-readonly','-mountpoint',str(mount),str(dmg)],stdout=subprocess.DEVNULL).returncode==0,'cannot mount downloaded DMG')
             attached=True
-            env=dict(os.environ,TOPNV_EXPECT_UNIVERSAL='1',TOPNV_EXPECT_FEED_URL=config.feed)
+            env=dict(os.environ,TOPNV_EXPECT_UNIVERSAL='1',TOPNV_EXPECT_FEED_URL=config.feed,TOPNV_EXPECT_SIGNATURE='developer-id')
             require(subprocess.run([str(self.root/'scripts/verify-bundle.sh'),str(mount/'TopNV.app')],env=env).returncode==0,'downloaded bundle invalid')
             args=[str(self.root/'.build/release/release-check'),'feed','--appcast',str(feed),'--dmg',str(dmg),'--app',str(mount/'TopNV.app'),'--tag',config.tag,'--prefix',config.prefix,'--version',config.version,'--build',config.build,'--feed',config.feed,'--public-key-file',str(self.root/'Assets/SparklePublicEDKey.txt')]
             require(subprocess.run(args).returncode==0,'downloaded feed invalid')

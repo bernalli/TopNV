@@ -132,6 +132,7 @@ def run_tests(kind):
             p = bindir / name; p.write_text('#!/bin/bash\n' + script + '\n'); p.chmod(0o755)
         env['PATH'] = str(bindir) + ':' + env['PATH']
         env['TOPNV_EXPECT_UNIVERSAL'] = '1'
+        env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'
         contents = app / 'Contents'
         (contents / 'MacOS').mkdir(parents=True)
         (contents / 'MacOS/TopNV').write_text('fixture')
@@ -206,6 +207,42 @@ def run_tests(kind):
         # A long listing must not turn an early grep match into a false failure under pipefail.
         (bindir/'otool').write_text('#!/bin/bash\n'+responses['otool']+'\nexec /usr/bin/seq 1 200000\n'); verify()
         (bindir/'otool').write_text('#!/bin/bash\n'+responses['otool']+'\n')
-        verify(); print('PASS verifier V0-V15 mutations')
+        # The expected signature is explicit: no default, no other value.
+        for mode in (None, '', 'foo', 'ADHOC', 'developer-id'):
+            if mode is None: del env['TOPNV_EXPECT_SIGNATURE']
+            else: env['TOPNV_EXPECT_SIGNATURE'] = mode
+            verify('V9')
+        env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'; verify()
+        # Developer ID: codesign answers per signed path from files, like the real tool on each component.
+        signatures = root / 'signatures'; signatures.mkdir()
+        (bindir/'codesign').write_text('#!/bin/bash\n[[ "$1" == --verify ]] && exit 0\n'
+                                       'cat "$FAKE_SIGNATURES/$(basename "${@: -1}")" >&2\n')
+        env['FAKE_SIGNATURES'] = str(signatures)
+        def details(team='ABCDE12345', flags='0x10000(runtime)', drop=(), extra=()):
+            lines = ['Executable=/fixture', 'Identifier=io.github.bernalli.topnv', 'Format=app bundle with Mach-O universal (x86_64 arm64)',
+                     f'CodeDirectory v=20500 size=100 flags={flags} hashes=1+7 location=embedded',
+                     'Authority=Developer ID Application: Example Developer (ABCDE12345)',
+                     'Authority=Developer ID Certification Authority', 'Authority=Apple Root CA',
+                     'Timestamp=14 Nov 2026 at 22:00:00', f'TeamIdentifier={team}', 'Runtime Version=14.0.0', *extra]
+            return '\n'.join(l for l in lines if not l.startswith(drop) or not drop) + '\n'
+        components = ('Installer.xpc', 'Downloader.xpc', 'Autoupdate', 'Updater.app', 'Sparkle.framework')
+        def signed(**app_changes):
+            (signatures / 'TopNV.app').write_text(details(**app_changes))
+            for name in components: (signatures / name).write_text(details())
+        env['TOPNV_EXPECT_SIGNATURE'] = 'developer-id'; signed(); verify()
+        for changes in ({'extra': ('Signature=adhoc',)}, {'drop': ('Authority=Developer ID Application:',)},
+                        {'drop': ('Authority=',)}, {'flags': '0x0(none)'}, {'flags': '0x2(adhoc)'},
+                        {'drop': ('Timestamp=',)}, {'extra': ('Signed Time=14 Nov 2026 at 22:00:00',), 'drop': ('Timestamp=',)},
+                        {'team': 'not set'}, {'drop': ('TeamIdentifier=',)}, {'drop': ('CodeDirectory',)}):
+            signed(**changes); verify('V9')
+        signed(); (signatures / 'TopNV.app').unlink(); verify('V9')
+        for name in components:
+            for changes in ({'flags': '0x0(none)'}, {'flags': '0x2(adhoc)'}, {'team': 'ZYXWV98765'}, {'team': 'not set'}):
+                signed(); (signatures / name).write_text(details(**changes)); verify('V14')
+            signed(); (signatures / name).unlink(); verify('V14')
+        # Ad hoc mode never accepts a Developer ID signature, and never looks at the components.
+        signed(); env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'; verify('V9')
+        (bindir/'codesign').write_text('#!/bin/bash\n'+responses['codesign']+'\n')
+        verify(); print('PASS verifier V0-V15 mutations; signature modes')
 
 run_tests(sys.argv[1])

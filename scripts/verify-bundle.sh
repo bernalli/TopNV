@@ -26,7 +26,31 @@ load_commands="$(otool -l "$APP/Contents/MacOS/TopNV" 2>/dev/null)" || load_comm
 [[ "$load_commands" == *'path @executable_path/../Frameworks (offset '* ]] || fail 'V7: missing rpath'
 codesign --verify --deep --strict "$APP" >/dev/null 2>&1 || fail 'V8: signature verification failed'
 SIGNATURE=$(codesign -dv --verbose=4 "$APP" 2>&1) || fail 'V9: signature metadata unavailable'
-if [[ "$SIGNATURE" != *'Signature=adhoc'* || "$SIGNATURE" == *runtime* ]]; then fail 'V9: outer signature must be ad hoc without runtime'; fi
+# Line-anchored reads of codesign -dv output.
+has_line() { [[ $'\n'"$1" == *$'\n'"$2"* ]]; }
+has_runtime() { [[ $1 =~ flags=0x[0-9a-fA-F]+\(([^\)]*)\) && ",${BASH_REMATCH[1]}," == *,runtime,* ]]; }
+team_of() { local pattern=$'(^|\n)TeamIdentifier=([A-Z0-9]{10})(\n|$)'; [[ $1 =~ $pattern ]] && printf '%s' "${BASH_REMATCH[2]}"; }
+# No default: the caller states which signature it built (DP-7).
+case "${TOPNV_EXPECT_SIGNATURE-}" in
+  adhoc)
+    if [[ "$SIGNATURE" != *'Signature=adhoc'* || "$SIGNATURE" == *runtime* ]]; then fail 'V9: outer signature must be ad hoc without runtime'; fi ;;
+  developer-id)
+    TEAM=$(team_of "$SIGNATURE") || TEAM=''
+    if [[ "$SIGNATURE" == *'Signature=adhoc'* || -z "$TEAM" ]] || ! has_line "$SIGNATURE" 'Authority=Developer ID Application: ' \
+      || ! has_runtime "$SIGNATURE" || ! has_line "$SIGNATURE" 'Timestamp='; then
+      fail 'V9: outer signature must be Developer ID with runtime, secure timestamp and team'
+    fi
+    # The five components that bundle.sh signs, inside out.
+    components=("$FRAMEWORK/Versions/B/XPCServices/Installer.xpc" "$FRAMEWORK/Versions/B/XPCServices/Downloader.xpc"
+      "$FRAMEWORK/Versions/B/Autoupdate" "$FRAMEWORK/Versions/B/Updater.app" "$FRAMEWORK")
+    for component in "${components[@]}"; do
+      DETAILS=$(codesign -dv --verbose=4 "$component" 2>&1) || DETAILS=''
+      if ! has_runtime "$DETAILS" || [[ -z "$TEAM" || "$(team_of "$DETAILS")" != "$TEAM" ]]; then
+        fail "V14: $(basename "$component") needs runtime and the app team"
+      fi
+    done ;;
+  *) fail 'V9: TOPNV_EXPECT_SIGNATURE must be adhoc or developer-id' ;;
+esac
 if [[ ${TOPNV_EXPECT_UNIVERSAL-0} == 1 ]]; then
   for binary in "$APP/Contents/MacOS/TopNV" "$FRAMEWORK/Versions/B/Sparkle"; do
     ARCHS=$(lipo -archs "$binary" 2>/dev/null) || ARCHS=''

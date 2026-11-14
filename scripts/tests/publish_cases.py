@@ -2,7 +2,9 @@
 import importlib.util
 import os
 from pathlib import Path
+import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -236,6 +238,20 @@ class Cases(unittest.TestCase):
         self.proof(); p=self.prepared(); self.transport.public_delay=100
         with self.assertRaisesRegex(module.ReleaseError,'public readback'): p.publish()
         self.assertFalse(self.transport.public)
+
+class RealVerify(unittest.TestCase):
+    def test_downloaded_bundle_must_carry_a_developer_id_signature(self):
+        calls=[]
+        def run(args,**options): calls.append((args,options)); return subprocess.CompletedProcess(args,0)
+        with tempfile.TemporaryDirectory(dir=ROOT/'build/test-tmp') as tmp:
+            root=Path(tmp); (root/'build').mkdir()
+            config=SimpleNamespace(feed=module.STABLE,tag='v1.2.0',prefix='https://github.com/bernalli/TopNV/releases/download/v1.2.0/',version='1.2.0',build='6')
+            with mock.patch.object(module.subprocess,'run',run), mock.patch.dict(os.environ,TOPNV_EXPECT_SIGNATURE='adhoc'):
+                module.Transport(root).verify(root/'TopNV-1.2.0.dmg',root/'appcast.xml',config)
+        verify=[options['env'] for args,options in calls if args[0].endswith('scripts/verify-bundle.sh')]
+        self.assertEqual(len(verify),1)
+        self.assertEqual(verify[0]['TOPNV_EXPECT_SIGNATURE'],'developer-id')
+        self.assertEqual(verify[0]['TOPNV_EXPECT_UNIVERSAL'],'1')
 
 class RealTransport(unittest.TestCase):
     def api(self,script,**options):
