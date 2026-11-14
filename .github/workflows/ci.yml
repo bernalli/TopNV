@@ -19,6 +19,7 @@ jobs:
           TOPNV_VERSION: '0.0.1'
           TOPNV_BUILD_NUMBER: '1'
           TOPNV_EXPECT_UNIVERSAL: '1'
+          TOPNV_EXPECT_SIGNATURE: 'adhoc'
         run: |
           scripts/bundle.sh --arch arm64 --arch x86_64
           scripts/verify-bundle.sh build/TopNV.app
@@ -27,6 +28,7 @@ jobs:
       - name: Verify mounted disk image
         env:
           TOPNV_EXPECT_UNIVERSAL: '1'
+          TOPNV_EXPECT_SIGNATURE: 'adhoc'
         run: |
           mkdir -p build/ci-mount
           attached=0

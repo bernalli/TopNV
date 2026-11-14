@@ -57,7 +57,7 @@ class Transport:
         try:
             require(subprocess.run(['hdiutil','attach','-nobrowse','-readonly','-mountpoint',str(mount),str(dmg)],stdout=subprocess.DEVNULL).returncode==0,'cannot mount downloaded DMG')
             attached=True
-            env=dict(os.environ,TOPNV_EXPECT_UNIVERSAL='1',TOPNV_EXPECT_FEED_URL=config.feed)
+            env=dict(os.environ,TOPNV_EXPECT_UNIVERSAL='1',TOPNV_EXPECT_FEED_URL=config.feed,TOPNV_EXPECT_SIGNATURE='developer-id')
             require(subprocess.run([str(self.root/'scripts/verify-bundle.sh'),str(mount/'TopNV.app')],env=env).returncode==0,'downloaded bundle invalid')
             args=[str(self.root/'.build/release/release-check'),'feed','--appcast',str(feed),'--dmg',str(dmg),'--app',str(mount/'TopNV.app'),'--tag',config.tag,'--prefix',config.prefix,'--version',config.version,'--build',config.build,'--feed',config.feed,'--public-key-file',str(self.root/'Assets/SparklePublicEDKey.txt')]
             require(subprocess.run(args).returncode==0,'downloaded feed invalid')
@@ -150,7 +150,7 @@ class Publisher:
             require(dmg.is_file() and feed.is_file(),'verified assets missing')
             self.io.verify(dmg,feed,self)
             body={'tag_name':self.tag,'target_commitish':self.sha,'name':'TopNV update proof' if self.proof else 'TopNV '+self.version,'draft':True,'prerelease':self.proof,'make_latest':'false' if self.proof else 'true',
-                  'body':self.notes.read_text()+'\n\nDownload the DMG and copy TopNV to Applications. Requires macOS 14+. The app uses an ad hoc signature. On first launch use System Settings > Privacy & Security > Open Anyway.\n'}
+                  'body':self.notes.read_text()+'\n\nDownload the DMG and copy TopNV to Applications. Requires macOS 14+. Signed with Developer ID and notarized by Apple.\n'}
             if existing:
                 self.release_id=existing['id']; self.record()
                 status,_=self.io.api('PATCH',f'{REPO}/releases/{self.release_id}',body); require(status==200,'cannot draft proof')

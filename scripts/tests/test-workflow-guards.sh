@@ -122,6 +122,14 @@ def check_workflow(text, contents):
 
 check_workflow(release, 'write')
 check_workflow(ci, 'read')
+# CI verifies ad hoc builds explicitly; the hosted release names no signature mode, so V9 fails it closed.
+def verify_steps(text):
+    return [step for job in workflow(text)['jobs'].values() for step in job['steps'] if 'verify-bundle.sh' in (step.get('run') or '')]
+ci_verify = verify_steps(ci)
+assert len(ci_verify) == 2 and all((step.get('env') or {}).get('TOPNV_EXPECT_SIGNATURE') == 'adhoc' for step in ci_verify)
+assert verify_steps(release) and 'TOPNV_EXPECT_SIGNATURE' not in release
+# The local release creates the tag: a tag push must not start the hosted release.
+assert set(workflow(release)['on']) == {'workflow_dispatch'}, workflow(release)['on']
 assert 'cancel-in-progress: false' in release and 'pull_request_target' not in ci
 for text in (release,ci):
     for action in re.findall(r'uses: (\S+)',text): assert re.fullmatch(r'[^@]+@[0-9a-f]{40}',action),action

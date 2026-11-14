@@ -79,7 +79,50 @@ def run_tests(kind):
                 name = language + '.lproj/Localizable.strings'
                 assert (app / 'Contents/Resources' / name).read_bytes() == (root / 'Localization' / name).read_bytes(), name
             assert (app / 'Contents/Resources/it.lproj/AppleStyleUpdateDriver.strings').read_bytes() == extra.read_bytes()
-            print('PASS bundle input matrix; rejected inputs preserve original app; languages bundled')
+            # Signing: a recording codesign shows every call, in order, with each argument intact.
+            log = root / 'codesign.log'; probe = root / 'build/sign-probe'
+            (bindir / 'codesign').write_text('#!/bin/bash\n'
+                                             '{ printf "%s\\t" "$@"; printf "\\n"; } >> "$FAKE_CODESIGN_LOG"\n'
+                                             'if [[ "${@: -1}" == */sign-probe ]]; then\n'
+                                             '  cmp -s "${@: -1}" /usr/bin/true || exit 3\n'
+                                             '  [[ -z "${FAKE_PROBE_FAIL:-}" ]] || exit 1\n'
+                                             'fi\n')
+            def signed(**values):
+                log.write_text('')
+                result = bundle(**dict(dict(TOPNV_EXECUTABLE=str(executable), PATH=str(bindir) + ':' + env['PATH'],
+                                            FAKE_CODESIGN_LOG=str(log)), **values))
+                return result, [line.split('\t')[:-1] for line in log.read_text().splitlines()]
+            verify_call = ['--verify', '--deep', '--strict', str(app)]
+            result, calls = signed()
+            assert result.returncode == 0, result
+            assert calls == [['--force', '--sign', '-', '--timestamp=none', str(app)], verify_call], calls
+            for identity in ('Developer ID Application', 'Developer ID Application: Example Developer (ABCDE12345)'):
+                result, calls = signed(TOPNV_SIGN_IDENTITY=identity)
+                assert result.returncode == 0, result
+                framework = app / 'Contents/Frameworks/Sparkle.framework'; component = framework / 'Versions/B'
+                runtime = ['--force', '--sign', identity, '--options', 'runtime', '--timestamp']
+                assert calls == [['--force', '--sign', identity, '--timestamp=none', str(probe)],
+                                 runtime + [str(component / 'XPCServices/Installer.xpc')],
+                                 runtime + ['--preserve-metadata=entitlements', str(component / 'XPCServices/Downloader.xpc')],
+                                 runtime + [str(component / 'Autoupdate')],
+                                 runtime + [str(component / 'Updater.app')],
+                                 runtime + [str(framework)],
+                                 runtime + [str(app)],
+                                 verify_call], calls
+                assert not any(a.startswith(('--deep', '--entitlements')) for call in calls if '--sign' in call for a in call)
+                assert not probe.exists()
+            # A failed probe stops before the build and before the previous app is removed.
+            shutil.rmtree(app); app.mkdir(); sentinel.write_text('original')
+            identity = 'Developer ID Application: Example Developer (ABCDE12345)'
+            result, calls = signed(TOPNV_SIGN_IDENTITY=identity, FAKE_PROBE_FAIL='1', TOPNV_EXECUTABLE=str(root / 'missing'))
+            assert result.returncode == 1, result
+            assert (f'error: signing identity "{identity}" not found; install the Developer ID Application '
+                    'certificate or set TOPNV_SIGN_IDENTITY').encode() in result.stderr, result.stderr
+            assert b'executable' not in result.stderr, result.stderr
+            assert calls == [['--force', '--sign', identity, '--timestamp=none', str(probe)]], calls
+            assert sentinel.read_text() == 'original' and sorted(p.name for p in app.iterdir()) == ['sentinel']
+            assert not probe.exists()
+            print('PASS bundle input matrix; rejected inputs preserve original app; languages bundled; signing order')
             return
         # Platform operations are replaced at the command boundary; plist and filesystem checks are real.
         bindir = root / 'bin'; bindir.mkdir()
@@ -89,6 +132,7 @@ def run_tests(kind):
             p = bindir / name; p.write_text('#!/bin/bash\n' + script + '\n'); p.chmod(0o755)
         env['PATH'] = str(bindir) + ':' + env['PATH']
         env['TOPNV_EXPECT_UNIVERSAL'] = '1'
+        env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'
         contents = app / 'Contents'
         (contents / 'MacOS').mkdir(parents=True)
         (contents / 'MacOS/TopNV').write_text('fixture')
@@ -163,6 +207,57 @@ def run_tests(kind):
         # A long listing must not turn an early grep match into a false failure under pipefail.
         (bindir/'otool').write_text('#!/bin/bash\n'+responses['otool']+'\nexec /usr/bin/seq 1 200000\n'); verify()
         (bindir/'otool').write_text('#!/bin/bash\n'+responses['otool']+'\n')
-        verify(); print('PASS verifier V0-V15 mutations')
+        # The expected signature is explicit: no default, no other value.
+        for mode in (None, '', 'foo', 'ADHOC', 'developer-id'):
+            if mode is None: del env['TOPNV_EXPECT_SIGNATURE']
+            else: env['TOPNV_EXPECT_SIGNATURE'] = mode
+            verify('V9')
+        env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'; verify()
+        # Developer ID: codesign answers per signed path from files, like the real tool on each component.
+        signatures = root / 'signatures'; signatures.mkdir()
+        (bindir/'codesign').write_text('#!/bin/bash\n[[ "$1" == --verify ]] && exit 0\n'
+                                       'cat "$FAKE_SIGNATURES/$(basename "${@: -1}")" >&2\n')
+        env['FAKE_SIGNATURES'] = str(signatures)
+        def details(team='ABCDE12345', flags='0x10000(runtime)', drop=(), extra=(), executable='/fixture', timestamp='14 Nov 2026 at 22:00:00'):
+            lines = [f'Executable={executable}', 'Identifier=io.github.bernalli.topnv', 'Format=app bundle with Mach-O universal (x86_64 arm64)',
+                     f'CodeDirectory v=20500 size=100 flags={flags} hashes=1+7 location=embedded',
+                     'Authority=Developer ID Application: Example Developer (ABCDE12345)',
+                     'Authority=Developer ID Certification Authority', 'Authority=Apple Root CA',
+                     f'Timestamp={timestamp}', f'TeamIdentifier={team}', 'Runtime Version=14.0.0', *extra]
+            return '\n'.join(l for l in lines if not l.startswith(drop) or not drop) + '\n'
+        components = ('Installer.xpc', 'Downloader.xpc', 'Autoupdate', 'Updater.app', 'Sparkle.framework')
+        def signed(**app_changes):
+            (signatures / 'TopNV.app').write_text(details(**app_changes))
+            for name in components: (signatures / name).write_text(details())
+        env['TOPNV_EXPECT_SIGNATURE'] = 'developer-id'; signed(); verify()
+        for changes in ({'extra': ('Signature=adhoc',)}, {'drop': ('Authority=Developer ID Application:',)},
+                        {'drop': ('Authority=',)}, {'flags': '0x0(none)'}, {'flags': '0x2(adhoc)'},
+                        {'drop': ('Timestamp=',)}, {'extra': ('Signed Time=14 Nov 2026 at 22:00:00',), 'drop': ('Timestamp=',)},
+                        {'team': 'not set'}, {'drop': ('TeamIdentifier=',)}, {'drop': ('CodeDirectory',)}):
+            signed(**changes); verify('V9')
+        signed(); (signatures / 'TopNV.app').unlink(); verify('V9')
+        for name in components:
+            for changes in ({'flags': '0x0(none)'}, {'flags': '0x2(adhoc)'}, {'team': 'ZYXWV98765'}, {'team': 'not set'}):
+                signed(); (signatures / name).write_text(details(**changes)); verify('V14')
+            signed(); (signatures / name).unlink(); verify('V14')
+        # Ambiguous metadata: runtime flags outside the CodeDirectory line, contradictory teams, an empty timestamp.
+        def verdict():
+            result = subprocess.run(['bash', str(REPO / 'scripts/verify-bundle.sh'), str(app)], env=env, capture_output=True)
+            return result.returncode, (result.stdout + result.stderr).decode()
+        ambiguous = [('TopNV.app', {'executable': '/Applications/flags=0x10000(runtime)/TopNV', 'flags': '0x0(none)'}, 'V9'),
+                     ('TopNV.app', {'extra': ('TeamIdentifier=ZYXWV98765',)}, 'V9'),
+                     ('TopNV.app', {'timestamp': ''}, 'V9')]
+        ambiguous += [(name, {'extra': ('TeamIdentifier=ZYXWV98765',)}, 'V14') for name in components]
+        accepted = []
+        for target, changes, code in ambiguous:
+            signed(); (signatures / target).write_text(details(**changes))
+            status, output = verdict()
+            if status != 1 or code not in output: accepted.append((target, changes, code))
+        assert not accepted, accepted
+        signed(); verify()
+        # Ad hoc mode never accepts a Developer ID signature, and never looks at the components.
+        signed(); env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'; verify('V9')
+        (bindir/'codesign').write_text('#!/bin/bash\n'+responses['codesign']+'\n')
+        verify(); print('PASS verifier V0-V15 mutations; signature modes')
 
 run_tests(sys.argv[1])

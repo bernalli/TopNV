@@ -14,8 +14,7 @@
 
 Open `TopNV-<version>.dmg` and drag **TopNV** into **Applications**.
 
-TopNV is signed ad hoc, not notarized. If macOS blocks the first launch, use
-**System Settings > Privacy & Security > Open Anyway**.
+From version 1.2.0, TopNV is signed with Developer ID and notarized by Apple.
 
 ## Features
 
@@ -90,7 +89,6 @@ or Spaces change, and after wake from sleep.
 - With an automatically hidden menu bar, the black strip covers only the notch-height
   area at the top of the screen.
 - Rounded corners hide a few points of content at the very corners of the display.
-- The app is signed ad hoc, not notarized, so macOS may require confirmation on first launch.
 
 ## Build from source
 
@@ -103,7 +101,9 @@ scripts/bundle.sh
 open build/TopNV.app
 ```
 
-The script builds the release executable, assembles `build/TopNV.app` and signs it ad hoc.
+The script builds the release executable, assembles `build/TopNV.app` and signs it locally,
+without a certificate. Set `TOPNV_SIGN_IDENTITY` to a Developer ID Application identity to
+sign every component with the hardened runtime instead.
 Move the app to Applications to keep it installed. To bundle an existing executable,
 set `TOPNV_EXECUTABLE` to its path when running the script. `Sparkle.framework` must
 be beside that executable. The bundle requires the public verification key in
@@ -119,11 +119,12 @@ swift test
 ## Releases
 
 [Release notes and downloads](https://github.com/bernalli/TopNV/releases) are on GitHub.
-The release workflow tests the code, builds a universal app for Apple silicon and Intel,
-and publishes a versioned DMG. It runs on a `v*` tag or through **Actions > Release >
-Run workflow** on `main` with a version number and the `stable` channel. Releases
-are verified in draft before publication. The public `update-proof` prerelease is
-reserved for testing and must not be installed by users.
+Releases are made on a Mac from a clean `main` with `scripts/release-local.sh <version> <build>`.
+It builds a universal app for Apple silicon and Intel, signs it with Developer ID,
+notarizes and staples the DMG, signs the appcast with the EdDSA key in the Keychain and
+publishes a versioned DMG. Releases are verified in draft before publication. The hosted
+release workflow no longer runs on tags and stops at the signature check. The public
+`update-proof` prerelease is reserved for testing and must not be installed by users.
 
 For a local disk image, run `scripts/make-dmg.sh` after `scripts/bundle.sh`;
 the result is `build/TopNV.dmg`.
