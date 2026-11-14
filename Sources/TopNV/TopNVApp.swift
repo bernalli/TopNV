@@ -66,7 +66,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ask: AutomaticUpdateQuestion.ask, onReady: { [weak self] in self?.updates.updaterDidStart() })
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    if sparkleUpdater?.reopenPendingUpdate() == true { return true }
     menuVisibility.setMenuVisible(true)
     return true
   }

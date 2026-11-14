@@ -79,6 +79,12 @@ def run_tests(kind):
                 name = language + '.lproj/Localizable.strings'
                 assert (app / 'Contents/Resources' / name).read_bytes() == (root / 'Localization' / name).read_bytes(), name
             assert (app / 'Contents/Resources/it.lproj/AppleStyleUpdateDriver.strings').read_bytes() == extra.read_bytes()
+            # The update window's own tables from the repository land beside Localizable.strings.
+            for language in LANGUAGES:
+                name = language + '.lproj/AppleStyleUpdateDriver.strings'
+                assert (REPO / 'Localization' / name).is_file(), name
+                if language != 'it':
+                    assert (app / 'Contents/Resources' / name).read_bytes() == (REPO / 'Localization' / name).read_bytes(), name
             # Signing: a recording codesign shows every call, in order, with each argument intact.
             log = root / 'codesign.log'; probe = root / 'build/sign-probe'
             (bindir / 'codesign').write_text('#!/bin/bash\n'

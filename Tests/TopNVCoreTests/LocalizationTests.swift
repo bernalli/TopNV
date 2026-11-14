@@ -270,6 +270,58 @@ final class LocalizationTests: XCTestCase {
     }
   }
 
+  // MARK: Update window table
+
+  private static let driverTable = "AppleStyleUpdateDriver.strings"
+
+  private func driverTable(_ language: String) throws -> (data: Data, text: String) {
+    let data = try Data(
+      contentsOf: Self.localization.appendingPathComponent("\(language).lproj/\(Self.driverTable)"))
+    return (data, try XCTUnwrap(String(data: data, encoding: .utf8), "\(language) is not UTF-8"))
+  }
+
+  /// The copied update window looks its texts up in its own table, with the English keys of `en`.
+  func testEveryLanguageHasTheUpdateWindowTableWithTheEnglishKeys() throws {
+    let english = parseTable(try driverTable("en").text)
+    XCTAssertEqual(english.problems, [])
+    XCTAssertFalse(english.entries.isEmpty)
+    let base = Dictionary(
+      uniqueKeysWithValues: english.entries.map {
+        ($0.key, BaseKey(isShared: false, value: $0.value))
+      })
+    for language in Self.languages {
+      let table = try driverTable(language)
+      XCTAssertFalse(table.data.starts(with: [0xEF, 0xBB, 0xBF]), "\(language) has a BOM")
+      XCTAssertEqual(tableProblems(base: base, raw: table.text), [], language)
+    }
+  }
+
+  /// Every `localized("…")` key of the copied driver has an English entry, and nothing more.
+  func testTheUpdateWindowTableHasExactlyTheKeysTheDriverLooksUp() throws {
+    let source = try String(
+      contentsOf: Self.repository.appendingPathComponent(
+        "Sources/TopNV/AppleStyleUpdateDriver.swift"),
+      encoding: .utf8)
+    let call = try NSRegularExpression(pattern: #"localized\("((?:[^"\\]|\\.)*)"\)"#)
+    let escape = try NSRegularExpression(pattern: #"\\u\{([0-9A-Fa-f]{1,8})\}"#)
+    var keys: Set<String> = []
+    for match in call.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+      let literal = try XCTUnwrap(Range(match.range(at: 1), in: source).map { String(source[$0]) })
+      var key = literal
+      for found in escape.matches(in: literal, range: NSRange(literal.startIndex..., in: literal))
+        .reversed()
+      {
+        let hex = try XCTUnwrap(Range(found.range(at: 1), in: literal).map { String(literal[$0]) })
+        let scalar = try XCTUnwrap(UInt32(hex, radix: 16).flatMap(Unicode.Scalar.init))
+        key.replaceSubrange(try XCTUnwrap(Range(found.range, in: key)), with: String(scalar))
+      }
+      XCTAssertFalse(key.contains("\\"), "unhandled escape in \(literal)")
+      keys.insert(key)
+    }
+    XCTAssertFalse(keys.isEmpty)
+    XCTAssertEqual(Set(parseTable(try driverTable("en").text).entries.map(\.key)), keys)
+  }
+
   // MARK: Validator properties
 
   private let sampleBase: [String: BaseKey] = [

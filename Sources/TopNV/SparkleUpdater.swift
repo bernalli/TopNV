@@ -2,57 +2,39 @@ import AppKit
 import Sparkle
 import TopNVCore
 
+/// Sparkle's updater with the compact update window shared with MonoPods.
 @MainActor
-final class SparkleUpdater: NSObject, UpdaterControlling, SPUStandardUserDriverDelegate {
+final class SparkleUpdater: NSObject, UpdaterControlling {
   var onChange: (() -> Void)?
-  private var controller: SPUStandardUpdaterController!
+  /// Kept here as well: the updater's own reference to its driver is not public.
+  let userDriver: any SPUUserDriver
+  private let updater: SPUUpdater
   private var observations: [NSKeyValueObservation] = []
-  private var hasPendingReminder = false
 
   override init() {
+    let driver = AppleStyleUpdateDriver(hostBundle: .main)
+    userDriver = driver
+    updater = SPUUpdater(
+      hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: nil)
     super.init()
-    controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: self)
     observations = [
-      controller.updater.observe(\.canCheckForUpdates, options: [.new]) { [weak self] _, _ in
+      updater.observe(\.canCheckForUpdates, options: [.new]) { [weak self] _, _ in
         Task { @MainActor in self?.onChange?() }
       },
-      controller.updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] _, _ in
+      updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] _, _ in
         Task { @MainActor in self?.onChange?() }
       },
     ]
   }
-  var canCheckForUpdates: Bool { controller.updater.canCheckForUpdates }
+  var canCheckForUpdates: Bool { updater.canCheckForUpdates }
   var automaticallyChecksForUpdates: Bool {
-    get { controller.updater.automaticallyChecksForUpdates }
-    set { controller.updater.automaticallyChecksForUpdates = newValue }
+    get { updater.automaticallyChecksForUpdates }
+    set { updater.automaticallyChecksForUpdates = newValue }
   }
-  func start() throws { try controller.updater.start() }
+  func start() throws { try updater.start() }
   func checkForUpdates() {
     RunLoop.main.perform(inModes: [.default]) { [weak self] in
-      MainActor.assumeIsolated { self?.controller.checkForUpdates(nil) }
+      MainActor.assumeIsolated { self?.updater.checkForUpdates() }
     }
-  }
-  var supportsGentleScheduledUpdateReminders: Bool { true }
-  func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
-    !immediateFocus
-  }
-  func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
-    guard !state.userInitiated, automaticallyChecksForUpdates else { return }
-    hasPendingReminder = true
-    NSApp.setActivationPolicy(.regular)
-    NSApp.dockTile.badgeLabel = "1"
-  }
-  func reopenPendingUpdate() -> Bool {
-    guard hasPendingReminder else { return false }
-    checkForUpdates()
-    return true
-  }
-  func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) { clearReminder() }
-  func standardUserDriverWillFinishUpdateSession() { clearReminder() }
-  private func clearReminder() {
-    guard hasPendingReminder else { return }
-    hasPendingReminder = false
-    NSApp.dockTile.badgeLabel = nil
-    NSApp.setActivationPolicy(.accessory)
   }
 }
