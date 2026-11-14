@@ -24,10 +24,7 @@ From version 1.2.0, TopNV is signed with Developer ID and notarized by Apple.
 - Keep your wallpaper untouched, including dynamic and animated wallpapers.
 - Launch at login and optionally hide the menu-bar icon while the app keeps running.
 
-Normally TopNV has no Dock icon. A pending scheduled update temporarily shows a
-Dock icon with a badge; clicking it opens the standard update window. Giving the
-update attention or ending its session removes the badge and returns TopNV to
-its normal background mode without a Dock icon. No Screen Recording or Accessibility permission is required.
+TopNV has no Dock icon. No Screen Recording or Accessibility permission is required.
 Hide Notch and Round Corners start enabled, with a 15-point radius on the built-in display.
 Your choices are saved automatically.
 
@@ -57,12 +54,12 @@ To restore a hidden menu-bar icon, **open TopNV again from Applications**.
 Automatic checks start **off**. On the first opening with update support, TopNV asks
 once whether to check automatically. Choosing **Don't Check**, pressing Esc or
 closing the question leaves automatic checks off. Change the choice later in
-**Options > Automatically Check for Updates**. No check runs before that answer.
+**Options > Automatic Updates**. No check runs before that answer.
 
-Use **Check for Updates…** for a manual check. To install, choose **Install Update**,
-then **Install and Relaunch** in Sparkle's standard window. Installation never happens
-silently. Scheduled reminders use the temporary Dock icon described above and do
-not activate the app or take focus while you work elsewhere.
+Use **Check for Updates…** for a manual check. A compact window in the style of a system
+alert shows the new version; choose **Install and Relaunch** to install it, or **Later**.
+Installation never happens silently. When a scheduled check finds an update, the same
+window appears without activating TopNV or taking focus while you work elsewhere.
 
 Version **1.0.0 has no updater**: download the new DMG and replace TopNV in Applications
 manually once. The new updater preserves the same preference domain and login identity.

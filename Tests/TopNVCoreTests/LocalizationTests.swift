@@ -16,17 +16,17 @@ enum TableProblem: Hashable {
   case emptyValue(String)
   case invalidPlaceholders(String)
   case placeholderMismatch(String)
-  case missingMarker(String)
   case unexpectedMarker(String)
   case sharedValueChanged(String)
 }
 
-/// What a table must contain for one key.
+/// What a table must contain for one key: a shared key must have exactly `value`.
 struct BaseKey {
   let isShared: Bool
   let value: String
 }
 
+/// The marker of the texts that waited for MonoPods; no table may carry it any more.
 let pendingMarker = "/* PENDING-MONOPODS */"
 
 struct ParsedEntry {
@@ -68,7 +68,8 @@ private func unescape(_ text: String) -> String? {
 }
 
 /// Parses the shared format: UTF-8 without BOM, one `"key" = "value";` per line, lines sorted
-/// by UTF-8 bytes (ignoring the marker), no comments except the leading pending marker.
+/// by UTF-8 bytes (ignoring the marker), no comments. The old pending marker is still parsed,
+/// so that a leftover one is reported as `unexpectedMarker` rather than as a bare comment.
 func parseTable(_ raw: String) -> (entries: [ParsedEntry], problems: [TableProblem]) {
   var problems: [TableProblem] = []
   var text = raw
@@ -176,11 +177,9 @@ func tableProblems(base: [String: BaseKey], raw: String) -> [TableProblem] {
     } else {
       problems.append(.invalidPlaceholders(entry.key))
     }
-    if expected.isShared {
-      if !entry.hasMarker { problems.append(.missingMarker(entry.key)) }
-      if entry.value != expected.value { problems.append(.sharedValueChanged(entry.key)) }
-    } else if entry.hasMarker {
-      problems.append(.unexpectedMarker(entry.key))
+    if entry.hasMarker { problems.append(.unexpectedMarker(entry.key)) }
+    if expected.isShared, entry.value != expected.value {
+      problems.append(.sharedValueChanged(entry.key))
     }
   }
   for key in base.keys.sorted() where !seen.contains(key) {
@@ -195,10 +194,12 @@ final class LocalizationTests: XCTestCase {
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
   private static let localization = repository.appendingPathComponent("Localization")
 
-  private static var textKeyBase: [String: BaseKey] {
+  /// Shared keys must carry the MonoPods text of the language; own keys only need to exist.
+  private static func textKeyBase(_ language: String) -> [String: BaseKey] {
     Dictionary(
       uniqueKeysWithValues: TextKey.allCases.map {
-        ($0.rawValue, BaseKey(isShared: $0.isShared, value: $0.rawValue))
+        let shared = $0.isShared ? monoPodsSharedTexts[language]?[$0.rawValue] : nil
+        return ($0.rawValue, BaseKey(isShared: $0.isShared, value: shared ?? $0.rawValue))
       })
   }
 
@@ -242,7 +243,8 @@ final class LocalizationTests: XCTestCase {
     for language in Self.languages {
       let data = try tableData(language)
       XCTAssertFalse(data.starts(with: [0xEF, 0xBB, 0xBF]), "\(language) has a BOM")
-      XCTAssertEqual(tableProblems(base: Self.textKeyBase, raw: try table(language)), [], language)
+      XCTAssertEqual(
+        tableProblems(base: Self.textKeyBase(language), raw: try table(language)), [], language)
     }
   }
 
@@ -256,30 +258,172 @@ final class LocalizationTests: XCTestCase {
     }
   }
 
-  func testSharedKeysArePendingAndKeepTheEnglishValue() throws {
-    let english = Dictionary(
-      uniqueKeysWithValues: parseTable(try table("en")).entries.map { ($0.key, $0.value) })
+  func testNoTableCarriesThePendingMarker() throws {
     for language in Self.languages {
+      XCTAssertFalse(try table(language).contains("PENDING-MONOPODS"), language)
+      XCTAssertFalse(try driverTable(language).text.contains("PENDING-MONOPODS"), language)
       for entry in parseTable(try table(language)).entries {
-        let key = try XCTUnwrap(TextKey(rawValue: entry.key), entry.key)
-        XCTAssertEqual(entry.hasMarker, key.isShared, "\(language): \(entry.key)")
-        if key.isShared {
-          XCTAssertEqual(entry.value, english[entry.key], "\(language): \(entry.key)")
-        }
+        XCTAssertFalse(entry.hasMarker, "\(language): \(entry.key)")
       }
     }
+  }
+
+  /// The shared keys are exactly the keys of the MonoPods table, with its text in every language.
+  func testSharedKeysCarryTheMonoPodsTexts() throws {
+    let shared = Set(TextKey.allCases.filter(\.isShared).map(\.rawValue))
+    XCTAssertEqual(Set(monoPodsSharedTexts.keys), Set(Self.languages))
+    for language in Self.languages {
+      let expected = try XCTUnwrap(monoPodsSharedTexts[language], language)
+      XCTAssertEqual(Set(expected.keys), shared, language)
+      let values = Dictionary(
+        uniqueKeysWithValues: parseTable(try table(language)).entries.map { ($0.key, $0.value) })
+      for key in shared.sorted() {
+        XCTAssertEqual(values[key], expected[key], "\(language): \(key)")
+      }
+    }
+  }
+
+  // MARK: Update window table
+
+  private static let driverTable = "AppleStyleUpdateDriver.strings"
+
+  private func driverTable(_ language: String) throws -> (data: Data, text: String) {
+    let data = try Data(
+      contentsOf: Self.localization.appendingPathComponent("\(language).lproj/\(Self.driverTable)"))
+    return (data, try XCTUnwrap(String(data: data, encoding: .utf8), "\(language) is not UTF-8"))
+  }
+
+  /// The copied update window looks its texts up in its own table, with the English keys of `en`.
+  func testEveryLanguageHasTheUpdateWindowTableWithTheEnglishKeys() throws {
+    let english = parseTable(try driverTable("en").text)
+    XCTAssertEqual(english.problems, [])
+    XCTAssertFalse(english.entries.isEmpty)
+    let base = Dictionary(
+      uniqueKeysWithValues: english.entries.map {
+        ($0.key, BaseKey(isShared: false, value: $0.value))
+      })
+    for language in Self.languages {
+      let table = try driverTable(language)
+      XCTAssertFalse(table.data.starts(with: [0xEF, 0xBB, 0xBF]), "\(language) has a BOM")
+      XCTAssertEqual(tableProblems(base: base, raw: table.text), [], language)
+    }
+  }
+
+  private enum DriverKeyError: Error {
+    case unsupportedLookup, invalidEscape
+  }
+
+  /// Restricted source gate: unknown lookup syntax must fail.
+  private func updateDriverKeys(in source: String) throws -> Set<String> {
+    let declaration = try NSRegularExpression(
+      pattern: #"\bfunc\s+localized(?=\s*\()"#)
+    let code = declaration.stringByReplacingMatches(
+      in: source, range: NSRange(source.startIndex..., in: source),
+      withTemplate: "")
+    let call = try NSRegularExpression(
+      pattern: #"\blocalized\s*\(\s*"((?:[^"\\\r\n]|\\.)*)"\s*\)"#)
+    let range = NSRange(code.startIndex..., in: code)
+    let matches = call.matches(in: code, range: range)
+    let remaining = call.stringByReplacingMatches(
+      in: code, range: range, withTemplate: "")
+    let reference = try NSRegularExpression(pattern: #"\blocalized\b"#)
+    guard !matches.isEmpty,
+      reference.firstMatch(
+        in: remaining,
+        range: NSRange(remaining.startIndex..., in: remaining)) == nil
+    else { throw DriverKeyError.unsupportedLookup }
+
+    let allowed = try NSRegularExpression(
+      pattern: #"\A(?:[^\\]|\\(?:[0\\nrt"]|u\{[0-9A-Fa-f]{1,8}\}))*\z"#)
+    let escape = try NSRegularExpression(
+      pattern: #"\\(?:u\{([0-9A-Fa-f]{1,8})\}|([0\\nrt"]))"#)
+    let simple = [
+      "0": "\0", "\\": "\\", "n": "\n",
+      "r": "\r", "t": "\t", "\"": "\"",
+    ]
+    var keys: Set<String> = []
+    for match in matches {
+      let literal = (code as NSString).substring(with: match.range(at: 1))
+      let whole = NSRange(literal.startIndex..., in: literal)
+      guard allowed.firstMatch(in: literal, range: whole) != nil
+      else { throw DriverKeyError.invalidEscape }
+      let key = NSMutableString(string: literal)
+      for found in escape.matches(in: literal, range: whole).reversed() {
+        let replacement: String
+        if found.range(at: 1).location != NSNotFound {
+          let hex = (literal as NSString).substring(with: found.range(at: 1))
+          guard let value = UInt32(hex, radix: 16),
+            let scalar = Unicode.Scalar(value)
+          else { throw DriverKeyError.invalidEscape }
+          replacement = String(scalar)
+        } else {
+          let token = (literal as NSString).substring(with: found.range(at: 2))
+          guard let value = simple[token]
+          else { throw DriverKeyError.invalidEscape }
+          replacement = value
+        }
+        key.replaceCharacters(in: found.range, with: replacement)
+      }
+      keys.insert(key as String)
+    }
+    return keys
+  }
+
+  func testDriverKeyExtractionPreservesWhitespaceEscapesAndOrdering() throws {
+    XCTAssertEqual(
+      try updateDriverKeys(
+        in: #"localized( "Later" )"# + "\n" + #"localized("#
+          + "\n" + #""New\u{2026}""# + "\n)"),
+      Set(["Later", "New…"]))
+    XCTAssertEqual(
+      try updateDriverKeys(in: #"localized("a\"b\\c\n")"#),
+      Set(["a\"b\\c\n"]))
+    XCTAssertEqual(
+      try updateDriverKeys(in: #"localized("\\u{0041}")"#),
+      Set([#"\u{0041}"#]))
+    XCTAssertEqual(
+      try updateDriverKeys(
+        in: #"localized("B"); localized("A"); localized("B")"#),
+      Set(["A", "B"]))
+  }
+
+  func testDriverKeyExtractionRejectsUnsupportedOrTruncatedLookups() {
+    for fragment in [
+      #"localized(value)"#, #"localized("Later", extra)"#,
+      #"localized()"#, #"localized("unterminated"#, #"localized("Later""#,
+      #"localized("bad\q")"#, #"localized("bad\u{}")"#,
+      #"localized("bad\u{D800}")"#, #"localized("bad\u{110000}")"#,
+      #"localized("bad\u{FFFFFFFFF}")"#, #"localized("bad\(value)")"#,
+    ] {
+      XCTAssertThrowsError(
+        try updateDriverKeys(
+          in: #"localized("Later")"# + "\n" + fragment),
+        fragment)
+    }
+    XCTAssertThrowsError(try updateDriverKeys(in: ""))
+  }
+
+  /// Every admitted literal lookup has an English entry, and nothing more.
+  func testTheUpdateWindowTableHasExactlyTheKeysTheDriverLooksUp() throws {
+    let source = try String(
+      contentsOf: Self.repository.appendingPathComponent(
+        "Sources/TopNV/AppleStyleUpdateDriver.swift"),
+      encoding: .utf8)
+    let keys = try updateDriverKeys(in: source)
+    XCTAssertEqual(
+      Set(parseTable(try driverTable("en").text).entries.map(\.key)), keys)
   }
 
   // MARK: Validator properties
 
   private let sampleBase: [String: BaseKey] = [
-    "About %@": BaseKey(isShared: true, value: "About %@"),
+    "About %@": BaseKey(isShared: true, value: "Informazioni su %@"),
     "Hide Notch": BaseKey(isShared: false, value: "Hide Notch"),
     "Version %@ (%@)": BaseKey(isShared: false, value: "Version %@ (%@)"),
   ]
 
   private let sampleLines = [
-    #"/* PENDING-MONOPODS */ "About %@" = "About %@";"#,
+    #""About %@" = "Informazioni su %@";"#,
     #""Hide Notch" = "Nascondi notch";"#,
     #""Version %@ (%@)" = "Versione %1$@ (%2$@)";"#,
   ]
@@ -395,13 +539,13 @@ final class LocalizationTests: XCTestCase {
     XCTAssertEqual(placeholderSignature("100%% %@")?.percents, 1)
   }
 
-  func testValidatorEnforcesThePendingMarker() {
+  func testValidatorRejectsThePendingMarkerAndOtherSharedTexts() {
     var lines = sampleLines
-    lines[0] = #""About %@" = "About %@";"#
-    XCTAssertTrue(problems(lines).contains(.missingMarker("About %@")))
+    lines[0] = pendingMarker + " " + sampleLines[0]
+    XCTAssertTrue(problems(lines).contains(.unexpectedMarker("About %@")))
 
     lines = sampleLines
-    lines[0] = #"/* PENDING-MONOPODS */ "About %@" = "Informazioni su %@";"#
+    lines[0] = #""About %@" = "About %@";"#
     XCTAssertTrue(problems(lines).contains(.sharedValueChanged("About %@")))
 
     lines = sampleLines
