@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Builds TopNV in release mode and assembles an ad-hoc signed build/TopNV.app.
+# Builds TopNV in release mode and assembles a signed build/TopNV.app.
 #
 # Usage: scripts/bundle.sh [extra swift build flags]
 # Set TOPNV_EXECUTABLE to the path of an already built release executable to skip the
 # SwiftPM build (for example one produced by xcodebuild).
 # Set TOPNV_VERSION and TOPNV_BUILD_NUMBER to override the bundle version (used by the release
 # workflow). Pass "--arch arm64 --arch x86_64" to build a universal app.
+# Without TOPNV_SIGN_IDENTITY the app is signed ad hoc. With it, every component is signed
+# with that identity and the hardened runtime, inside out, as the Sparkle guide orders.
 set -euo pipefail
 
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -32,8 +34,22 @@ AUTHOR_XML="$(printf '%s' "$AUTHOR" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 
 readonly AUTHOR AUTHOR_XML
 LOCALIZATIONS_XML="$(printf '    <string>%s</string>\n' "${LANGUAGES[@]}")"
 readonly LOCALIZATIONS_XML
+readonly SIGN_IDENTITY="${TOPNV_SIGN_IDENTITY:-}"
 
 cd "$ROOT"
+if [[ -n "$SIGN_IDENTITY" ]]; then
+  # Probe the identity on a throwaway copy before building or removing the previous app.
+  readonly SIGN_PROBE="$ROOT/build/sign-probe"
+  mkdir -p "$ROOT/build"
+  cp /usr/bin/true "$SIGN_PROBE"
+  probe_status=0
+  codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$SIGN_PROBE" || probe_status=$?
+  rm -f "$SIGN_PROBE"
+  if [[ $probe_status != 0 ]]; then
+    echo "error: signing identity \"$SIGN_IDENTITY\" not found; install the Developer ID Application certificate or set TOPNV_SIGN_IDENTITY" >&2
+    exit 1
+  fi
+fi
 if [[ -n "${TOPNV_EXECUTABLE:-}" ]]; then
   EXECUTABLE="$TOPNV_EXECUTABLE"
 else
@@ -116,7 +132,19 @@ $LOCALIZATIONS_XML
 PLIST
 
 plutil -lint "$APP_DIR/Contents/Info.plist" > /dev/null
-codesign --force --sign - --timestamp=none "$APP_DIR"
+if [[ -n "$SIGN_IDENTITY" ]]; then
+  # Inside out, without --deep: each nested component gets its own runtime signature.
+  readonly SPARKLE="$APP_DIR/Contents/Frameworks/Sparkle.framework"
+  sign() { codesign --force --sign "$SIGN_IDENTITY" --options runtime --timestamp "$@"; }
+  sign "$SPARKLE/Versions/B/XPCServices/Installer.xpc"
+  sign --preserve-metadata=entitlements "$SPARKLE/Versions/B/XPCServices/Downloader.xpc"
+  sign "$SPARKLE/Versions/B/Autoupdate"
+  sign "$SPARKLE/Versions/B/Updater.app"
+  sign "$SPARKLE"
+  sign "$APP_DIR"
+else
+  codesign --force --sign - --timestamp=none "$APP_DIR"
+fi
 codesign --verify --deep --strict "$APP_DIR"
 
 echo "$APP_DIR"

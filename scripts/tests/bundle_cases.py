@@ -79,7 +79,50 @@ def run_tests(kind):
                 name = language + '.lproj/Localizable.strings'
                 assert (app / 'Contents/Resources' / name).read_bytes() == (root / 'Localization' / name).read_bytes(), name
             assert (app / 'Contents/Resources/it.lproj/AppleStyleUpdateDriver.strings').read_bytes() == extra.read_bytes()
-            print('PASS bundle input matrix; rejected inputs preserve original app; languages bundled')
+            # Signing: a recording codesign shows every call, in order, with each argument intact.
+            log = root / 'codesign.log'; probe = root / 'build/sign-probe'
+            (bindir / 'codesign').write_text('#!/bin/bash\n'
+                                             '{ printf "%s\\t" "$@"; printf "\\n"; } >> "$FAKE_CODESIGN_LOG"\n'
+                                             'if [[ "${@: -1}" == */sign-probe ]]; then\n'
+                                             '  cmp -s "${@: -1}" /usr/bin/true || exit 3\n'
+                                             '  [[ -z "${FAKE_PROBE_FAIL:-}" ]] || exit 1\n'
+                                             'fi\n')
+            def signed(**values):
+                log.write_text('')
+                result = bundle(**dict(dict(TOPNV_EXECUTABLE=str(executable), PATH=str(bindir) + ':' + env['PATH'],
+                                            FAKE_CODESIGN_LOG=str(log)), **values))
+                return result, [line.split('\t')[:-1] for line in log.read_text().splitlines()]
+            verify_call = ['--verify', '--deep', '--strict', str(app)]
+            result, calls = signed()
+            assert result.returncode == 0, result
+            assert calls == [['--force', '--sign', '-', '--timestamp=none', str(app)], verify_call], calls
+            for identity in ('Developer ID Application', 'Developer ID Application: Example Developer (ABCDE12345)'):
+                result, calls = signed(TOPNV_SIGN_IDENTITY=identity)
+                assert result.returncode == 0, result
+                framework = app / 'Contents/Frameworks/Sparkle.framework'; component = framework / 'Versions/B'
+                runtime = ['--force', '--sign', identity, '--options', 'runtime', '--timestamp']
+                assert calls == [['--force', '--sign', identity, '--timestamp=none', str(probe)],
+                                 runtime + [str(component / 'XPCServices/Installer.xpc')],
+                                 runtime + ['--preserve-metadata=entitlements', str(component / 'XPCServices/Downloader.xpc')],
+                                 runtime + [str(component / 'Autoupdate')],
+                                 runtime + [str(component / 'Updater.app')],
+                                 runtime + [str(framework)],
+                                 runtime + [str(app)],
+                                 verify_call], calls
+                assert not any(a.startswith(('--deep', '--entitlements')) for call in calls if '--sign' in call for a in call)
+                assert not probe.exists()
+            # A failed probe stops before the build and before the previous app is removed.
+            shutil.rmtree(app); app.mkdir(); sentinel.write_text('original')
+            identity = 'Developer ID Application: Example Developer (ABCDE12345)'
+            result, calls = signed(TOPNV_SIGN_IDENTITY=identity, FAKE_PROBE_FAIL='1', TOPNV_EXECUTABLE=str(root / 'missing'))
+            assert result.returncode == 1, result
+            assert (f'error: signing identity "{identity}" not found; install the Developer ID Application '
+                    'certificate or set TOPNV_SIGN_IDENTITY').encode() in result.stderr, result.stderr
+            assert b'executable' not in result.stderr, result.stderr
+            assert calls == [['--force', '--sign', identity, '--timestamp=none', str(probe)]], calls
+            assert sentinel.read_text() == 'original' and sorted(p.name for p in app.iterdir()) == ['sentinel']
+            assert not probe.exists()
+            print('PASS bundle input matrix; rejected inputs preserve original app; languages bundled; signing order')
             return
         # Platform operations are replaced at the command boundary; plist and filesystem checks are real.
         bindir = root / 'bin'; bindir.mkdir()
