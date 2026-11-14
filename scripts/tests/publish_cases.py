@@ -100,6 +100,11 @@ class Cases(unittest.TestCase):
         return p
     def test_clean_checkout_and_stable_publish(self):
         p=self.prepared(); p.publish(); self.assertTrue(self.transport.public)
+    def test_release_body_states_the_developer_id_signature(self):
+        p=self.prepared(); p.publish()
+        body=[b for m,path,b in self.transport.events if m=='POST' and path.endswith('/releases')][0]['body']
+        self.assertIn('Developer ID',body); self.assertNotIn('ad hoc',body); self.assertNotIn('Open Anyway',body)
+        self.assertEqual(body,'Notes\n\nDownload the DMG and copy TopNV to Applications. Requires macOS 14+. Signed with Developer ID and notarized by Apple.\n')
     def test_source_and_release_guards(self):
         for changes in [{'GITHUB_REF':'refs/heads/other'},{'INPUT_CHANNEL':'other'},{'INPUT_CHANNEL':'proof','GITHUB_EVENT_NAME':'push'},{'INPUT_VERSION':'1.1.0\n'}]:
             with self.subTest(changes=changes):

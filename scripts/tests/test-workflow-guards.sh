@@ -128,6 +128,8 @@ def verify_steps(text):
 ci_verify = verify_steps(ci)
 assert len(ci_verify) == 2 and all((step.get('env') or {}).get('TOPNV_EXPECT_SIGNATURE') == 'adhoc' for step in ci_verify)
 assert verify_steps(release) and 'TOPNV_EXPECT_SIGNATURE' not in release
+# The local release creates the tag: a tag push must not start the hosted release.
+assert set(workflow(release)['on']) == {'workflow_dispatch'}, workflow(release)['on']
 assert 'cancel-in-progress: false' in release and 'pull_request_target' not in ci
 for text in (release,ci):
     for action in re.findall(r'uses: (\S+)',text): assert re.fullmatch(r'[^@]+@[0-9a-f]{40}',action),action
