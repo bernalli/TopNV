@@ -16,17 +16,17 @@ enum TableProblem: Hashable {
   case emptyValue(String)
   case invalidPlaceholders(String)
   case placeholderMismatch(String)
-  case missingMarker(String)
   case unexpectedMarker(String)
   case sharedValueChanged(String)
 }
 
-/// What a table must contain for one key.
+/// What a table must contain for one key: a shared key must have exactly `value`.
 struct BaseKey {
   let isShared: Bool
   let value: String
 }
 
+/// The marker of the texts that waited for MonoPods; no table may carry it any more.
 let pendingMarker = "/* PENDING-MONOPODS */"
 
 struct ParsedEntry {
@@ -68,7 +68,8 @@ private func unescape(_ text: String) -> String? {
 }
 
 /// Parses the shared format: UTF-8 without BOM, one `"key" = "value";` per line, lines sorted
-/// by UTF-8 bytes (ignoring the marker), no comments except the leading pending marker.
+/// by UTF-8 bytes (ignoring the marker), no comments. The old pending marker is still parsed,
+/// so that a leftover one is reported as `unexpectedMarker` rather than as a bare comment.
 func parseTable(_ raw: String) -> (entries: [ParsedEntry], problems: [TableProblem]) {
   var problems: [TableProblem] = []
   var text = raw
@@ -176,11 +177,9 @@ func tableProblems(base: [String: BaseKey], raw: String) -> [TableProblem] {
     } else {
       problems.append(.invalidPlaceholders(entry.key))
     }
-    if expected.isShared {
-      if !entry.hasMarker { problems.append(.missingMarker(entry.key)) }
-      if entry.value != expected.value { problems.append(.sharedValueChanged(entry.key)) }
-    } else if entry.hasMarker {
-      problems.append(.unexpectedMarker(entry.key))
+    if entry.hasMarker { problems.append(.unexpectedMarker(entry.key)) }
+    if expected.isShared, entry.value != expected.value {
+      problems.append(.sharedValueChanged(entry.key))
     }
   }
   for key in base.keys.sorted() where !seen.contains(key) {
@@ -195,10 +194,12 @@ final class LocalizationTests: XCTestCase {
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
   private static let localization = repository.appendingPathComponent("Localization")
 
-  private static var textKeyBase: [String: BaseKey] {
+  /// Shared keys must carry the MonoPods text of the language; own keys only need to exist.
+  private static func textKeyBase(_ language: String) -> [String: BaseKey] {
     Dictionary(
       uniqueKeysWithValues: TextKey.allCases.map {
-        ($0.rawValue, BaseKey(isShared: $0.isShared, value: $0.rawValue))
+        let shared = $0.isShared ? monoPodsSharedTexts[language]?[$0.rawValue] : nil
+        return ($0.rawValue, BaseKey(isShared: $0.isShared, value: shared ?? $0.rawValue))
       })
   }
 
@@ -242,7 +243,8 @@ final class LocalizationTests: XCTestCase {
     for language in Self.languages {
       let data = try tableData(language)
       XCTAssertFalse(data.starts(with: [0xEF, 0xBB, 0xBF]), "\(language) has a BOM")
-      XCTAssertEqual(tableProblems(base: Self.textKeyBase, raw: try table(language)), [], language)
+      XCTAssertEqual(
+        tableProblems(base: Self.textKeyBase(language), raw: try table(language)), [], language)
     }
   }
 
@@ -256,16 +258,27 @@ final class LocalizationTests: XCTestCase {
     }
   }
 
-  func testSharedKeysArePendingAndKeepTheEnglishValue() throws {
-    let english = Dictionary(
-      uniqueKeysWithValues: parseTable(try table("en")).entries.map { ($0.key, $0.value) })
+  func testNoTableCarriesThePendingMarker() throws {
     for language in Self.languages {
+      XCTAssertFalse(try table(language).contains("PENDING-MONOPODS"), language)
+      XCTAssertFalse(try driverTable(language).text.contains("PENDING-MONOPODS"), language)
       for entry in parseTable(try table(language)).entries {
-        let key = try XCTUnwrap(TextKey(rawValue: entry.key), entry.key)
-        XCTAssertEqual(entry.hasMarker, key.isShared, "\(language): \(entry.key)")
-        if key.isShared {
-          XCTAssertEqual(entry.value, english[entry.key], "\(language): \(entry.key)")
-        }
+        XCTAssertFalse(entry.hasMarker, "\(language): \(entry.key)")
+      }
+    }
+  }
+
+  /// The shared keys are exactly the keys of the MonoPods table, with its text in every language.
+  func testSharedKeysCarryTheMonoPodsTexts() throws {
+    let shared = Set(TextKey.allCases.filter(\.isShared).map(\.rawValue))
+    XCTAssertEqual(Set(monoPodsSharedTexts.keys), Set(Self.languages))
+    for language in Self.languages {
+      let expected = try XCTUnwrap(monoPodsSharedTexts[language], language)
+      XCTAssertEqual(Set(expected.keys), shared, language)
+      let values = Dictionary(
+        uniqueKeysWithValues: parseTable(try table(language)).entries.map { ($0.key, $0.value) })
+      for key in shared.sorted() {
+        XCTAssertEqual(values[key], expected[key], "\(language): \(key)")
       }
     }
   }
@@ -325,13 +338,13 @@ final class LocalizationTests: XCTestCase {
   // MARK: Validator properties
 
   private let sampleBase: [String: BaseKey] = [
-    "About %@": BaseKey(isShared: true, value: "About %@"),
+    "About %@": BaseKey(isShared: true, value: "Informazioni su %@"),
     "Hide Notch": BaseKey(isShared: false, value: "Hide Notch"),
     "Version %@ (%@)": BaseKey(isShared: false, value: "Version %@ (%@)"),
   ]
 
   private let sampleLines = [
-    #"/* PENDING-MONOPODS */ "About %@" = "About %@";"#,
+    #""About %@" = "Informazioni su %@";"#,
     #""Hide Notch" = "Nascondi notch";"#,
     #""Version %@ (%@)" = "Versione %1$@ (%2$@)";"#,
   ]
@@ -447,13 +460,13 @@ final class LocalizationTests: XCTestCase {
     XCTAssertEqual(placeholderSignature("100%% %@")?.percents, 1)
   }
 
-  func testValidatorEnforcesThePendingMarker() {
+  func testValidatorRejectsThePendingMarkerAndOtherSharedTexts() {
     var lines = sampleLines
-    lines[0] = #""About %@" = "About %@";"#
-    XCTAssertTrue(problems(lines).contains(.missingMarker("About %@")))
+    lines[0] = pendingMarker + " " + sampleLines[0]
+    XCTAssertTrue(problems(lines).contains(.unexpectedMarker("About %@")))
 
     lines = sampleLines
-    lines[0] = #"/* PENDING-MONOPODS */ "About %@" = "Informazioni su %@";"#
+    lines[0] = #""About %@" = "About %@";"#
     XCTAssertTrue(problems(lines).contains(.sharedValueChanged("About %@")))
 
     lines = sampleLines
