@@ -36,8 +36,14 @@ struct ParsedEntry {
   let hasMarker: Bool
 }
 
-private let entryPattern = try! NSRegularExpression(
-  pattern: #"^(/\* PENDING-MONOPODS \*/ )?"((?:[^"\\]|\\.)*)" = "((?:[^"\\]|\\.)*)";\z"#)
+private let entryPattern: NSRegularExpression = {
+  let pattern = #"^(/\* PENDING-MONOPODS \*/ )?"((?:[^"\\]|\\.)*)" = "((?:[^"\\]|\\.)*)";\z"#
+  do {
+    return try NSRegularExpression(pattern: pattern)
+  } catch {
+    preconditionFailure("invalid entry pattern: \(error)")
+  }
+}()
 
 private func unescape(_ text: String) -> String {
   var result = ""
