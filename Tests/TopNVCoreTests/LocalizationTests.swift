@@ -309,30 +309,109 @@ final class LocalizationTests: XCTestCase {
     }
   }
 
-  /// Every `localized("…")` key of the copied driver has an English entry, and nothing more.
+  private enum DriverKeyError: Error {
+    case unsupportedLookup, invalidEscape
+  }
+
+  /// Restricted source gate: unknown lookup syntax must fail.
+  private func updateDriverKeys(in source: String) throws -> Set<String> {
+    let declaration = try NSRegularExpression(
+      pattern: #"\bfunc\s+localized(?=\s*\()"#)
+    let code = declaration.stringByReplacingMatches(
+      in: source, range: NSRange(source.startIndex..., in: source),
+      withTemplate: "")
+    let call = try NSRegularExpression(
+      pattern: #"\blocalized\s*\(\s*"((?:[^"\\\r\n]|\\.)*)"\s*\)"#)
+    let range = NSRange(code.startIndex..., in: code)
+    let matches = call.matches(in: code, range: range)
+    let remaining = call.stringByReplacingMatches(
+      in: code, range: range, withTemplate: "")
+    let reference = try NSRegularExpression(pattern: #"\blocalized\b"#)
+    guard !matches.isEmpty,
+      reference.firstMatch(
+        in: remaining,
+        range: NSRange(remaining.startIndex..., in: remaining)) == nil
+    else { throw DriverKeyError.unsupportedLookup }
+
+    let allowed = try NSRegularExpression(
+      pattern: #"\A(?:[^\\]|\\(?:[0\\nrt"]|u\{[0-9A-Fa-f]{1,8}\}))*\z"#)
+    let escape = try NSRegularExpression(
+      pattern: #"\\(?:u\{([0-9A-Fa-f]{1,8})\}|([0\\nrt"]))"#)
+    let simple = [
+      "0": "\0", "\\": "\\", "n": "\n",
+      "r": "\r", "t": "\t", "\"": "\"",
+    ]
+    var keys: Set<String> = []
+    for match in matches {
+      let literal = (code as NSString).substring(with: match.range(at: 1))
+      let whole = NSRange(literal.startIndex..., in: literal)
+      guard allowed.firstMatch(in: literal, range: whole) != nil
+      else { throw DriverKeyError.invalidEscape }
+      let key = NSMutableString(string: literal)
+      for found in escape.matches(in: literal, range: whole).reversed() {
+        let replacement: String
+        if found.range(at: 1).location != NSNotFound {
+          let hex = (literal as NSString).substring(with: found.range(at: 1))
+          guard let value = UInt32(hex, radix: 16),
+            let scalar = Unicode.Scalar(value)
+          else { throw DriverKeyError.invalidEscape }
+          replacement = String(scalar)
+        } else {
+          let token = (literal as NSString).substring(with: found.range(at: 2))
+          guard let value = simple[token]
+          else { throw DriverKeyError.invalidEscape }
+          replacement = value
+        }
+        key.replaceCharacters(in: found.range, with: replacement)
+      }
+      keys.insert(key as String)
+    }
+    return keys
+  }
+
+  func testDriverKeyExtractionPreservesWhitespaceEscapesAndOrdering() throws {
+    XCTAssertEqual(
+      try updateDriverKeys(
+        in: #"localized( "Later" )"# + "\n" + #"localized("#
+          + "\n" + #""New\u{2026}""# + "\n)"),
+      Set(["Later", "New…"]))
+    XCTAssertEqual(
+      try updateDriverKeys(in: #"localized("a\"b\\c\n")"#),
+      Set(["a\"b\\c\n"]))
+    XCTAssertEqual(
+      try updateDriverKeys(in: #"localized("\\u{0041}")"#),
+      Set([#"\u{0041}"#]))
+    XCTAssertEqual(
+      try updateDriverKeys(
+        in: #"localized("B"); localized("A"); localized("B")"#),
+      Set(["A", "B"]))
+  }
+
+  func testDriverKeyExtractionRejectsUnsupportedOrTruncatedLookups() {
+    for fragment in [
+      #"localized(value)"#, #"localized("Later", extra)"#,
+      #"localized()"#, #"localized("unterminated"#, #"localized("Later""#,
+      #"localized("bad\q")"#, #"localized("bad\u{}")"#,
+      #"localized("bad\u{D800}")"#, #"localized("bad\u{110000}")"#,
+      #"localized("bad\u{FFFFFFFFF}")"#, #"localized("bad\(value)")"#,
+    ] {
+      XCTAssertThrowsError(
+        try updateDriverKeys(
+          in: #"localized("Later")"# + "\n" + fragment),
+        fragment)
+    }
+    XCTAssertThrowsError(try updateDriverKeys(in: ""))
+  }
+
+  /// Every admitted literal lookup has an English entry, and nothing more.
   func testTheUpdateWindowTableHasExactlyTheKeysTheDriverLooksUp() throws {
     let source = try String(
       contentsOf: Self.repository.appendingPathComponent(
         "Sources/TopNV/AppleStyleUpdateDriver.swift"),
       encoding: .utf8)
-    let call = try NSRegularExpression(pattern: #"localized\("((?:[^"\\]|\\.)*)"\)"#)
-    let escape = try NSRegularExpression(pattern: #"\\u\{([0-9A-Fa-f]{1,8})\}"#)
-    var keys: Set<String> = []
-    for match in call.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
-      let literal = try XCTUnwrap(Range(match.range(at: 1), in: source).map { String(source[$0]) })
-      var key = literal
-      for found in escape.matches(in: literal, range: NSRange(literal.startIndex..., in: literal))
-        .reversed()
-      {
-        let hex = try XCTUnwrap(Range(found.range(at: 1), in: literal).map { String(literal[$0]) })
-        let scalar = try XCTUnwrap(UInt32(hex, radix: 16).flatMap(Unicode.Scalar.init))
-        key.replaceSubrange(try XCTUnwrap(Range(found.range, in: key)), with: String(scalar))
-      }
-      XCTAssertFalse(key.contains("\\"), "unhandled escape in \(literal)")
-      keys.insert(key)
-    }
-    XCTAssertFalse(keys.isEmpty)
-    XCTAssertEqual(Set(parseTable(try driverTable("en").text).entries.map(\.key)), keys)
+    let keys = try updateDriverKeys(in: source)
+    XCTAssertEqual(
+      Set(parseTable(try driverTable("en").text).entries.map(\.key)), keys)
   }
 
   // MARK: Validator properties
