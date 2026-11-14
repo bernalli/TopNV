@@ -9,6 +9,7 @@ import sys
 import tempfile
 
 REPO = Path(__file__).resolve().parents[2]
+LANGUAGES = ['en', 'it', 'es', 'fr', 'de', 'pt-BR', 'ja', 'zh-Hans']
 
 def run_tests(kind):
     with tempfile.TemporaryDirectory(prefix='bundle-', dir=REPO / 'build/test-tmp') as tmp:
@@ -17,6 +18,7 @@ def run_tests(kind):
             shutil.copy2(REPO / name, root / name)
         shutil.copytree(REPO / 'Licenses', root / 'Licenses')
         shutil.copytree(REPO / 'Assets', root / 'Assets')
+        shutil.copytree(REPO / 'Localization', root / 'Localization')
         public = root / 'Assets/SparklePublicEDKey.txt'
         public.write_text(base64.b64encode(bytes(32)).decode() + '\n')
         app = root / 'build/TopNV.app'
@@ -53,9 +55,31 @@ def run_tests(kind):
                 path = root / name; saved = path.read_bytes()
                 path.write_bytes(saved + b'!'); rejected()
                 path.unlink(); rejected(); path.write_bytes(saved)
+            for language in ('it', 'zh-Hans'):
+                table = root / 'Localization' / (language + '.lproj') / 'Localizable.strings'
+                saved = table.read_bytes()
+                table.unlink(); rejected(); table.write_bytes(saved)
+            (root / 'Localization/ko.lproj').mkdir(); rejected(); (root / 'Localization/ko.lproj').rmdir()
             result = bundle()
             assert b'executable' in result.stderr, result.stderr
-            print('PASS bundle input matrix; rejected inputs preserve original app')
+            # A full run with platform tools replaced: every language folder lands in Resources.
+            bindir = root / 'bin'; bindir.mkdir()
+            for name, script in {'otool': 'echo "          path @executable_path/../Frameworks (offset 12)"',
+                                 'codesign': 'exit 0'}.items():
+                tool = bindir / name; tool.write_text('#!/bin/bash\n' + script + '\n'); tool.chmod(0o755)
+            products = root / 'products'; (products / 'Sparkle.framework').mkdir(parents=True)
+            executable = products / 'TopNV'; executable.write_text('#!/bin/bash\n'); executable.chmod(0o755)
+            extra = root / 'Localization/it.lproj/AppleStyleUpdateDriver.strings'
+            extra.write_text('"Later" = "Più tardi";\n')
+            result = bundle(TOPNV_EXECUTABLE=str(executable), PATH=str(bindir) + ':' + env['PATH'])
+            assert result.returncode == 0, result
+            built = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+            assert built['CFBundleLocalizations'] == LANGUAGES, built.get('CFBundleLocalizations')
+            for language in LANGUAGES:
+                name = language + '.lproj/Localizable.strings'
+                assert (app / 'Contents/Resources' / name).read_bytes() == (root / 'Localization' / name).read_bytes(), name
+            assert (app / 'Contents/Resources/it.lproj/AppleStyleUpdateDriver.strings').read_bytes() == extra.read_bytes()
+            print('PASS bundle input matrix; rejected inputs preserve original app; languages bundled')
             return
         # Platform operations are replaced at the command boundary; plist and filesystem checks are real.
         bindir = root / 'bin'; bindir.mkdir()
@@ -77,13 +101,20 @@ def run_tests(kind):
             if name in ('Sparkle', 'Autoupdate'): (version / name).write_text('fixture')
             else: (version / name).mkdir()
             (framework / name).symlink_to('Versions/Current/' + name)
+        resources = contents / 'Resources'
+        for language in LANGUAGES:
+            folder = resources / (language + '.lproj'); folder.mkdir()
+            shutil.copy(root / 'Localization' / (language + '.lproj/Localizable.strings'), folder / 'Localizable.strings')
+        # Other tables (the update window's) are allowed beside Localizable.strings.
+        (resources / 'it.lproj/AppleStyleUpdateDriver.strings').write_text('"Later" = "Più tardi";\n')
         fplist = version / 'Resources/Info.plist'
         fplist.write_bytes(plistlib.dumps({'CFBundleShortVersionString': '2.10.1'}))
         plist = dict(CFBundleIdentifier='io.github.bernalli.topnv', CFBundleShortVersionString='1.1.0', CFBundleVersion='2',
                      LSMinimumSystemVersion='14.0', LSUIElement=True, SUFeedURL='https://github.com/bernalli/TopNV/releases/latest/download/appcast.xml',
                      SUPublicEDKey=original.decode().strip() if 'original' in locals() else public.read_text().strip(),
                      SUEnableAutomaticChecks=False, SUAllowsAutomaticUpdates=False, SUVerifyUpdateBeforeExtraction=True,
-                     NSHumanReadableCopyright='Copyright (c) 2026 ' + (root / 'AUTHORS').read_text().splitlines()[0])
+                     NSHumanReadableCopyright='Copyright (c) 2026 ' + (root / 'AUTHORS').read_text().splitlines()[0],
+                     CFBundleLocalizations=list(LANGUAGES))
         info = contents / 'Info.plist'
         def verify(expected=None):
             result = subprocess.run(['bash', str(REPO / 'scripts/verify-bundle.sh'), str(app)], env=env, capture_output=True)
@@ -106,6 +137,18 @@ def run_tests(kind):
                               ({'LSMinimumSystemVersion': '13.0'}, 'V4')]:
             info.write_bytes(plistlib.dumps(dict(plist, **changes))); verify(code)
         info.write_bytes(plistlib.dumps(dict(plist, NSHumanReadableCopyright='All rights reserved'))); verify('V13')
+        for value in (LANGUAGES[:-1], LANGUAGES + ['ko'], list(reversed(LANGUAGES)), 'en', [], None):
+            changed = dict(plist)
+            if value is None: del changed['CFBundleLocalizations']
+            else: changed['CFBundleLocalizations'] = value
+            info.write_bytes(plistlib.dumps(changed)); verify('V15')
+        info.write_bytes(plistlib.dumps(plist))
+        for language in ('en', 'pt-BR', 'zh-Hans'):
+            folder = resources / (language + '.lproj'); table = folder / 'Localizable.strings'; saved = table.read_bytes()
+            table.unlink(); verify('V15')
+            table.mkdir(); verify('V15'); table.rmdir()
+            shutil.rmtree(folder); verify('V15')
+            folder.mkdir(); table.write_bytes(saved)
         info.write_bytes(plistlib.dumps(plist))
         for name in ('Current', 'Sparkle', 'Autoupdate', 'Updater.app', 'XPCServices', 'Resources', 'Headers', 'Modules', 'PrivateHeaders'):
             p = framework / ('Versions/Current' if name == 'Current' else name); dest = os.readlink(p)
@@ -120,6 +163,6 @@ def run_tests(kind):
         # A long listing must not turn an early grep match into a false failure under pipefail.
         (bindir/'otool').write_text('#!/bin/bash\n'+responses['otool']+'\nexec /usr/bin/seq 1 200000\n'); verify()
         (bindir/'otool').write_text('#!/bin/bash\n'+responses['otool']+'\n')
-        verify(); print('PASS verifier V0-V13 mutations')
+        verify(); print('PASS verifier V0-V15 mutations')
 
 run_tests(sys.argv[1])

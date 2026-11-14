@@ -7,11 +7,11 @@ final class AboutWindowController: NSWindowController {
   static let shared = AboutWindowController()
 
   private init() {
-    let content = NSHostingView(
-      rootView: AboutView(information: AboutInformation(infoDictionary: Bundle.main.infoDictionary)))
+    let information = AboutInformation(infoDictionary: Bundle.main.infoDictionary)
+    let content = NSHostingView(rootView: AboutView(information: information))
     let window = AboutWindow(
       contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-    window.title = ""
+    window.title = Localizer.main(.about, information.name)
     window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.backgroundColor = .windowBackgroundColor

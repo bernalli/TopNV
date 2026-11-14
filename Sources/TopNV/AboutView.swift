@@ -4,21 +4,20 @@ import TopNVCore
 
 struct AboutView: View {
   let information: AboutInformation
+  private let localizer = Localizer.main
 
   var body: some View {
-    VStack(spacing: 8) {
+    VStack(spacing: 0) {
       Image(nsImage: NSApp.applicationIconImage)
         .resizable()
         .scaledToFit()
         .frame(width: 64, height: 64)
         .accessibilityHidden(true)
-        .padding(.bottom, 4)
-      Text(information.name)
+      Text(verbatim: information.name)
         .font(.system(size: 16, weight: .bold))
-      HStack(spacing: 6) {
-        Text(information.version.title)
-          .font(.system(size: NSFont.smallSystemFontSize))
-          .foregroundStyle(.secondary)
+        .padding(.top, 10)
+      HStack(spacing: 5) {
+        Text(verbatim: information.version.title)
         Button {
           open(.source)
         } label: {
@@ -26,26 +25,31 @@ struct AboutView: View {
         }
         .buttonStyle(.plain)
         .focusEffectDisabled()
-        .help("View Source on GitHub")
-        .accessibilityLabel("View Source on GitHub")
+        .help(localizer(.viewOnGitHub, information.name))
+        .accessibilityLabel(localizer(.viewOnGitHub, information.name))
       }
+      .font(.system(size: NSFont.smallSystemFontSize))
+      .foregroundStyle(.secondary)
+      .padding(.top, 4)
       if let copyright = information.copyright {
-        Text(copyright)
+        Text(verbatim: copyright)
           .font(.system(size: NSFont.smallSystemFontSize))
           .foregroundStyle(.secondary)
+          .padding(.top, 10)
       }
       Button {
         open(.sponsor)
       } label: {
-        Label("Buy Me a Coffee", systemImage: "cup.and.saucer.fill")
+        Label(localizer(.buyMeACoffee), systemImage: "cup.and.saucer")
       }
-      .buttonStyle(CoffeeButtonStyle())
-      .focusEffectDisabled()
-      .padding(.top, 8)
+      .controlSize(.small)
+      .padding(.top, 14)
     }
     .multilineTextAlignment(.center)
     .fixedSize(horizontal: false, vertical: true)
-    .padding(20)
+    .padding(.horizontal, 20)
+    .padding(.top, 6)
+    .padding(.bottom, 20)
     .frame(width: 280)
   }
 
@@ -73,20 +77,5 @@ private struct GitHubMark: View {
       }
     }
     .foregroundStyle(.secondary)
-  }
-}
-
-private struct CoffeeButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .font(.system(size: NSFont.smallSystemFontSize))
-      .foregroundStyle(.primary)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 4)
-      // Native bordered buttons ignore capsule border shapes on macOS 14.
-      .background(.primary.opacity(configuration.isPressed ? 0.12 : 0.04), in: Capsule())
-      .overlay {
-        Capsule().strokeBorder(.primary.opacity(0.2), lineWidth: 1)
-      }
   }
 }

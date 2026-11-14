@@ -55,12 +55,11 @@ final class MenuOptionsTests: XCTestCase {
 
   func testGitHubLinks() throws {
     let paths: [AppLink: String] = [
-      .releaseNotes: "/bernalli/TopNV/releases",
       .reportIssue: "/bernalli/TopNV/issues/new",
       .source: "/bernalli/TopNV",
       .sponsor: "/sponsors/bernalli",
     ]
-    XCTAssertEqual(AppLink.allCases.count, 4)
+    XCTAssertEqual(AppLink.allCases.count, 3)
     for link in AppLink.allCases {
       let url = try XCTUnwrap(link.url)
       XCTAssertEqual(url.scheme, "https")

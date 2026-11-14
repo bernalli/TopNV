@@ -16,6 +16,7 @@ readonly BUNDLE_ID="io.github.bernalli.topnv"
 readonly VERSION="${TOPNV_VERSION-1.1.0}"
 readonly BUILD_NUMBER="${TOPNV_BUILD_NUMBER-1}"
 readonly MIN_MACOS="14.0"
+readonly LANGUAGES=(en it es fr de pt-BR ja zh-Hans)
 readonly APP_DIR="$ROOT/build/$APP_NAME.app"
 readonly FEED_URL="${TOPNV_FEED_URL-https://github.com/bernalli/TopNV/releases/latest/download/appcast.xml}"
 python3 "$SCRIPT_ROOT/scripts/bundle-metadata.py" inputs "$ROOT"
@@ -29,6 +30,8 @@ if [[ -z "$AUTHOR" ]]; then
 fi
 AUTHOR_XML="$(printf '%s' "$AUTHOR" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
 readonly AUTHOR AUTHOR_XML
+LOCALIZATIONS_XML="$(printf '    <string>%s</string>\n' "${LANGUAGES[@]}")"
+readonly LOCALIZATIONS_XML
 
 cd "$ROOT"
 if [[ -n "${TOPNV_EXECUTABLE:-}" ]]; then
@@ -55,6 +58,10 @@ cp "$EXECUTABLE" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "$ROOT/Assets/AppIcon.icns" "$ROOT/Assets/MenuBarIcon.png" "$ROOT/Assets/MenuBarIcon@2x.png" \
   "$ROOT/Assets/GitHubMark.png" "$ROOT/Assets/GitHubMark@2x.png" \
   "$APP_DIR/Contents/Resources/"
+# Whole folders: a language may carry more tables than Localizable.strings.
+for language in "${LANGUAGES[@]}"; do
+  cp -R "$ROOT/Localization/$language.lproj" "$APP_DIR/Contents/Resources/"
+done
 
 # Capture first: grep -q stops reading early, and under pipefail the SIGPIPE to otool reads as failure.
 LOAD_COMMANDS="$(otool -l "$APP_DIR/Contents/MacOS/$APP_NAME")"
@@ -69,6 +76,10 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
+  <key>CFBundleLocalizations</key>
+  <array>
+$LOCALIZATIONS_XML
+  </array>
   <key>CFBundleExecutable</key>
   <string>$APP_NAME</string>
   <key>CFBundleIconFile</key>

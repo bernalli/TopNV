@@ -11,6 +11,7 @@ import sys
 SPARKLE_HASH = '389a4e4e9a32f059775b13a06e25a591445ba229d2838d26dd3e7c0c45127cfe'
 MIT_HASH = 'd0d211e1fb7d9926f5e1693cab1e843b42152cdc39d38638a5cf83b3530feaaa'
 STABLE = 'https://github.com/bernalli/TopNV/releases/latest/download/appcast.xml'
+LANGUAGES = ['en', 'it', 'es', 'fr', 'de', 'pt-BR', 'ja', 'zh-Hans']
 FEED = r'https://github\.com/bernalli/TopNV/releases/(latest/download|download/update-proof)/appcast\.xml'
 
 def version(value):
@@ -25,6 +26,11 @@ def key(value):
 def hash_matches(path, expected):
     return hashlib.sha256(path.read_bytes()).hexdigest() == expected
 
+def languages_complete(folder):
+    """Exactly the supported .lproj folders exist, each with its Localizable.strings."""
+    present = {p.name for p in folder.iterdir() if p.suffix == '.lproj'}
+    return present == {l + '.lproj' for l in LANGUAGES} and all((folder/(l + '.lproj')/'Localizable.strings').is_file() for l in LANGUAGES)
+
 def main():
     mode, root = sys.argv[1], Path(sys.argv[2])
     if mode == 'inputs':
@@ -36,6 +42,7 @@ def main():
             ('Sparkle license missing or altered', lambda: hash_matches(root/'Licenses/Sparkle.txt', SPARKLE_HASH)),
             ('TopNV license missing or altered', lambda: hash_matches(root/'LICENSE', MIT_HASH)),
             ('AUTHORS is empty', lambda: bool((root/'AUTHORS').read_text().splitlines()[0].strip())),
+            ('localizations missing or incomplete', lambda: languages_complete(root/'Localization')),
         ]
     else:
         app = Path(sys.argv[3]); info = app/'Contents/Info.plist'
@@ -49,6 +56,7 @@ def main():
             ('V4: invalid identity or version', lambda: version(p.get('CFBundleShortVersionString')) and build(p.get('CFBundleVersion')) and p.get('CFBundleIdentifier') == 'io.github.bernalli.topnv' and p.get('LSMinimumSystemVersion') == '14.0'),
             ('V11: Sparkle license mismatch', lambda: hash_matches(resources/'Sparkle.txt',SPARKLE_HASH)),
             ('V12: TopNV license mismatch', lambda: hash_matches(resources/'TopNV.txt',MIT_HASH)),
+            ('V15: localizations missing or incomplete', lambda: p.get('CFBundleLocalizations') == LANGUAGES and all((app/'Contents/Resources'/(l + '.lproj')/'Localizable.strings').is_file() for l in LANGUAGES)),
             ('V13: copyright mismatch', lambda: p.get('NSHumanReadableCopyright') == 'Copyright (c) 2026 ' + (root/'AUTHORS').read_text().splitlines()[0] and 'All rights reserved' not in p['NSHumanReadableCopyright']),
         ]
     failed = False

@@ -7,10 +7,11 @@ enum AutomaticUpdateQuestion {
     RunLoop.main.perform(inModes: [.default]) {
       MainActor.assumeIsolated {
         let alert = NSAlert()
-        alert.messageText = "Check for Updates Automatically?"
-        alert.informativeText = "TopNV can check for new versions once a day. Installing requires Install Update, then Install and Relaunch. You can change this at any time in Options."
-        alert.addButton(withTitle: "Check Automatically")
-        alert.addButton(withTitle: "Don't Check").keyEquivalent = "\u{1b}"
+        let localizer = Localizer.main
+        alert.messageText = localizer(.updateQuestionTitle)
+        alert.informativeText = localizer(.updateQuestionMessage, Localizer.appName)
+        alert.addButton(withTitle: localizer(.checkAutomatically))
+        alert.addButton(withTitle: localizer(.dontCheck)).keyEquivalent = "\u{1b}"
         NSApp.activate(ignoringOtherApps: true)
         completion(answer(for: alert.runModal()))
       }
