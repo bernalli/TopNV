@@ -96,6 +96,8 @@ struct SettingsMenu: View {
   @ObservedObject var loginItem: LoginItem
   @ObservedObject var visibility: MenuVisibility
   @ObservedObject var updates: UpdateMenuModel
+  private let localizer = Localizer.main
+  private let appName = Localizer.appName
   private let version = AppVersion(
     shortVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
     build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
@@ -105,78 +107,77 @@ struct SettingsMenu: View {
       let status = MenuStatus(hideNotch: settings.hideNotch, roundCorners: settings.roundCorners)
       Label(status.title, systemImage: status.symbol)
       Toggle(isOn: $settings.hideNotch) {
-        Label("Hide Notch", systemImage: "menubar.rectangle")
+        Label(localizer(.hideNotch), systemImage: "menubar.rectangle")
       }
       Toggle(isOn: $settings.roundCorners) {
-        Label("Round Corners", systemImage: "rectangle")
+        Label(localizer(.roundCorners), systemImage: "rectangle")
       }
       Menu {
-        Picker("Corner Radius", selection: $settings.cornerRadius) {
+        Picker(localizer(.cornerRadius), selection: $settings.cornerRadius) {
           ForEach(CornerRadiusOption.options(for: settings.cornerRadius)) { option in
-            Text(option.title).tag(option.value)
+            Text(verbatim: option.title).tag(option.value)
           }
         }
         .pickerStyle(.inline)
       } label: {
-        Label("Corner Radius", systemImage: "ruler")
+        Label(localizer(.cornerRadius), systemImage: "ruler")
       }
       .disabled(!settings.roundCorners)
     }
     Menu {
-      info("Corner Radius: \(CornerRadiusOption(value: settings.cornerRadius, isCustom: false).title)")
-      info(settings.cornersOnAllDisplays ? "Applies To: All Displays" : "Applies To: Built-in Display")
-      info("Permissions: None Required")
-      info("Requires macOS 14 or Later")
-      Divider()
-      Button("View Source on GitHub") { open(.source) }
-      Button("Release Notes") { open(.releaseNotes) }
-      Button("Report an Issue…") { open(.reportIssue) }
+      info(
+        localizer(
+          .cornerRadiusDetail, CornerRadiusOption(value: settings.cornerRadius, isCustom: false).title))
+      info(localizer(settings.cornersOnAllDisplays ? .appliesToAllDisplays : .appliesToBuiltInDisplay))
+      info(localizer(.permissionsNoneRequired))
+      info(localizer(.requiresMacOS))
     } label: {
-      Label("Details", systemImage: "info.circle")
+      Label(localizer(.details), systemImage: "info.circle")
     }
     Menu {
       Toggle(isOn: $settings.cornersOnAllDisplays) {
-        Label("Corners on All Displays", systemImage: "display.2")
+        Label(localizer(.cornersOnAllDisplays), systemImage: "display.2")
       }
       .disabled(!settings.roundCorners)
       Divider()
       Toggle(isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.setEnabled($0) })) {
-        Label("Launch at Login", systemImage: "power")
+        Label(localizer(.launchAtLogin), systemImage: "power")
       }
       if let message = loginItem.errorMessage {
         info(message)
       } else if loginItem.needsApproval {
-        info("Allow TopNV in System Settings > General > Login Items.")
+        info(localizer(.loginItemApproval, appName))
       }
       Toggle(isOn: Binding(
         get: { updates.automaticallyChecksForUpdates }, set: { updates.setAutomaticallyChecks($0) }
       )) {
-        Label("Automatically Check for Updates", systemImage: "arrow.triangle.2.circlepath")
+        Label(localizer(.automaticUpdates), systemImage: "arrow.triangle.2.circlepath")
       }
       .disabled(!updates.isAvailable)
       Divider()
       Toggle(isOn: Binding(
         get: { !visibility.isVisible }, set: { visibility.setMenuVisible(!$0) }
       )) {
-        Label("Hide Menu Bar Icon", systemImage: "menubar.rectangle")
+        Label(localizer(.hideMenuBarIcon), systemImage: "menubar.rectangle")
       }
-      info("Open TopNV again to bring it back.")
+      info(localizer(.hideMenuBarIconCaption, appName))
     } label: {
-      Label("Options", systemImage: "gearshape")
+      Label(localizer(.options), systemImage: "gearshape")
     }
     Divider()
     info(version.title)
-    Button("Check for Updates…") { updates.checkForUpdates() }
+    Button(localizer(.checkForUpdates)) { updates.checkForUpdates() }
       .disabled(!updates.canCheckForUpdates)
-    Button("About TopNV") { AboutWindowController.shared.show() }
+    Button(localizer(.about, appName)) { AboutWindowController.shared.show() }
+    Button(localizer(.reportIssue)) { open(.reportIssue) }
     Divider()
-    Button("Quit TopNV") { NSApp.terminate(nil) }
+    Button(localizer(.quit, appName)) { NSApp.terminate(nil) }
       .keyboardShortcut("q", modifiers: .command)
   }
 
   @ViewBuilder private func info(_ text: String) -> some View {
     ForEach(Array(MenuText.lines(text).enumerated()), id: \.offset) { _, line in
-      Text(line)
+      Text(verbatim: line)
     }
   }
 
