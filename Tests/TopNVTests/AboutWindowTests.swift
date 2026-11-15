@@ -2,10 +2,10 @@ import AppKit
 import CoreText
 import CryptoKit
 import SwiftUI
-import TopNVCore
 import XCTest
 
 @testable import TopNV
+@testable import TopNVCore
 
 /// The About window as MonoPods builds it. Links and activation are injected, so no test opens a
 /// browser or activates the app.
@@ -118,6 +118,19 @@ final class AboutWindowTests: XCTestCase {
   /// The About window reads no table: with the Italian table as its bundle it stays in English.
   func testTheWindowStaysInEnglishWithTheItalianTable() throws {
     let italian = try XCTUnwrap(Bundle(path: Self.italian.path))
+    // The Italian table answers the default lookups too, so a window that read `Localizer.main`
+    // or `Bundle.main` would turn Italian here.
+    try Localizer.$bundleOverride.withValue(italian) {
+      try checkTheWindowInEnglish(italian: italian)
+    }
+  }
+
+  private func checkTheWindowInEnglish(italian: Bundle) throws {
+    XCTAssertEqual(Localizer.main(.options), "Opzioni")
+    XCTAssertEqual(Localizer.main(.about, "TopNV"), "Informazioni su TopNV")
+    XCTAssertEqual(
+      AboutInformation(infoDictionary: ["CFBundleShortVersionString": "1.2.0"]).version.title,
+      "Versione 1.2.0")
     XCTAssertEqual(Localizer(bundle: italian)(.about, "TopNV"), "Informazioni su TopNV")
     let controller = controller(
       bundle: italian,

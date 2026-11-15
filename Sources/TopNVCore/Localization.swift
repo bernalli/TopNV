@@ -62,6 +62,10 @@ public struct Localizer {
   /// Reads no table: the English text of every key, in every language (the About window, D-35).
   public static let english = Localizer(table: nil)
 
+  /// Replaces `Bundle.main` for the lookups of this task, so a test can put a real table in
+  /// effect for the default lookups. Other bundles and the English localizer are not affected.
+  @TaskLocal static var bundleOverride: Bundle?
+
   private let bundle: Bundle?
 
   public init(bundle: Bundle) {
@@ -73,8 +77,9 @@ public struct Localizer {
   }
 
   public func callAsFunction(_ key: TextKey, _ arguments: CVarArg...) -> String {
+    let selected = bundle === Bundle.main ? (Self.bundleOverride ?? bundle) : bundle
     let format =
-      bundle?.localizedString(forKey: key.rawValue, value: key.rawValue, table: "Localizable")
+      selected?.localizedString(forKey: key.rawValue, value: key.rawValue, table: "Localizable")
       ?? key.rawValue
     return arguments.isEmpty ? format : String(format: format, arguments: arguments)
   }
