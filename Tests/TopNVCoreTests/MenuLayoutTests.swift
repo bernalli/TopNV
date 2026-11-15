@@ -17,7 +17,7 @@ final class MenuLayoutTests: XCTestCase {
       loginNeedsApproval: loginNeedsApproval, loginError: loginError,
       updatesAvailable: updatesAvailable, canCheckForUpdates: canCheckForUpdates,
       automaticUpdates: automaticUpdates, menuVisible: menuVisible,
-      versionTitle: "Version 1.2.0 (7)")
+      versionTitle: "Version 1.2.0")
   }
 
   private func rows(_ state: MenuState) -> [MenuRow] {
@@ -91,7 +91,7 @@ final class MenuLayoutTests: XCTestCase {
     XCTAssertEqual(row("options", in: rows)?.symbol, "gearshape")
     XCTAssertEqual(
       row("version.0", in: rows),
-      MenuRow(id: "version.0", title: "Version 1.2.0 (7)", symbol: nil, kind: .info))
+      MenuRow(id: "version.0", title: "Version 1.2.0", symbol: nil, kind: .info))
     XCTAssertEqual(row("check", in: rows)?.title, "Check for Updates…")
     XCTAssertEqual(row("about", in: rows)?.kind, .action(.about, enabled: true, key: ""))
     XCTAssertEqual(row("about", in: rows)?.title, "About TopNV")

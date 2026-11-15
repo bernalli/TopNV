@@ -6,8 +6,9 @@ from pathlib import Path
 import hashlib
 import sys
 
-# Reviewed D-35 source closure at 76a24e9. Do not regenerate automatically:
-# changing any digest requires reviewing the entire About text path again.
+# Reviewed D-35 source closure at 76a24e9, plus the D-36 version and sponsor
+# button changes. Do not regenerate automatically: changing any digest
+# requires reviewing the entire About text path again.
 EXPECTED = {
     "Sources/TopNV/AboutTitleFont.swift":
         "2f5d9ad11f78953ff4fb76929d1b71b42d0c61a93489d4f64eb00759c7aafc27",
@@ -16,13 +17,13 @@ EXPECTED = {
     "Sources/TopNV/AboutWindowController.swift":
         "12625a3cb72d7ae1aa04d581ffcf4a628e848ea0a8b70e797572987caa0ec932",
     "Sources/TopNVCore/AboutInformation.swift":
-        "5ba62e31e18ce5b5b7162e21f1c1d8f0b2a036b8a846a431084f98bf039f213c",
+        "718a46794d2c9c649705b3ae6a9e679ebb72ea339872ae5e3b0cb8d0a20f4710",
     "Sources/TopNVCore/AboutText.swift":
         "d9f8dfca130fd711430f5763e06e2207334f5b34526bc856b387b08bee7c859e",
     "Sources/TopNVCore/AppVersion.swift":
-        "a67e0af60c4b3840d5914d55c2d172e931e50df3e9670d9779f35205b3401697",
+        "38d6dad93ff0f741f228733f0f02ffdb0abed5bb4429b3641383095b9d1f4e70",
     "Sources/TopNVCore/Localization.swift":
-        "0cfae3aa7a65807f0277f4e23c025d2b3b7dd5fd697382de426486ef83b2d226",
+        "aa7c7beb825b7ae2552325fd94309be15ed4463213257709e2f2e6f9bafffa89",
 }
 
 

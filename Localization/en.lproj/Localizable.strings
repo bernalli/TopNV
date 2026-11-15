@@ -25,7 +25,5 @@
 "Report an Issue…" = "Report an Issue…";
 "Requires macOS 14 or Later" = "Requires macOS 14 or Later";
 "Round Corners" = "Round Corners";
-"Version %@ (%@)" = "Version %@ (%@)";
 "Version %@" = "Version %@";
-"Version Unavailable (Build %@)" = "Version Unavailable (Build %@)";
 "Version Unavailable" = "Version Unavailable";

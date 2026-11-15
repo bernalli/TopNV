@@ -29,7 +29,7 @@ final class StatusMenuControllerTests: XCTestCase {
       defaults: defaults, key: AppSettings.showMenuBarIconKey, schedule: { $0() })
     let controller = StatusMenuController(
       settings: settings, loginItem: LoginItem(), updates: UpdateMenuModel(updater: nil),
-      visibility: visibility, version: "Version 1.2.0 (7)")
+      visibility: visibility, version: "Version 1.2.0")
     self.controller = controller
     return (controller, visibility, settings)
   }

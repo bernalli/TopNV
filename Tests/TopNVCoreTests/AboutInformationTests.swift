@@ -11,7 +11,7 @@ final class AboutInformationTests: XCTestCase {
       "NSHumanReadableCopyright": "Copyright (c) 2026. All rights reserved.",
     ])
     XCTAssertEqual(information.name, "Example App")
-    XCTAssertEqual(information.version.title, "Version 1.1.0 (1)")
+    XCTAssertEqual(information.version.title, "Version 1.1.0")
     XCTAssertEqual(information.copyright, "Copyright (c) 2026. All rights reserved.")
   }
 
@@ -21,6 +21,15 @@ final class AboutInformationTests: XCTestCase {
     XCTAssertEqual(information.version.title, "Version Unavailable")
     XCTAssertNil(information.copyright)
     XCTAssertNil(AboutInformation(infoDictionary: [:]).copyright)
+  }
+
+  /// D-36: the build number is never shown, even when it is the only field present.
+  func testTheBuildNumberIsNeverShown() {
+    for build: Any in ["7", " 7\n", 7] {
+      XCTAssertEqual(
+        AboutInformation(infoDictionary: ["CFBundleVersion": build]).version.title,
+        "Version Unavailable")
+    }
   }
 
   func testMissingBlankOrNonStringCopyrightOmitsTheRow() {
@@ -37,7 +46,7 @@ final class AboutInformationTests: XCTestCase {
       "NSHumanReadableCopyright": " \nCopyright (c) 2026\nAll rights reserved. \n",
     ])
     XCTAssertEqual(information.name, "Example App")
-    XCTAssertEqual(information.version.title, "Version 1.1.0 (1)")
+    XCTAssertEqual(information.version.title, "Version 1.1.0")
     XCTAssertEqual(information.copyright, "Copyright (c) 2026\nAll rights reserved.")
   }
 

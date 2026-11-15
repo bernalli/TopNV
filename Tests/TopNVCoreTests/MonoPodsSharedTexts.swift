@@ -1,5 +1,5 @@
 // swiftlint:disable line_length - one entry per line, as in the tables
-/// The shared texts of MonoPods (its Localizable.strings at 0ade59b), by language and key.
+/// The shared texts of MonoPods (its Localizable.strings at 2ed55b1), by language and key.
 /// TopNV must show the same translation for every shared key. The About window texts are not
 /// here: the About window is English in every language (D-35).
 let monoPodsSharedTexts: [String: [String: String]] = [
@@ -20,9 +20,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "Quit %@",
     "Report an Issue…": "Report an Issue…",
     "Version %@": "Version %@",
-    "Version %@ (%@)": "Version %@ (%@)",
     "Version Unavailable": "Version Unavailable",
-    "Version Unavailable (Build %@)": "Version Unavailable (Build %@)"
   ],
   "it": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ può verificare una volta al giorno se ci sono nuove versioni. Puoi modificare questa scelta in qualsiasi momento in Opzioni.",
@@ -41,9 +39,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "Esci da %@",
     "Report an Issue…": "Segnala un problema…",
     "Version %@": "Versione %@",
-    "Version %@ (%@)": "Versione %@ (%@)",
     "Version Unavailable": "Versione non disponibile",
-    "Version Unavailable (Build %@)": "Versione non disponibile (build %@)"
   ],
   "es": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ puede buscar nuevas versiones una vez al día. Puedes cambiarlo en cualquier momento en Opciones.",
@@ -62,9 +58,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "Salir de %@",
     "Report an Issue…": "Informar de un problema…",
     "Version %@": "Versión %@",
-    "Version %@ (%@)": "Versión %@ (%@)",
     "Version Unavailable": "Versión no disponible",
-    "Version Unavailable (Build %@)": "Versión no disponible (compilación %@)"
   ],
   "fr": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ peut rechercher de nouvelles versions une fois par jour. Vous pouvez modifier ce réglage à tout moment dans Options.",
@@ -83,9 +77,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "Quitter %@",
     "Report an Issue…": "Signaler un problème…",
     "Version %@": "Version %@",
-    "Version %@ (%@)": "Version %@ (%@)",
     "Version Unavailable": "Version indisponible",
-    "Version Unavailable (Build %@)": "Version indisponible (build %@)"
   ],
   "de": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ kann einmal täglich nach neuen Versionen suchen. Du kannst dies jederzeit in „Optionen“ ändern.",
@@ -104,9 +96,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "%@ beenden",
     "Report an Issue…": "Problem melden …",
     "Version %@": "Version %@",
-    "Version %@ (%@)": "Version %@ (%@)",
     "Version Unavailable": "Version nicht verfügbar",
-    "Version Unavailable (Build %@)": "Version nicht verfügbar (Build %@)"
   ],
   "pt-BR": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "O %@ pode buscar novas versões uma vez por dia. Você pode alterar isso a qualquer momento em Opções.",
@@ -125,9 +115,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "Encerrar o %@",
     "Report an Issue…": "Relatar um problema…",
     "Version %@": "Versão %@",
-    "Version %@ (%@)": "Versão %@ (%@)",
     "Version Unavailable": "Versão indisponível",
-    "Version Unavailable (Build %@)": "Versão indisponível (compilação %@)"
   ],
   "ja": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@は1日に1回、新しいバージョンを確認できます。この設定は“オプション”でいつでも変更できます。",
@@ -146,9 +134,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "%@を終了",
     "Report an Issue…": "問題を報告…",
     "Version %@": "バージョン %@",
-    "Version %@ (%@)": "バージョン %@（%@）",
     "Version Unavailable": "バージョン不明",
-    "Version Unavailable (Build %@)": "バージョン不明（ビルド %@）"
   ],
   "zh-Hans": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ 每天可以检查一次新版本。你可以随时在“选项”中更改此设置。",
@@ -167,9 +153,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "退出 %@",
     "Report an Issue…": "报告问题…",
     "Version %@": "版本 %@",
-    "Version %@ (%@)": "版本 %@（%@）",
     "Version Unavailable": "版本不可用",
-    "Version Unavailable (Build %@)": "版本不可用（构建版本 %@）"
   ]
 ]
 // swiftlint:enable line_length

@@ -13,7 +13,7 @@ final class AboutTextTests: XCTestCase {
       XCTAssertEqual(Localizer.english(key), key.rawValue)
     }
     XCTAssertEqual(Localizer.english(.about, "TopNV"), "About TopNV")
-    XCTAssertEqual(Localizer.english(.versionWithBuild, "1.2.0", "7"), "Version 1.2.0 (7)")
+    XCTAssertEqual(Localizer.english(.version, "1.2.0"), "Version 1.2.0")
   }
 
   func testAboutTextsAreEnglish() {
@@ -23,7 +23,7 @@ final class AboutTextTests: XCTestCase {
     let information = AboutInformation(
       infoDictionary: ["CFBundleShortVersionString": "1.2.0", "CFBundleVersion": "7"],
       localizer: AboutText.localizer)
-    XCTAssertEqual(information.version.title, "Version 1.2.0 (7)")
+    XCTAssertEqual(information.version.title, "Version 1.2.0")
   }
 
   /// The menu still shows About and the version in the system language.
@@ -32,7 +32,12 @@ final class AboutTextTests: XCTestCase {
       bundle: try XCTUnwrap(Bundle(path: Self.localization.appendingPathComponent("it.lproj").path))
     )
     XCTAssertEqual(italian(.about, "TopNV"), "Informazioni su TopNV")
-    XCTAssertEqual(italian(.versionWithBuild, "1.2.0", "7"), "Versione 1.2.0 (7)")
+    XCTAssertEqual(italian(.version, "1.2.0"), "Versione 1.2.0")
+    XCTAssertEqual(
+      AboutInformation(
+        infoDictionary: ["CFBundleShortVersionString": "1.2.0", "CFBundleVersion": "7"],
+        localizer: italian
+      ).version.title, "Versione 1.2.0")
   }
 
   /// Texts that only the About window shows have no entry in any table.
@@ -44,6 +49,22 @@ final class AboutTextTests: XCTestCase {
         encoding: .utf8)
       XCTAssertFalse(table.contains("\"View %@ on GitHub\""), language)
       XCTAssertFalse(table.contains("\"Buy Me a Coffee\""), language)
+    }
+  }
+
+  /// D-36: no text carries the build number, as in MonoPods at 2ed55b1. CFBundleVersion stays in
+  /// Info.plist, where Sparkle reads it.
+  func testNoTextCarriesTheBuildNumber() throws {
+    let removed = ["Version %@ (%@)", "Version Unavailable (Build %@)"]
+    XCTAssertEqual(TextKey.allCases.filter { removed.contains($0.rawValue) }, [])
+    for language in ["en", "it", "es", "fr", "de", "pt-BR", "ja", "zh-Hans"] {
+      let table = try String(
+        contentsOf: Self.localization.appendingPathComponent(
+          "\(language).lproj/Localizable.strings"),
+        encoding: .utf8)
+      for key in removed {
+        XCTAssertFalse(table.contains("\"\(key)\""), "\(language): \(key)")
+      }
     }
   }
 }

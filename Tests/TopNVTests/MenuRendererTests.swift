@@ -49,7 +49,7 @@ final class MenuRendererTests: XCTestCase {
     renderer(.disabledItem).apply(
       [
         row("status.0", "Inactive", .info, symbol: "power"),
-        row("version.0", "Version 1.2.0 (7)", .info),
+        row("version.0", "Version 1.2.0", .info),
       ], to: menu)
     XCTAssertFalse(menu.autoenablesItems)
     for item in menu.items {
@@ -57,7 +57,7 @@ final class MenuRendererTests: XCTestCase {
       XCTAssertNil(item.action)
       XCTAssertNil(item.view)
     }
-    XCTAssertEqual(menu.items.map(\.title), ["Inactive", "Version 1.2.0 (7)"])
+    XCTAssertEqual(menu.items.map(\.title), ["Inactive", "Version 1.2.0"])
     XCTAssertNotNil(menu.items[0].image)
     XCTAssertNil(menu.items[1].image)
   }
@@ -175,7 +175,7 @@ final class MenuRendererTests: XCTestCase {
           hideNotch: bit(0), roundCorners: bit(1), cornersOnAllDisplays: bit(2),
           launchAtLogin: bit(3), loginNeedsApproval: bit(4), loginError: nil,
           updatesAvailable: bit(5), canCheckForUpdates: bit(6), automaticUpdates: bit(7),
-          menuVisible: bit(8), versionTitle: "Version 1.2.0 (7)")
+          menuVisible: bit(8), versionTitle: "Version 1.2.0")
         let rows = MenuLayout.rows(for: state, localizer: localizer)
         renderer.apply(rows, to: menu)
         for (item, row) in zip(Self.items(of: menu), Self.flatten(rows)) where row.kind == .info {

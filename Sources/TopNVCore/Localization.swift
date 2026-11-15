@@ -30,9 +30,7 @@ public enum TextKey: String, CaseIterable {
   case reportIssue = "Report an Issue…"
   case quit = "Quit %@"
   case version = "Version %@"
-  case versionWithBuild = "Version %@ (%@)"
   case versionUnavailable = "Version Unavailable"
-  case versionUnavailableWithBuild = "Version Unavailable (Build %@)"
   case updateQuestionTitle = "Check for Updates Automatically?"
   case updateQuestionMessage =
     "%@ can check for new versions once a day. You can change this at any time in Options."

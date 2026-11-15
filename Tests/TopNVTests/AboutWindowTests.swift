@@ -129,7 +129,9 @@ final class AboutWindowTests: XCTestCase {
     XCTAssertEqual(Localizer.main(.options), "Opzioni")
     XCTAssertEqual(Localizer.main(.about, "TopNV"), "Informazioni su TopNV")
     XCTAssertEqual(
-      AboutInformation(infoDictionary: ["CFBundleShortVersionString": "1.2.0"]).version.title,
+      AboutInformation(infoDictionary: [
+        "CFBundleShortVersionString": "1.2.0", "CFBundleVersion": "7",
+      ]).version.title,
       "Versione 1.2.0")
     XCTAssertEqual(Localizer(bundle: italian)(.about, "TopNV"), "Informazioni su TopNV")
     let controller = controller(
@@ -140,7 +142,7 @@ final class AboutWindowTests: XCTestCase {
       ])
     XCTAssertEqual(controller.window.title, "About TopNV")
     let view = try view(of: controller)
-    XCTAssertEqual(view.information.version.title, "Version 1.2.0 (7)")
+    XCTAssertEqual(view.information.version.title, "Version 1.2.0")
     XCTAssertEqual(view.information.copyright, "Copyright (c) 2026 Example")
     XCTAssertEqual(AboutText.gitHubHelp, "View TopNV on GitHub")
     XCTAssertEqual(AboutText.sponsor, "Buy Me a Coffee")

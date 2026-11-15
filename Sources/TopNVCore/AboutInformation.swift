@@ -8,8 +8,7 @@ public struct AboutInformation {
   public init(infoDictionary: [String: Any]?, localizer: Localizer = .main) {
     name = Self.nonblank(infoDictionary?["CFBundleName"] as? String) ?? "TopNV"
     version = AppVersion(
-      shortVersion: infoDictionary?["CFBundleShortVersionString"] as? String,
-      build: infoDictionary?["CFBundleVersion"] as? String, localizer: localizer)
+      shortVersion: infoDictionary?["CFBundleShortVersionString"] as? String, localizer: localizer)
     copyright = Self.nonblank(infoDictionary?["NSHumanReadableCopyright"] as? String)
   }
 

@@ -25,7 +25,5 @@
 "Report an Issue…" = "問題を報告…";
 "Requires macOS 14 or Later" = "macOS 14以降が必要です";
 "Round Corners" = "角を丸くする";
-"Version %@ (%@)" = "バージョン %@（%@）";
 "Version %@" = "バージョン %@";
-"Version Unavailable (Build %@)" = "バージョン不明（ビルド %@）";
 "Version Unavailable" = "バージョン不明";

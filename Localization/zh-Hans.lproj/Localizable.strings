@@ -25,7 +25,5 @@
 "Report an Issue…" = "报告问题…";
 "Requires macOS 14 or Later" = "需要 macOS 14 或更高版本";
 "Round Corners" = "圆角";
-"Version %@ (%@)" = "版本 %@（%@）";
 "Version %@" = "版本 %@";
-"Version Unavailable (Build %@)" = "版本不可用（构建版本 %@）";
 "Version Unavailable" = "版本不可用";
