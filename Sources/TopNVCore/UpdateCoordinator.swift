@@ -11,15 +11,16 @@ public final class UpdateCoordinator {
   private let defaults: UserDefaults
   private let ask: (@escaping (AutomaticUpdateAnswer) -> Void) -> Void
   private let onReady: () -> Void
+  private let onFailed: () -> Void
   public init(configuration: UpdateConfiguration, updater: UpdaterControlling?, defaults: UserDefaults,
               ask: @escaping (@escaping (AutomaticUpdateAnswer) -> Void) -> Void,
-              onReady: @escaping () -> Void = {}) {
+              onReady: @escaping () -> Void = {}, onFailed: @escaping () -> Void = {}) {
     self.configuration=configuration; self.updater=updater; self.defaults=defaults
-    self.ask=ask; self.onReady=onReady
+    self.ask=ask; self.onReady=onReady; self.onFailed=onFailed
   }
   public func start() {
     guard state == .idle else { return }
-    guard configuration.isValid, let updater else { state = .failed; return }
+    guard configuration.isValid, let updater else { fail(); return }
     state = .starting // Guard reentry from setters and startup callbacks.
     if defaults.object(forKey: "automaticUpdateQuestionAsked") != nil { startUpdater(); return }
     updater.automaticallyChecksForUpdates = false
@@ -34,8 +35,10 @@ public final class UpdateCoordinator {
     startUpdater()
   }
   private func startUpdater() {
-    guard let updater else { state = .failed; return }
+    guard let updater else { fail(); return }
     do { try updater.start(); state = .ready; onReady() }
-    catch { state = .failed }
+    catch { fail() }
   }
+  /// The state changes before any external code runs, as for the answer.
+  private func fail() { state = .failed; onFailed() }
 }

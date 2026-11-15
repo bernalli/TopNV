@@ -39,7 +39,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   lazy var updates = UpdateMenuModel(updater: sparkleUpdater)
   private lazy var updateCoordinator = UpdateCoordinator(
     configuration: updateConfiguration, updater: sparkleUpdater, defaults: .standard,
-    ask: AutomaticUpdateQuestion.ask, onReady: { [weak self] in self?.updates.updaterDidStart() })
+    ask: AutomaticUpdateQuestion.ask, onReady: { [weak self] in self?.updates.updaterDidStart() },
+    onFailed: { [weak self] in self?.updates.updaterDidFail() })
   private let version = AppVersion(
     shortVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
 
