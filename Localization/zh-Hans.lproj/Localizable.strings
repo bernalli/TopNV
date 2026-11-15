@@ -6,13 +6,17 @@
 "Check for Updates Automatically?" = "要自动检查更新吗？";
 "Check for Updates…" = "检查更新…";
 "Don't Check" = "不检查";
+"Finish Setting Up the Black Bar" = "完成黑色菜单栏的设置";
 "Hide Menu Bar Icon" = "隐藏菜单栏图标";
 "Hide Notch" = "隐藏刘海";
 "Launch at Login (Requires Approval)" = "登录时打开（需要批准）";
 "Launch at Login" = "登录时打开";
+"Not Now" = "以后";
 "Open %@ again to bring it back." = "再次打开 %@ 即可重新显示。";
+"Open Wallpaper Settings" = "打开“墙纸”设置";
 "Options" = "选项";
 "Quit %@" = "退出 %@";
 "Report an Issue…" = "报告问题…";
 "Round Corners on All Displays" = "在所有显示器上使用圆角";
 "Round Corners" = "使用圆角";
+"macOS drew the menu bar before %@ started. Click your current wallpaper once in Wallpaper settings and the bar turns black." = "macOS 在 %@ 启动前绘制了菜单栏。在“墙纸”设置中点按一次当前墙纸，菜单栏就会变黑。";

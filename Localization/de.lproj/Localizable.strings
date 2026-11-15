@@ -6,13 +6,17 @@
 "Check for Updates Automatically?" = "Automatisch nach Updates suchen?";
 "Check for Updates…" = "Nach Updates suchen …";
 "Don't Check" = "Nicht suchen";
+"Finish Setting Up the Black Bar" = "Einrichtung der schwarzen Leiste abschließen";
 "Hide Menu Bar Icon" = "Symbol in der Menüleiste ausblenden";
 "Hide Notch" = "Notch ausblenden";
 "Launch at Login (Requires Approval)" = "Bei der Anmeldung öffnen (Genehmigung erforderlich)";
 "Launch at Login" = "Bei der Anmeldung öffnen";
+"Not Now" = "Nicht jetzt";
 "Open %@ again to bring it back." = "Öffne %@ erneut, um es einzublenden.";
+"Open Wallpaper Settings" = "Einstellungen „Hintergrundbild“ öffnen";
 "Options" = "Optionen";
 "Quit %@" = "%@ beenden";
 "Report an Issue…" = "Problem melden …";
 "Round Corners on All Displays" = "Ecken auf allen Displays abrunden";
 "Round Corners" = "Ecken abrunden";
+"macOS drew the menu bar before %@ started. Click your current wallpaper once in Wallpaper settings and the bar turns black." = "macOS hat die Menüleiste gezeichnet, bevor %@ gestartet wurde. Klicke in den Einstellungen „Hintergrundbild“ einmal auf dein aktuelles Hintergrundbild, dann wird die Leiste schwarz.";

@@ -6,13 +6,17 @@
 "Check for Updates Automatically?" = "Buscar Atualizações Automaticamente?";
 "Check for Updates…" = "Buscar Atualizações…";
 "Don't Check" = "Não Buscar";
+"Finish Setting Up the Black Bar" = "Concluir a Configuração da Barra Preta";
 "Hide Menu Bar Icon" = "Ocultar Ícone da Barra de Menus";
 "Hide Notch" = "Ocultar Entalhe";
 "Launch at Login (Requires Approval)" = "Abrir ao Iniciar Sessão (Requer Aprovação)";
 "Launch at Login" = "Abrir ao Iniciar Sessão";
+"Not Now" = "Agora Não";
 "Open %@ again to bring it back." = "Abra o %@ novamente para exibi-lo.";
+"Open Wallpaper Settings" = "Abrir Ajustes de Imagem de Fundo";
 "Options" = "Opções";
 "Quit %@" = "Encerrar %@";
 "Report an Issue…" = "Relatar um Problema…";
 "Round Corners on All Displays" = "Arredondar Cantos em Todas as Telas";
 "Round Corners" = "Arredondar Cantos";
+"macOS drew the menu bar before %@ started. Click your current wallpaper once in Wallpaper settings and the bar turns black." = "O macOS desenhou a barra de menus antes de o %@ ser aberto. Clique uma vez na sua imagem de fundo atual nos ajustes de Imagem de Fundo e a barra ficará preta.";

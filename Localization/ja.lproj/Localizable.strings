@@ -6,13 +6,17 @@
 "Check for Updates Automatically?" = "アップデートを自動的に確認しますか？";
 "Check for Updates…" = "アップデートを確認…";
 "Don't Check" = "確認しない";
+"Finish Setting Up the Black Bar" = "黒いバーの設定を完了";
 "Hide Menu Bar Icon" = "メニューバーのアイコンを非表示";
 "Hide Notch" = "ノッチを隠す";
 "Launch at Login (Requires Approval)" = "ログイン時に開く（承認が必要）";
 "Launch at Login" = "ログイン時に開く";
+"Not Now" = "後で";
 "Open %@ again to bring it back." = "もう一度表示するには、%@を再度開いてください。";
+"Open Wallpaper Settings" = "“壁紙”設定を開く";
 "Options" = "オプション";
 "Quit %@" = "%@を終了";
 "Report an Issue…" = "問題を報告…";
 "Round Corners on All Displays" = "すべてのディスプレイで角を丸くする";
 "Round Corners" = "角を丸くする";
+"macOS drew the menu bar before %@ started. Click your current wallpaper once in Wallpaper settings and the bar turns black." = "%@の起動前にmacOSがメニューバーを描画しました。“壁紙”設定で現在の壁紙を1回クリックすると、バーが黒くなります。";
