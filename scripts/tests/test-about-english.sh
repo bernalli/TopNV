@@ -71,7 +71,7 @@ lookups = (
 for name in EXPECTED:
     for lookup in lookups:
         mutated = dict(sources)
-        mutated[name] += ("\nprivate let d35Regression = " + lookup + "\n").encode()
+        mutated[name] += ("\nprivate let aboutRegression = " + lookup + "\n").encode()
         if violations(mutated) != [name]:
             raise RuntimeError(f"English About missed {lookup} in {name}")
     missing = dict(sources)

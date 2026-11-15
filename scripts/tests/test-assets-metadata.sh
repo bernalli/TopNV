@@ -38,7 +38,7 @@ def split(raw):
 
 
 def problem(raw):
-    """Returns None for a bare PNG, or the reason it is not one."""
+    """Validates the two published RGBA8 PNGs, including their compressed data."""
     try:
         chunks = split(raw)
     except ValueError as error:
@@ -53,6 +53,36 @@ def problem(raw):
     extra = sorted(set(kinds) - ALLOWED)
     if extra:
         return "extra " + ",".join(extra)
+    # The two published images use the renderer's non-interlaced RGBA8 profile.
+    if (kinds.count("sRGB") != 1 or kinds[1] != "sRGB"
+            or any(kind != "IDAT" for kind in kinds[2:-1])):
+        return "chunk order"
+    header = chunks[0][1][8:-4]
+    if len(header) != 13:
+        return "IHDR length"
+    width, height, depth, color, compression, filtering, interlace = struct.unpack(
+        ">IIBBBBB", header)
+    if (width, height) not in {(2560, 1280), (1280, 640)}:
+        return "dimensions"
+    if (depth, color, compression, filtering, interlace) != (8, 6, 0, 0, 0):
+        return "RGBA8 profile"
+    if chunks[1][1][8:-4] not in (b"\x00", b"\x01", b"\x02", b"\x03"):
+        return "sRGB intent"
+    if chunks[-1][1][8:-4]:
+        return "IEND length"
+    packed = b"".join(c[8:-4] for kind, c in chunks if kind == "IDAT")
+    stride = width * 4 + 1
+    expected = stride * height
+    decoder = zlib.decompressobj()
+    try:
+        pixels = decoder.decompress(packed, expected + 1)
+    except zlib.error:
+        return "IDAT zlib"
+    if (len(pixels) != expected or not decoder.eof
+            or decoder.unused_data or decoder.unconsumed_tail):
+        return "IDAT length"
+    if any(pixels[offset] > 4 for offset in range(0, expected, stride)):
+        return "scanline filter"
     return None
 
 
@@ -99,5 +129,65 @@ malformed = {
 for label, data in malformed.items():
     assert problem(data) is not None, label
     cases += 1
+
+# Negative properties for allowed chunk types: cardinality, order, payload and range.
+def image(parts):
+    return SIGNATURE + b"".join(parts)
+
+
+header = body[0][8:-4]
+srgb = next(c for kind, c in chunks if kind == "sRGB")
+idats = [c for kind, c in chunks if kind == "IDAT"]
+compressed = b"".join(c[8:-4] for c in idats)
+pixels = zlib.decompress(compressed)
+
+
+def replace(kind, payload):
+    return image([chunk(kind, payload) if k == kind else c for k, c in chunks])
+
+
+properties = {
+    "duplicate sRGB": image(body[:2] + [srgb] + body[2:]),
+    "missing sRGB": image([c for k, c in chunks if k != "sRGB"]),
+    "sRGB after IDAT": image([body[0]] + idats + [srgb, body[-1]]),
+    "sRGB interrupts IDAT": image(
+        [body[0], idats[0], srgb] + idats[1:] + [body[-1]]),
+    "short IHDR": replace("IHDR", header[:-1]),
+    "extra IHDR byte": replace("IHDR", header + b"\x00"),
+    "empty sRGB": replace("sRGB", b""),
+    "extra sRGB byte": replace("sRGB", b"\x00\x00"),
+    "IEND with payload": replace("IEND", b"x"),
+}
+for field, values in enumerate([
+    (0, 0x80000000), (0, 0x80000000), (0, 7, 16),
+    (1, 3, 5), (1, 255), (1, 255), (1, 255),
+]):
+    for value in values:
+        fields = list(struct.unpack(">IIBBBBB", header))
+        fields[field] = value
+        properties[f"IHDR field {field} value {value}"] = replace(
+            "IHDR", struct.pack(">IIBBBBB", *fields))
+for intent in (4, 255):
+    properties[f"sRGB intent {intent}"] = replace("sRGB", bytes([intent]))
+for label, data in {
+    "empty": b"", "truncated": compressed[:-1],
+    "garbage": b"garbage", "trailing": compressed + b"x",
+    "short rows": zlib.compress(pixels[:-1]),
+    "extra row byte": zlib.compress(pixels + b"x"),
+    "bad filter": zlib.compress(b"\x05" + pixels[1:]),
+}.items():
+    properties[f"IDAT {label}"] = image(
+        [body[0], srgb, chunk("IDAT", data), body[-1]])
+for label, data in properties.items():
+    assert problem(data) is not None, label
+    cases += 1
+
+# Chunk boundaries may move; an empty individual IDAT remains legal.
+for parts in (
+    [body[0], srgb, chunk("IDAT", compressed), body[-1]],
+    [body[0], srgb, chunk("IDAT", b"")] + idats + [body[-1]],
+):
+    assert problem(image(parts)) is None
+
 print(f"PASS published PNGs carry no metadata; {cases} rejected variants")
 PY
