@@ -154,6 +154,7 @@ def run_tests(kind):
         shutil.copy(root / 'Licenses/Sparkle.txt', licenses / 'Sparkle.txt')
         shutil.copy(root / 'Assets/Fonts/PlusJakartaSans-OFL.txt', licenses / 'PlusJakartaSans-OFL.txt')
         shutil.copy(root / 'Assets/Fonts/PlusJakartaSans-SemiBold.ttf', contents / 'Resources/PlusJakartaSans-SemiBold.ttf')
+        shutil.copy(root / 'Assets/GitHubMark.pdf', contents / 'Resources/GitHubMark.pdf')
         framework = contents / 'Frameworks/Sparkle.framework'; version = framework / 'Versions/B'; version.mkdir(parents=True)
         (framework / 'Versions/Current').symlink_to('B')
         for name in ('Sparkle', 'Autoupdate', 'Updater.app', 'XPCServices', 'Resources', 'Headers', 'Modules', 'PrivateHeaders'):
@@ -219,6 +220,8 @@ def run_tests(kind):
             p.unlink(); verify(code); p.write_bytes(old)
         font = contents / 'Resources/PlusJakartaSans-SemiBold.ttf'; old = font.read_bytes()
         font.write_bytes(old + b'!'); verify('V16'); font.unlink(); verify('V16'); font.write_bytes(old); verify()
+        mark = contents / 'Resources/GitHubMark.pdf'; old = mark.read_bytes()
+        mark.write_bytes(old + b'!'); verify('V18'); mark.unlink(); verify('V18'); mark.write_bytes(old); verify()
         for name, script, code in [('otool','exit 0','V7'),('codesign','exit 1','V8'),('codesign','echo "flags=0x10000(runtime)" >&2','V9'),('lipo','echo arm64','V10'),('plutil','exit 1','V0')]:
             (bindir/name).write_text('#!/bin/bash\n'+script+'\n'); verify(code)
             (bindir/name).write_text('#!/bin/bash\n'+responses[name]+'\n')
@@ -276,6 +279,6 @@ def run_tests(kind):
         # Ad hoc mode never accepts a Developer ID signature, and never looks at the components.
         signed(); env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'; verify('V9')
         (bindir/'codesign').write_text('#!/bin/bash\n'+responses['codesign']+'\n')
-        verify(); print('PASS verifier V0-V17 mutations; signature modes')
+        verify(); print('PASS verifier V0-V18 mutations; signature modes')
 
 run_tests(sys.argv[1])

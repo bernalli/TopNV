@@ -66,6 +66,7 @@ def main():
             ('V12: TopNV license mismatch', lambda: hash_matches(resources/'TopNV.txt',MIT_HASH)),
             ('V16: About font mismatch', lambda: hash_matches(app/'Contents/Resources/PlusJakartaSans-SemiBold.ttf',FONT_HASH)),
             ('V17: About font license mismatch', lambda: hash_matches(resources/'PlusJakartaSans-OFL.txt',OFL_HASH)),
+            ('V18: GitHub mark mismatch', lambda: hash_matches(app/'Contents/Resources/GitHubMark.pdf',MARK_HASH)),
             ('V15: localizations missing or incomplete', lambda: p.get('CFBundleLocalizations') == LANGUAGES and all((app/'Contents/Resources'/(l + '.lproj')/'Localizable.strings').is_file() for l in LANGUAGES)),
             ('V13: copyright mismatch', lambda: p.get('NSHumanReadableCopyright') == 'Copyright (c) 2026 ' + (root/'AUTHORS').read_text().splitlines()[0] and 'All rights reserved' not in p['NSHumanReadableCopyright']),
         ]

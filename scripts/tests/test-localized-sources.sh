@@ -154,6 +154,23 @@ cases = [
 for fragment, red in cases:
     assert bool(violations(fragment)) == red, (fragment, violations(fragment))
 
+# Direct title literals remain violations when truncated, duplicated or reordered.
+from itertools import permutations
+
+for prefix in ('item.title = ', 'NSMenu(title: ', 'MenuRow(id: "x", title: '):
+    value = prefix + '"Unlocalized text"'
+    for end in range(len(prefix) + 1, len(value)):
+        assert violations(value[:end]), value[:end]
+
+fragments = [
+    'item.title = "Hello"',
+    'item.title = localizer(.details)',
+    'item.title = ""',
+]
+for order in permutations(fragments):
+    assert len(violations("\n".join(order))) == 1, order
+assert len(violations("\n".join([fragments[0]] * 3))) == 3
+
 root = Path(sys.argv[1])
 problems = []
 sources = sorted((root / 'Sources/TopNV').glob('*.swift')) + [root / 'Sources/TopNVCore/MenuLayout.swift']

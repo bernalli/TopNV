@@ -25,6 +25,7 @@ final class AutomaticUpdateQuestionTests: XCTestCase {
   func testTheQuestionAsksWithTwoButtonsAndActivatesWithoutAModalSession() {
     let question = makeQuestion()
     question.show()
+    defer { click(question.alert.buttons[1]) }
     let alert = question.alert
     XCTAssertEqual(alert.messageText, "Check for Updates Automatically?")
     XCTAssertEqual(
