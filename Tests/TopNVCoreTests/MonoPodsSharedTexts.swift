@@ -1,5 +1,5 @@
 // swiftlint:disable line_length - one entry per line, as in the tables
-/// The shared texts of MonoPods (its Localizable.strings at 2ed55b1), by language and key.
+/// The shared texts of MonoPods (its Localizable.strings at fb3070e), by language and key.
 /// TopNV must show the same translation for every shared key. The About window texts are not
 /// here: the About window is English in every language (D-35).
 let monoPodsSharedTexts: [String: [String: String]] = [
@@ -71,7 +71,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Details": "Détails",
     "Don't Check": "Ne pas rechercher",
     "Hide Menu Bar Icon": "Masquer l’icône de la barre des menus",
-    "Launch at Login": "Ouvrir à la connexion",
+    "Launch at Login": "Ouvrir avec la session",
     "Open %@ again to bring it back.": "Rouvrez %@ pour la faire réapparaître.",
     "Options": "Options",
     "Quit %@": "Quitter %@",
@@ -128,7 +128,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Details": "詳細",
     "Don't Check": "確認しない",
     "Hide Menu Bar Icon": "メニューバーのアイコンを非表示",
-    "Launch at Login": "ログイン時に起動",
+    "Launch at Login": "ログイン時に開く",
     "Open %@ again to bring it back.": "もう一度表示するには、%@を再度開いてください。",
     "Options": "オプション",
     "Quit %@": "%@を終了",
@@ -147,7 +147,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Details": "详细信息",
     "Don't Check": "不检查",
     "Hide Menu Bar Icon": "隐藏菜单栏图标",
-    "Launch at Login": "登录时启动",
+    "Launch at Login": "登录时打开",
     "Open %@ again to bring it back.": "再次打开 %@ 即可重新显示。",
     "Options": "选项",
     "Quit %@": "退出 %@",

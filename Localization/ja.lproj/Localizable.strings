@@ -15,7 +15,7 @@
 "Hide Menu Bar Icon" = "メニューバーのアイコンを非表示";
 "Hide Notch" = "ノッチを隠す";
 "Inactive" = "オフ";
-"Launch at Login" = "ログイン時に起動";
+"Launch at Login" = "ログイン時に開く";
 "Notch Hidden" = "ノッチ非表示";
 "Notch Hidden, Corners Rounded" = "ノッチ非表示、角丸";
 "Open %@ again to bring it back." = "もう一度表示するには、%@を再度開いてください。";

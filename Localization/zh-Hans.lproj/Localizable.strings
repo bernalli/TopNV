@@ -15,7 +15,7 @@
 "Hide Menu Bar Icon" = "隐藏菜单栏图标";
 "Hide Notch" = "隐藏刘海";
 "Inactive" = "未启用";
-"Launch at Login" = "登录时启动";
+"Launch at Login" = "登录时打开";
 "Notch Hidden" = "已隐藏刘海";
 "Notch Hidden, Corners Rounded" = "已隐藏刘海，已启用圆角";
 "Open %@ again to bring it back." = "再次打开 %@ 即可重新显示。";
