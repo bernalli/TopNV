@@ -9,7 +9,7 @@ final class OverlayController: NSObject {
   private enum Delay {
     /// Screen and Space notifications arrive in bursts; wait for the layout to settle.
     static let system: Duration = .milliseconds(250)
-    /// Short enough to keep the radius slider live.
+    /// Short enough for a menu switch to look immediate.
     static let settings: Duration = .milliseconds(30)
   }
 
@@ -90,7 +90,7 @@ final class OverlayController: NSObject {
         && (settings.cornersOnAllDisplays || CGDisplayIsBuiltin(displayID) != 0)
       if wantsCorners {
         let rects = ScreenGeometry.cornerRects(
-          frame: screen.frame, radius: CGFloat(settings.cornerRadius),
+          frame: screen.frame, radius: ScreenGeometry.cornerRadius,
           topInset: barRect?.height ?? 0)
         for (corner, rect) in rects {
           let key = "\(displayID).\(corner.rawValue)"

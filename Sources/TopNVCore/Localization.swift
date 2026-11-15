@@ -6,15 +6,11 @@ public enum TextKey: String, CaseIterable {
   // TopNV only.
   case hideNotch = "Hide Notch"
   case roundCorners = "Round Corners"
-  case cornerRadius = "Corner Radius"
   case cornersOnAllDisplays = "Corners on All Displays"
   case notchHiddenCornersRounded = "Notch Hidden, Corners Rounded"
   case notchHidden = "Notch Hidden"
   case cornersRounded = "Corners Rounded"
   case inactive = "Inactive"
-  case radius = "%@ pt"
-  case customRadius = "Custom (%@ pt)"
-  case cornerRadiusDetail = "Corner Radius: %@"
   case appliesToAllDisplays = "Applies To: All Displays"
   case appliesToBuiltInDisplay = "Applies To: Built-in Display"
   case permissionsNoneRequired = "Permissions: None Required"
@@ -47,9 +43,8 @@ public enum TextKey: String, CaseIterable {
   /// True when MonoPods shows the same text, so both apps must use the same translation.
   public var isShared: Bool {
     switch self {
-    case .hideNotch, .roundCorners, .cornerRadius, .cornersOnAllDisplays,
-      .notchHiddenCornersRounded,
-      .notchHidden, .cornersRounded, .inactive, .radius, .customRadius, .cornerRadiusDetail,
+    case .hideNotch, .roundCorners, .cornersOnAllDisplays, .notchHiddenCornersRounded,
+      .notchHidden, .cornersRounded, .inactive,
       .appliesToAllDisplays, .appliesToBuiltInDisplay, .permissionsNoneRequired, .requiresMacOS,
       .loginItemApproval:
       return false

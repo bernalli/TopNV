@@ -123,6 +123,12 @@ final class ScreenGeometryTests: XCTestCase {
     XCTAssertEqual(ScreenGeometry.cornerRects(frame: frame, radius: 30)[.topRight]?.width, 20)
   }
 
+  // MARK: - Fixed radius
+
+  func testCornerRadiusIsFixedAtFifteenPoints() {
+    XCTAssertEqual(ScreenGeometry.cornerRadius, 15)
+  }
+
   // MARK: - Arc centre
 
   func testArcCenterPointsTowardsScreenCentre() {

@@ -19,13 +19,12 @@ From version 1.2.0, TopNV is signed with Developer ID and notarized by Apple.
 ## Features
 
 - Hide the notch against a black menu-bar strip on notched displays.
-- Round the corners of the built-in display, or enable corners on all displays.
-- Choose a corner radius of 5, 10, 15, 20, 25 or 30 points.
+- Round the corners of the built-in display with a fixed 15-point radius, or enable corners on all displays.
 - Keep your wallpaper untouched, including dynamic and animated wallpapers.
 - Launch at login and optionally hide the menu-bar icon while the app keeps running.
 
 TopNV has no Dock icon. No Screen Recording or Accessibility permission is required.
-Hide Notch and Round Corners start enabled, with a 15-point radius on the built-in display.
+Hide Notch and Round Corners start enabled; corners are rounded on the built-in display.
 Your choices are saved automatically.
 
 ## Menu
@@ -36,14 +35,13 @@ Click the menu-bar icon to see the current configuration and change it directly.
 | --- | --- |
 | Hide Notch | Turn the black menu-bar strip on or off. |
 | Round Corners | Turn corner overlays on or off. |
-| Corner Radius | Select a preset. A stored non-preset value remains selected as **Custom**, without rounding it to a preset. |
-| Details | Show the stored radius, selected display scope and system requirements; open the source, release notes or issue tracker. |
+| Details | Show the selected display scope and system requirements; open the source, release notes or issue tracker. |
 | Options | Set **Corners on All Displays**, **Launch at Login**, **Automatically Check for Updates** and **Hide Menu Bar Icon**. |
 | Check for Updates… | Check manually, including when automatic checks are off. |
 | Version / About TopNV | Show the installed version and the About window with a GitHub icon and a Buy Me a Coffee button. |
 | Quit TopNV · ⌘Q | Stop the app and remove its overlays. |
 
-Corner Radius and Corners on All Displays are disabled while Round Corners is off.
+Corners on All Displays is disabled while Round Corners is off.
 If Launch at Login needs approval, Options tells you to allow it in
 **System Settings > General > Login Items**; registration errors appear there too.
 

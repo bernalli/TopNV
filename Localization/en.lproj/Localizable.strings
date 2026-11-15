@@ -1,5 +1,4 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ can check for new versions once a day. You can change this at any time in Options.";
-"%@ pt" = "%@ pt";
 "About %@" = "About %@";
 "Allow %@ in System Settings > General > Login Items." = "Allow %@ in System Settings > General > Login Items.";
 "Applies To: All Displays" = "Applies To: All Displays";
@@ -9,11 +8,8 @@
 "Check Automatically" = "Check Automatically";
 "Check for Updates Automatically?" = "Check for Updates Automatically?";
 "Check for Updates…" = "Check for Updates…";
-"Corner Radius" = "Corner Radius";
-"Corner Radius: %@" = "Corner Radius: %@";
 "Corners Rounded" = "Corners Rounded";
 "Corners on All Displays" = "Corners on All Displays";
-"Custom (%@ pt)" = "Custom (%@ pt)";
 "Details" = "Details";
 "Don't Check" = "Don't Check";
 "Hide Menu Bar Icon" = "Hide Menu Bar Icon";

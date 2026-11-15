@@ -9,7 +9,8 @@ final class AppSettings: ObservableObject {
   private enum Key {
     static let hideNotch = "hideNotch"
     static let roundCorners = "roundCorners"
-    static let cornerRadius = "cornerRadius"
+    /// Written by versions before the radius was fixed at 15 points; removed at launch.
+    static let legacyCornerRadius = "cornerRadius"
     static let cornersOnAllDisplays = "cornersOnAllDisplays"
     static let showMenuBarIcon = AppSettings.showMenuBarIconKey
   }
@@ -17,7 +18,6 @@ final class AppSettings: ObservableObject {
   private enum Default {
     static let hideNotch = true
     static let roundCorners = true
-    static let cornerRadius: Double = 15
     static let cornersOnAllDisplays = false
     static let showMenuBarIcon = true
   }
@@ -32,10 +32,6 @@ final class AppSettings: ObservableObject {
     didSet { defaults.set(roundCorners, forKey: Key.roundCorners) }
   }
 
-  @Published var cornerRadius: Double {
-    didSet { defaults.set(cornerRadius, forKey: Key.cornerRadius) }
-  }
-
   /// When false, corners are rounded on the built-in display only.
   @Published var cornersOnAllDisplays: Bool {
     didSet { defaults.set(cornersOnAllDisplays, forKey: Key.cornersOnAllDisplays) }
@@ -43,17 +39,15 @@ final class AppSettings: ObservableObject {
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
+    defaults.removeObject(forKey: Key.legacyCornerRadius)
     defaults.register(defaults: [
       Key.hideNotch: Default.hideNotch,
       Key.roundCorners: Default.roundCorners,
-      Key.cornerRadius: Default.cornerRadius,
       Key.cornersOnAllDisplays: Default.cornersOnAllDisplays,
       Key.showMenuBarIcon: Default.showMenuBarIcon,
     ])
     hideNotch = defaults.bool(forKey: Key.hideNotch)
     roundCorners = defaults.bool(forKey: Key.roundCorners)
-    // Keep legacy custom values exact; overlay geometry already bounds the rendered radius.
-    cornerRadius = defaults.double(forKey: Key.cornerRadius)
     cornersOnAllDisplays = defaults.bool(forKey: Key.cornersOnAllDisplays)
   }
 }

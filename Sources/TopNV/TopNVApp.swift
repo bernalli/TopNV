@@ -111,22 +111,8 @@ struct SettingsMenu: View {
       Toggle(isOn: $settings.roundCorners) {
         Label(localizer(.roundCorners), systemImage: "rectangle")
       }
-      Menu {
-        Picker(localizer(.cornerRadius), selection: $settings.cornerRadius) {
-          ForEach(CornerRadiusOption.options(for: settings.cornerRadius)) { option in
-            Text(verbatim: option.title).tag(option.value)
-          }
-        }
-        .pickerStyle(.inline)
-      } label: {
-        Label(localizer(.cornerRadius), systemImage: "ruler")
-      }
-      .disabled(!settings.roundCorners)
     }
     Menu {
-      info(
-        localizer(
-          .cornerRadiusDetail, CornerRadiusOption(value: settings.cornerRadius, isCustom: false).title))
       info(localizer(settings.cornersOnAllDisplays ? .appliesToAllDisplays : .appliesToBuiltInDisplay))
       info(localizer(.permissionsNoneRequired))
       info(localizer(.requiresMacOS))

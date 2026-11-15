@@ -569,9 +569,5 @@ final class LocalizationTests: XCTestCase {
     XCTAssertEqual(
       MenuStatus(hideNotch: true, roundCorners: false, localizer: italian).title,
       values[TextKey.notchHidden.rawValue])
-    let custom = try XCTUnwrap(values[TextKey.customRadius.rawValue])
-    XCTAssertEqual(
-      CornerRadiusOption(value: 13, isCustom: true, localizer: italian).title,
-      String(format: custom, "13"))
   }
 }

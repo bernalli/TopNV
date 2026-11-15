@@ -1,5 +1,4 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@は1日に1回、新しいバージョンを確認できます。この設定は“オプション”でいつでも変更できます。";
-"%@ pt" = "%@ pt";
 "About %@" = "%@について";
 "Allow %@ in System Settings > General > Login Items." = "システム設定 > 一般 > ログイン項目で %@ を許可してください。";
 "Applies To: All Displays" = "適用先：すべてのディスプレイ";
@@ -9,11 +8,8 @@
 "Check Automatically" = "自動的に確認";
 "Check for Updates Automatically?" = "アップデートを自動的に確認しますか？";
 "Check for Updates…" = "アップデートを確認…";
-"Corner Radius" = "角の半径";
-"Corner Radius: %@" = "角の半径：%@";
 "Corners Rounded" = "角丸";
 "Corners on All Displays" = "すべてのディスプレイの角";
-"Custom (%@ pt)" = "カスタム（%@ pt）";
 "Details" = "詳細";
 "Don't Check" = "確認しない";
 "Hide Menu Bar Icon" = "メニューバーのアイコンを非表示";

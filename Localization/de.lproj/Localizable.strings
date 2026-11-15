@@ -1,5 +1,4 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ kann einmal täglich nach neuen Versionen suchen. Du kannst dies jederzeit in „Optionen“ ändern.";
-"%@ pt" = "%@ pt";
 "About %@" = "Über %@";
 "Allow %@ in System Settings > General > Login Items." = "Erlaube %@ in Systemeinstellungen > Allgemein > Anmeldeobjekte.";
 "Applies To: All Displays" = "Gilt für: alle Displays";
@@ -9,11 +8,8 @@
 "Check Automatically" = "Automatisch suchen";
 "Check for Updates Automatically?" = "Automatisch nach Updates suchen?";
 "Check for Updates…" = "Nach Updates suchen …";
-"Corner Radius" = "Eckenradius";
-"Corner Radius: %@" = "Eckenradius: %@";
 "Corners Rounded" = "Ecken abgerundet";
 "Corners on All Displays" = "Ecken auf allen Displays";
-"Custom (%@ pt)" = "Eigener Wert (%@ pt)";
 "Details" = "Details";
 "Don't Check" = "Nicht suchen";
 "Hide Menu Bar Icon" = "Symbol in der Menüleiste ausblenden";
