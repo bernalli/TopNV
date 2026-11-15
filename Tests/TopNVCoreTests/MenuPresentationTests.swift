@@ -3,20 +3,6 @@ import XCTest
 @testable import TopNVCore
 
 final class MenuPresentationTests: XCTestCase {
-  func testStatusReflectsEverySettingsCombination() {
-    let cases = [
-      (true, true, "Notch Hidden, Corners Rounded", "display"),
-      (true, false, "Notch Hidden", "menubar.rectangle"),
-      (false, true, "Corners Rounded", "rectangle"),
-      (false, false, "Inactive", "power"),
-    ]
-    for (notch, corners, title, symbol) in cases {
-      let status = MenuStatus(hideNotch: notch, roundCorners: corners)
-      XCTAssertEqual(status.title, title)
-      XCTAssertEqual(status.symbol, symbol)
-    }
-  }
-
   /// The version row shows the short version only, never the build number.
   func testVersionShowsOnlyTheShortVersion() {
     XCTAssertEqual(AppVersion(shortVersion: "1.1.0").title, "Version 1.1.0")

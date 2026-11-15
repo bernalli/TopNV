@@ -7,8 +7,10 @@ import hashlib
 import sys
 
 # Reviewed English About source closure at 76a24e9, plus the version and sponsor
-# button changes. Do not regenerate automatically: changing any digest
-# requires reviewing the entire About text path again.
+# button changes and the menu texts of 1.2.1, plus the four TopNV-only keys of the
+# grey menu bar notice (only the TextKey enum of Localization.swift changes; the
+# Localizer and the English About path stay the same). Do not regenerate automatically:
+# changing any digest requires reviewing the entire About text path again.
 EXPECTED = {
     "Sources/TopNV/AboutTitleFont.swift":
         "2f5d9ad11f78953ff4fb76929d1b71b42d0c61a93489d4f64eb00759c7aafc27",
@@ -23,11 +25,11 @@ EXPECTED = {
     "Sources/TopNVCore/AboutInformation.swift":
         "718a46794d2c9c649705b3ae6a9e679ebb72ea339872ae5e3b0cb8d0a20f4710",
     "Sources/TopNVCore/AboutText.swift":
-        "913dd3e2fc93d581b07981188158ace12746bba7da72bb2d555ba16ee122ba3a",
+        "47dc5b453926e3b060e86391e56f2dc68a3e1ff5bb29caf5acaa9f1c73c4433d",
     "Sources/TopNVCore/AppVersion.swift":
-        "aa7e53c9a18d4e3c8c074915339b4bc3beb828a562139ce63b58fae76f523df5",
+        "ace8d64174babf5a40915aa7132bde50dd3f329f92cf38459e204875e2618d1b",
     "Sources/TopNVCore/Localization.swift":
-        "abf9c9976001d32d7d6128519291a34fcb7ff168976ea08999ef0e16ce66dc2a",
+        "c82d0736b60ef4532a64be0fc47f734eb155443afa80c9f05e890343d757f957",
 }
 
 

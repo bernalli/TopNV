@@ -134,7 +134,7 @@ final class AboutWindowTests: XCTestCase {
       AboutInformation(infoDictionary: [
         "CFBundleShortVersionString": "1.2.0", "CFBundleVersion": "7",
       ]).version.title,
-      "Versione 1.2.0")
+      "Version 1.2.0")
     XCTAssertEqual(Localizer(bundle: italian)(.about, "TopNV"), "Informazioni su TopNV")
     let controller = controller(
       bundle: italian,

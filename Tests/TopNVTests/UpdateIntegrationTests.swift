@@ -21,7 +21,7 @@ final class UpdateIntegrationTests: XCTestCase {
       present: { _, _ in }, openURL: { _ in })
 
     driver.presentNotFound(reason: nil, description: "", acknowledgement: {})
-    XCTAssertEqual(driver.alert?.messageText, "TopNV è aggiornata.")
+    XCTAssertEqual(driver.alert?.messageText, "TopNV è aggiornato.")
 
     driver.presentUpdate(
       version: "1.2.1", informationOnly: false, infoURL: nil, userInitiated: true, reply: { _ in })

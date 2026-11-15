@@ -169,21 +169,28 @@ final class MenuRendererTests: XCTestCase {
     for style in InfoRowStyle.allCases {
       let renderer = renderer(style)
       let menu = NSMenu()
-      for mask in 0..<(1 << 9) {
+      let updateStates: [UpdateItems] = [
+        .hidden, .waiting, .ready(canCheck: true, checksAutomatically: true),
+        .ready(canCheck: false, checksAutomatically: false),
+      ]
+      for mask in 0..<(1 << 5) {
         func bit(_ index: Int) -> Bool { mask & (1 << index) != 0 }
-        let state = MenuState(
-          hideNotch: bit(0), roundCorners: bit(1), cornersOnAllDisplays: bit(2),
-          launchAtLogin: bit(3), loginNeedsApproval: bit(4), loginError: nil,
-          updatesAvailable: bit(5), canCheckForUpdates: bit(6), automaticUpdates: bit(7),
-          menuVisible: bit(8), versionTitle: "Version 1.2.0")
-        let rows = MenuLayout.rows(for: state, localizer: localizer)
-        renderer.apply(rows, to: menu)
-        for (item, row) in zip(Self.items(of: menu), Self.flatten(rows)) where row.kind == .info {
-          XCTAssertFalse(item.isEnabled, "\(row.id) \(mask)")
-          XCTAssertNil(item.action, "\(row.id) \(mask)")
-          XCTAssertEqual(item.view is InfoRowView, style == .secondaryView, row.id)
+        for updates in updateStates {
+          for error in [nil, "Operation not permitted."] as [String?] {
+            let state = MenuState(
+              hideNotch: bit(0), roundCorners: bit(1), cornersOnAllDisplays: bit(2),
+              launchAtLogin: bit(3), loginNeedsApproval: bit(4), loginError: error,
+              updates: updates)
+            let rows = MenuLayout.rows(for: state, localizer: localizer)
+            renderer.apply(rows, to: menu)
+            for (item, row) in zip(Self.items(of: menu), Self.flatten(rows)) where row.kind == .info {
+              XCTAssertFalse(item.isEnabled, "\(row.id) \(mask)")
+              XCTAssertNil(item.action, "\(row.id) \(mask)")
+              XCTAssertEqual(item.view is InfoRowView, style == .secondaryView, row.id)
+            }
+            XCTAssertEqual(Self.items(of: menu).count, Self.flatten(rows).count)
+          }
         }
-        XCTAssertEqual(Self.items(of: menu).count, Self.flatten(rows).count)
       }
     }
   }

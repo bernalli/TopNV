@@ -68,4 +68,37 @@ final class UpdateCoordinatorTests: XCTestCase {
     XCTAssertEqual(updater.events,["automatic:false","automatic:false","start"])
     XCTAssertEqual(coordinator.state,.ready)
   }
+  @MainActor func testOnlyAFailedStartReportsTheFailureAndOnlyOnce() {
+    func make(valid: Bool, updater: FakeUpdater?, asked: Bool,
+              reply: @escaping (@escaping (AutomaticUpdateAnswer) -> Void) -> Void = { _ in })
+      -> (UpdateCoordinator, () -> (ready: Int, failed: Int)) {
+      let defaults = UserDefaults(suiteName: "test.updates.\(UUID())")!
+      if asked { defaults.set(true, forKey: "automaticUpdateQuestionAsked") }
+      var ready = 0, failed = 0
+      let coordinator = UpdateCoordinator(
+        configuration: UpdateConfiguration(infoDictionary: valid ? UpdateConfigurationTests.valid : nil),
+        updater: updater, defaults: defaults, ask: reply,
+        onReady: { ready += 1 }, onFailed: { failed += 1 })
+      return (coordinator, { (ready, failed) })
+    }
+    for (valid, hasUpdater) in [(false, true), (true, false)] {
+      let (coordinator, counts) = make(valid: valid, updater: hasUpdater ? FakeUpdater() : nil, asked: true)
+      coordinator.start(); coordinator.start()
+      XCTAssertEqual(coordinator.state, .failed); XCTAssertEqual(counts().failed, 1); XCTAssertEqual(counts().ready, 0)
+    }
+    let throwing = FakeUpdater(); throwing.fails = true
+    let (direct, directCounts) = make(valid: true, updater: throwing, asked: true)
+    direct.start(); direct.start()
+    XCTAssertEqual(directCounts().failed, 1); XCTAssertEqual(directCounts().ready, 0)
+    let throwingLater = FakeUpdater(); throwingLater.fails = true
+    var answer: ((AutomaticUpdateAnswer) -> Void)?
+    let (asking, askingCounts) = make(valid: true, updater: throwingLater, asked: false, reply: { answer = $0 })
+    asking.start()
+    XCTAssertEqual(askingCounts().failed, 0, "no failure while the question waits")
+    answer?(.enable); answer?(.decline)
+    XCTAssertEqual(askingCounts().failed, 1); XCTAssertEqual(asking.state, .failed)
+    let (working, workingCounts) = make(valid: true, updater: FakeUpdater(), asked: true)
+    working.start()
+    XCTAssertEqual(workingCounts().failed, 0); XCTAssertEqual(workingCounts().ready, 1)
+  }
 }

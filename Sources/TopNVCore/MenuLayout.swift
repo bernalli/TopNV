@@ -50,17 +50,11 @@ public struct MenuState: Equatable, Sendable {
   public var loginNeedsApproval: Bool
   /// The last registration error; blank text counts as no error.
   public var loginError: String?
-  /// False without an updater: the update items are then not shown at all.
-  public var updatesAvailable: Bool
-  public var canCheckForUpdates: Bool
-  public var automaticUpdates: Bool
-  public var menuVisible: Bool
-  public var versionTitle: String
+  public var updates: UpdateItems
 
   public init(
     hideNotch: Bool, roundCorners: Bool, cornersOnAllDisplays: Bool, launchAtLogin: Bool,
-    loginNeedsApproval: Bool, loginError: String?, updatesAvailable: Bool,
-    canCheckForUpdates: Bool, automaticUpdates: Bool, menuVisible: Bool, versionTitle: String
+    loginNeedsApproval: Bool, loginError: String?, updates: UpdateItems
   ) {
     self.hideNotch = hideNotch
     self.roundCorners = roundCorners
@@ -68,84 +62,40 @@ public struct MenuState: Equatable, Sendable {
     self.launchAtLogin = launchAtLogin
     self.loginNeedsApproval = loginNeedsApproval
     self.loginError = loginError
-    self.updatesAvailable = updatesAvailable
-    self.canCheckForUpdates = canCheckForUpdates
-    self.automaticUpdates = automaticUpdates
-    self.menuVisible = menuVisible
-    self.versionTitle = versionTitle
+    self.updates = updates
   }
 }
 
-/// The menu as a list of rows, without AppKit, so its content can be tested. The structure is
-/// the one of MonoPods: header and status, the switches, Details and Options, a separator,
-/// version and actions, a separator and Quit.
+/// The menu as a list of rows, without AppKit, so its content can be tested: the header and the
+/// two switches, Options, then About, Check for Updates…, Report an Issue… and Quit, with a
+/// separator between the groups.
 public enum MenuLayout {
   public static func rows(for state: MenuState, localizer: Localizer = .main) -> [MenuRow] {
     let appName = Localizer.appName
-    let status = MenuStatus(
-      hideNotch: state.hideNotch, roundCorners: state.roundCorners, localizer: localizer)
-    var rows = [MenuRow(id: "topnv", title: appName, symbol: nil, kind: .header)]
-    rows += info(status.title, id: "status", symbol: status.symbol)
-    rows.append(
+    var rows = [
+      MenuRow(id: "topnv", title: appName, symbol: nil, kind: .header),
       MenuRow(
         id: "hideNotch", title: localizer(.hideNotch), symbol: "menubar.rectangle",
-        kind: .toggle(.hideNotch, isOn: state.hideNotch, enabled: true)))
-    rows.append(
+        kind: .toggle(.hideNotch, isOn: state.hideNotch, enabled: true)),
       MenuRow(
         id: "roundCorners", title: localizer(.roundCorners), symbol: "rectangle",
-        kind: .toggle(.roundCorners, isOn: state.roundCorners, enabled: true)))
-
-    let scope: TextKey =
-      state.cornersOnAllDisplays ? .appliesToAllDisplays : .appliesToBuiltInDisplay
-    let details =
-      info(localizer(scope), id: "display")
-      + info(localizer(.permissionsNoneRequired), id: "permissions")
-      + info(localizer(.requiresMacOS), id: "macOS")
-    rows.append(
-      MenuRow(
-        id: "details", title: localizer(.details), symbol: "info.circle",
-        kind: .submenu(details, enabled: true)))
-
-    var options = [
-      MenuRow(
-        id: "cornersOnAllDisplays", title: localizer(.cornersOnAllDisplays), symbol: "display.2",
-        kind: .toggle(
-          .cornersOnAllDisplays, isOn: state.cornersOnAllDisplays, enabled: state.roundCorners)),
-      MenuRow(
-        id: "login", title: localizer(.launchAtLogin), symbol: "power",
-        kind: .toggle(.launchAtLogin, isOn: state.launchAtLogin, enabled: true)),
-    ]
-    options += info(loginCaption(for: state, localizer: localizer), id: "login.caption")
-    if state.updatesAvailable {
-      options.append(
-        MenuRow(
-          id: "automatic", title: localizer(.automaticUpdates),
-          symbol: "arrow.triangle.2.circlepath",
-          kind: .toggle(.automaticUpdates, isOn: state.automaticUpdates, enabled: true)))
-    }
-    options.append(separator("options.separator"))
-    options.append(
-      MenuRow(
-        id: "hide", title: localizer(.hideMenuBarIcon), symbol: "menubar.rectangle",
-        kind: .toggle(.hideMenuBarIcon, isOn: !state.menuVisible, enabled: true)))
-    options += info(localizer(.hideMenuBarIconCaption, appName), id: "hide.caption")
-    rows.append(
+        kind: .toggle(.roundCorners, isOn: state.roundCorners, enabled: true)),
+      separator("separator.options"),
       MenuRow(
         id: "options", title: localizer(.options), symbol: "gearshape",
-        kind: .submenu(options, enabled: true)))
-
-    rows.append(separator("separator.app"))
-    rows += info(state.versionTitle, id: "version")
-    if state.updatesAvailable {
+        kind: .submenu(options(for: state, localizer: localizer), enabled: true)),
+      separator("separator.app"),
+      MenuRow(
+        id: "about", title: localizer(.about, appName), symbol: nil,
+        kind: .action(.about, enabled: true, key: "")),
+    ]
+    // Before the first-launch answer the item is shown dimmed, so the menu keeps its shape.
+    if state.updates != .hidden {
       rows.append(
         MenuRow(
           id: "check", title: localizer(.checkForUpdates), symbol: nil,
-          kind: .action(.checkForUpdates, enabled: state.canCheckForUpdates, key: "")))
+          kind: .action(.checkForUpdates, enabled: state.updates.canCheck, key: "")))
     }
-    rows.append(
-      MenuRow(
-        id: "about", title: localizer(.about, appName), symbol: nil,
-        kind: .action(.about, enabled: true, key: "")))
     rows.append(
       MenuRow(
         id: "report", title: localizer(.reportIssue), symbol: nil,
@@ -158,16 +108,53 @@ public enum MenuLayout {
     return rows
   }
 
-  /// The row under Launch at Login is always there, as in MonoPods: the error, otherwise the
-  /// approval request, otherwise when the setting takes effect.
-  static func loginCaption(for state: MenuState, localizer: Localizer) -> String {
+  /// Round Corners on All Displays; Launch at Login and Check for Updates Automatically; Hide Menu
+  /// Bar Icon, a command without a check mark, with the row that says how to get the icon back.
+  static func options(for state: MenuState, localizer: Localizer) -> [MenuRow] {
+    let loginTitle =
+      state.loginNeedsApproval ? localizer(.launchAtLoginNeedsApproval) : localizer(.launchAtLogin)
+    var options = [
+      MenuRow(
+        id: "cornersOnAllDisplays", title: localizer(.roundCornersOnAllDisplays),
+        symbol: "display.2",
+        kind: .toggle(
+          .cornersOnAllDisplays, isOn: state.cornersOnAllDisplays, enabled: state.roundCorners)),
+      separator("options.separator.login"),
+      MenuRow(
+        id: "login", title: loginTitle, symbol: "power",
+        kind: .toggle(.launchAtLogin, isOn: state.launchAtLogin, enabled: true)),
+    ]
+    if let caption = loginCaption(for: state, localizer: localizer) {
+      options += info(caption, id: "login.caption")
+    }
+    if state.updates != .hidden {
+      options.append(
+        MenuRow(
+          id: "automatic", title: localizer(.checkForUpdatesAutomatically),
+          symbol: "arrow.triangle.2.circlepath",
+          kind: .toggle(
+            .automaticUpdates, isOn: state.updates.checksAutomatically,
+            enabled: state.updates.isReady)))
+    }
+    options.append(separator("options.separator"))
+    options.append(
+      MenuRow(
+        id: "hide", title: localizer(.hideMenuBarIcon), symbol: "menubar.rectangle",
+        kind: .action(.hideMenuBarIcon, enabled: true, key: "")))
+    options += info(localizer(.hideMenuBarIconCaption, Localizer.appName), id: "hide.caption")
+    return options
+  }
+
+  /// The grey row under Launch at Login, only when something needs the user: the registration
+  /// error, otherwise the approval request. Nil while the login item works.
+  static func loginCaption(for state: MenuState, localizer: Localizer) -> String? {
     if let error = state.loginError?.trimmingCharacters(in: .whitespacesAndNewlines),
       !error.isEmpty
     {
       return error
     }
     if state.loginNeedsApproval { return localizer(.loginItemApproval, Localizer.appName) }
-    return localizer(.appliesFromNextLogin)
+    return nil
   }
 
   /// Free text as information rows of at most `MenuText.lines` width; only the first line carries

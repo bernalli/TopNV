@@ -6,49 +6,57 @@ public enum TextKey: String, CaseIterable {
   // TopNV only.
   case hideNotch = "Hide Notch"
   case roundCorners = "Round Corners"
-  case cornersOnAllDisplays = "Corners on All Displays"
-  case notchHiddenCornersRounded = "Notch Hidden, Corners Rounded"
-  case notchHidden = "Notch Hidden"
-  case cornersRounded = "Corners Rounded"
-  case inactive = "Inactive"
-  case appliesToAllDisplays = "Applies to: All Displays"
-  case appliesToBuiltInDisplay = "Applies to: Built-in Display"
-  case permissionsNoneRequired = "Permissions: None Required"
-  case requiresMacOS = "Requires macOS 14 or Later"
+  case roundCornersOnAllDisplays = "Round Corners on All Displays"
+  case launchAtLoginNeedsApproval = "Launch at Login (Requires Approval)"
   case loginItemApproval = "Allow %@ in System Settings > General > Login Items."
+  case greyBarTitle = "Finish Setting Up the Black Bar"
+  case greyBarMessage =
+    "macOS drew the menu bar before %@ started. Click your current wallpaper once in Wallpaper settings and the bar turns black."
+  case openWallpaperSettings = "Open Wallpaper Settings"
+  case notNow = "Not Now"
 
   // Shared with MonoPods.
-  case details = "Details"
   case options = "Options"
   case launchAtLogin = "Launch at Login"
-  case appliesFromNextLogin = "Applies from the next login."
   case hideMenuBarIcon = "Hide Menu Bar Icon"
   case hideMenuBarIconCaption = "Open %@ again to bring it back."
-  case automaticUpdates = "Automatic Updates"
+  case checkForUpdatesAutomatically = "Check for Updates Automatically"
   case checkForUpdates = "Check for Updates…"
   case about = "About %@"
   case reportIssue = "Report an Issue…"
   case quit = "Quit %@"
-  case version = "Version %@"
-  case versionUnavailable = "Version Unavailable"
   case updateQuestionTitle = "Check for Updates Automatically?"
   case updateQuestionMessage =
     "%@ can check for new versions once a day. You can change this at any time in Options."
   case checkAutomatically = "Check Automatically"
   case dontCheck = "Don't Check"
 
-  /// True when MonoPods shows the same text, so both apps must use the same translation.
-  public var isShared: Bool {
+  // English only: the About window reads no table.
+  case version = "Version %@"
+  case versionUnavailable = "Version Unavailable"
+
+  /// Which tables carry a key.
+  public enum Scope { case topNV, shared, englishOnly }
+
+  public var scope: Scope {
     switch self {
-    case .hideNotch, .roundCorners, .cornersOnAllDisplays, .notchHiddenCornersRounded,
-      .notchHidden, .cornersRounded, .inactive,
-      .appliesToAllDisplays, .appliesToBuiltInDisplay, .permissionsNoneRequired, .requiresMacOS,
-      .loginItemApproval:
-      return false
-    default:
-      return true
+    case .hideNotch, .roundCorners, .roundCornersOnAllDisplays, .launchAtLoginNeedsApproval,
+      .loginItemApproval, .greyBarTitle, .greyBarMessage, .openWallpaperSettings, .notNow:
+      return .topNV
+    case .options, .launchAtLogin, .hideMenuBarIcon, .hideMenuBarIconCaption,
+      .checkForUpdatesAutomatically, .checkForUpdates, .about, .reportIssue, .quit,
+      .updateQuestionTitle, .updateQuestionMessage, .checkAutomatically, .dontCheck:
+      return .shared
+    case .version, .versionUnavailable:
+      return .englishOnly
     }
   }
+
+  /// True when MonoPods shows the same text, so both apps must use the same translation.
+  public var isShared: Bool { scope == .shared }
+
+  /// False for the texts of the About window, which no table carries.
+  public var isInTables: Bool { scope != .englishOnly }
 }
 
 /// Looks texts up in `Localizable.strings` of a bundle; a missing table gives the English key.
