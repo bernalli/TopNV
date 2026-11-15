@@ -23,7 +23,7 @@ final class AboutInformationTests: XCTestCase {
     XCTAssertNil(AboutInformation(infoDictionary: [:]).copyright)
   }
 
-  /// D-36: the build number is never shown, even when it is the only field present.
+  /// The build number is never shown, even when it is the only field present.
   func testTheBuildNumberIsNeverShown() {
     for build: Any in ["7", " 7\n", 7] {
       XCTAssertEqual(

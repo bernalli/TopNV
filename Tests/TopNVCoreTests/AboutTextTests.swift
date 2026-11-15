@@ -2,7 +2,7 @@ import XCTest
 
 @testable import TopNVCore
 
-/// The About window stays in English in every language (D-35); the menu stays translated.
+/// The About window stays in English in every language; the menu stays translated.
 final class AboutTextTests: XCTestCase {
   private static let localization = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -52,7 +52,7 @@ final class AboutTextTests: XCTestCase {
     }
   }
 
-  /// D-36: no text carries the build number, as in MonoPods at 2ed55b1. CFBundleVersion stays in
+  /// No text carries the build number, as in MonoPods at 2ed55b1. CFBundleVersion stays in
   /// Info.plist, where Sparkle reads it.
   func testNoTextCarriesTheBuildNumber() throws {
     let removed = ["Version %@ (%@)", "Version Unavailable (Build %@)"]

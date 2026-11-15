@@ -115,7 +115,7 @@ final class AboutWindowTests: XCTestCase {
     }
   }
 
-  // MARK: English in every language (D-35)
+  // MARK: English in every language
 
   /// Checks About data and window title while Localizer.main uses the Italian table.
   func testTheWindowStaysInEnglishWithTheItalianTable() throws {
@@ -156,7 +156,7 @@ final class AboutWindowTests: XCTestCase {
       "Version Unavailable")
   }
 
-  // MARK: Title font (D-33)
+  // MARK: Title font
 
   func testTheNameUsesPlusJakartaSansSemiBold() throws {
     let font = try view(of: controller()).titleFont
@@ -176,7 +176,7 @@ final class AboutWindowTests: XCTestCase {
     XCTAssertEqual(try view(of: controller(titleFontURL: nil)).titleFont, fallback)
   }
 
-  // MARK: Sponsor button (D-36)
+  // MARK: Sponsor button
 
   nonisolated private static let coffeeStyle = repository.appendingPathComponent(
     "Sources/TopNV/CoffeeButtonStyle.swift")

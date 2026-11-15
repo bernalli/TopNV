@@ -1,4 +1,4 @@
-/// Visible texts of the About window. The window stays in English in every language (D-35), as
+/// Visible texts of the About window. The window stays in English in every language, as
 /// in MonoPods; the menu, its About item and its version row stay translated.
 public enum AboutText {
   /// Reads no table, so the window title and the version row are English.

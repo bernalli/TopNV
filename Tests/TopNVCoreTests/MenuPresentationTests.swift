@@ -17,7 +17,7 @@ final class MenuPresentationTests: XCTestCase {
     }
   }
 
-  /// D-36: the version row shows the short version only, never the build number.
+  /// The version row shows the short version only, never the build number.
   func testVersionShowsOnlyTheShortVersion() {
     XCTAssertEqual(AppVersion(shortVersion: "1.1.0").title, "Version 1.1.0")
     XCTAssertEqual(AppVersion(shortVersion: "2.0").title, "Version 2.0")

@@ -13,7 +13,7 @@ enum AboutArtwork {
 }
 
 /// The content of the standard About panel (icon, name, version, copyright) plus a GitHub link
-/// beside the version and a sponsor button, as in MonoPods. Its texts are always English (D-35).
+/// beside the version and a sponsor button, as in MonoPods. Its texts are always English.
 struct AboutView: View {
   let information: AboutInformation
   let icon: NSImage?

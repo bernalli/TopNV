@@ -57,7 +57,7 @@ public struct Localizer {
   /// The app name is not translated.
   public static let appName = "TopNV"
 
-  /// Reads no table: the English text of every key, in every language (the About window, D-35).
+  /// Reads no table: the English text of every key, in every language (the About window).
   public static let english = Localizer(table: nil)
 
   /// Replaces `Bundle.main` for the lookups of this task, so a test can put a real table in

@@ -21,7 +21,7 @@ final class AboutWindow: NSWindow {
 }
 
 /// Owns the single About window, as in MonoPods. Links and activation are injected, so tests never
-/// open a browser. The window reads no table: it is English in every language (D-35).
+/// open a browser. The window reads no table: it is English in every language.
 @MainActor final class AboutWindowController {
   static let shared = AboutWindowController()
 

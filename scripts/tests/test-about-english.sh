@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# D-35: fail closed on changes to the reviewed About source closure.
+# Fail closed on changes to the reviewed About source closure.
 set -euo pipefail
 python3 -B - "$(dirname "$0")/../.." <<'PY'
 from pathlib import Path
 import hashlib
 import sys
 
-# Reviewed D-35 source closure at 76a24e9, plus the D-36 version and sponsor
+# Reviewed English About source closure at 76a24e9, plus the version and sponsor
 # button changes. Do not regenerate automatically: changing any digest
 # requires reviewing the entire About text path again.
 EXPECTED = {
     "Sources/TopNV/AboutTitleFont.swift":
         "2f5d9ad11f78953ff4fb76929d1b71b42d0c61a93489d4f64eb00759c7aafc27",
     "Sources/TopNV/AboutView.swift":
-        "9bc2c6765ecc88ddcc7c78812d169ab24dd7bc44318b080d531a66b678a76286",
+        "5fdeed5f56f1ff94a4c6293505ed03c42d91fb4b311742fba0aa33127dcb16a0",
     "Sources/TopNV/AboutWindowController.swift":
-        "12625a3cb72d7ae1aa04d581ffcf4a628e848ea0a8b70e797572987caa0ec932",
+        "38cece2ee98b7d89ed7a0f94ab5884cb4bdcb2f04d07a11ce1272ffe6359d6a7",
     # Not matched by the About* globs below, so listed here: the sponsor
     # button style, MonoPods' CoffeeButtonStyle.swift at d5517ff verbatim.
     "Sources/TopNV/CoffeeButtonStyle.swift":
@@ -23,11 +23,11 @@ EXPECTED = {
     "Sources/TopNVCore/AboutInformation.swift":
         "718a46794d2c9c649705b3ae6a9e679ebb72ea339872ae5e3b0cb8d0a20f4710",
     "Sources/TopNVCore/AboutText.swift":
-        "d9f8dfca130fd711430f5763e06e2207334f5b34526bc856b387b08bee7c859e",
+        "913dd3e2fc93d581b07981188158ace12746bba7da72bb2d555ba16ee122ba3a",
     "Sources/TopNVCore/AppVersion.swift":
-        "38d6dad93ff0f741f228733f0f02ffdb0abed5bb4429b3641383095b9d1f4e70",
+        "aa7e53c9a18d4e3c8c074915339b4bc3beb828a562139ce63b58fae76f523df5",
     "Sources/TopNVCore/Localization.swift":
-        "aa7c7beb825b7ae2552325fd94309be15ed4463213257709e2f2e6f9bafffa89",
+        "abf9c9976001d32d7d6128519291a34fcb7ff168976ea08999ef0e16ce66dc2a",
 }
 
 
@@ -49,12 +49,12 @@ sources = {
 }
 problems = violations(sources)
 if problems:
-    sys.exit("D-35: review About text paths before updating the baseline:\n"
+    sys.exit("English About: review About text paths before updating the baseline:\n"
              + "\n".join(problems))
 
 # Positive case: the reviewed sources, including Text(verbatim:), pass unchanged.
 if violations(dict(sources)):
-    raise RuntimeError("D-35 positive case rejected")
+    raise RuntimeError("English About positive case rejected")
 
 # Negative cases are source mutations in memory; no fixture files or app launch.
 lookups = (
@@ -73,16 +73,16 @@ for name in EXPECTED:
         mutated = dict(sources)
         mutated[name] += ("\nprivate let d35Regression = " + lookup + "\n").encode()
         if violations(mutated) != [name]:
-            raise RuntimeError(f"D-35 missed {lookup} in {name}")
+            raise RuntimeError(f"English About missed {lookup} in {name}")
     missing = dict(sources)
     del missing[name]
     if violations(missing) != [name]:
-        raise RuntimeError(f"D-35 missed removed source {name}")
+        raise RuntimeError(f"English About missed removed source {name}")
 
 extra = "Sources/TopNV/AboutExtra.swift"
 if violations({**sources, extra: b"let title = translatedAboutTitle()\n"}) != [extra]:
-    raise RuntimeError("D-35 missed an added About source")
+    raise RuntimeError("English About missed an added About source")
 
-print(f"PASS D-35: {len(EXPECTED)} sources; positive, "
+print(f"PASS English About: {len(EXPECTED)} sources; positive, "
       f"{len(EXPECTED) * len(lookups)} lookup mutations, missing/extra cases")
 PY

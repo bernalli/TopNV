@@ -1,7 +1,7 @@
 // swiftlint:disable line_length - one entry per line, as in the tables
 /// The shared texts of MonoPods (its Localizable.strings at fb3070e), by language and key.
 /// TopNV must show the same translation for every shared key. The About window texts are not
-/// here: the About window is English in every language (D-35).
+/// here: the About window is English in every language.
 let monoPodsSharedTexts: [String: [String: String]] = [
   "en": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ can check for new versions once a day. You can change this at any time in Options.",
