@@ -9,11 +9,6 @@ public enum TextKey: String, CaseIterable {
   case roundCornersOnAllDisplays = "Round Corners on All Displays"
   case launchAtLoginNeedsApproval = "Launch at Login (Requires Approval)"
   case loginItemApproval = "Allow %@ in System Settings > General > Login Items."
-  case greyBarTitle = "Finish Setting Up the Black Bar"
-  case greyBarMessage =
-    "macOS drew the menu bar before %@ started. Click your current wallpaper once in Wallpaper settings and the bar turns black."
-  case openWallpaperSettings = "Open Wallpaper Settings"
-  case notNow = "Not Now"
 
   // Shared with MonoPods.
   case options = "Options"
@@ -41,7 +36,7 @@ public enum TextKey: String, CaseIterable {
   public var scope: Scope {
     switch self {
     case .hideNotch, .roundCorners, .roundCornersOnAllDisplays, .launchAtLoginNeedsApproval,
-      .loginItemApproval, .greyBarTitle, .greyBarMessage, .openWallpaperSettings, .notNow:
+      .loginItemApproval:
       return .topNV
     case .options, .launchAtLogin, .hideMenuBarIcon, .hideMenuBarIconCaption,
       .checkForUpdatesAutomatically, .checkForUpdates, .about, .reportIssue, .quit,
