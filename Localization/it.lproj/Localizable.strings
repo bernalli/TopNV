@@ -1,8 +1,9 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ può verificare una volta al giorno se ci sono nuove versioni. Puoi modificare questa scelta in qualsiasi momento in Opzioni.";
 "About %@" = "Informazioni su %@";
 "Allow %@ in System Settings > General > Login Items." = "Consenti %@ in Impostazioni di Sistema > Generali > Elementi login.";
-"Applies To: All Displays" = "Si applica a: tutti i monitor";
-"Applies To: Built-in Display" = "Si applica a: monitor integrato";
+"Applies from the next login." = "Effettivo dal prossimo login.";
+"Applies to: All Displays" = "Si applica a: tutti i monitor";
+"Applies to: Built-in Display" = "Si applica a: monitor integrato";
 "Automatic Updates" = "Aggiornamenti automatici";
 "Buy Me a Coffee" = "Offrimi un caffè";
 "Check Automatically" = "Verifica automaticamente";

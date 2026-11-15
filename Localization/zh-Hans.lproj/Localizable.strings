@@ -1,8 +1,9 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ 每天可以检查一次新版本。你可以随时在“选项”中更改此设置。";
 "About %@" = "关于 %@";
 "Allow %@ in System Settings > General > Login Items." = "请在“系统设置”>“通用”>“登录项”中允许 %@。";
-"Applies To: All Displays" = "适用于：所有显示器";
-"Applies To: Built-in Display" = "适用于：内建显示器";
+"Applies from the next login." = "将从下次登录起生效。";
+"Applies to: All Displays" = "适用于：所有显示器";
+"Applies to: Built-in Display" = "适用于：内建显示器";
 "Automatic Updates" = "自动更新";
 "Buy Me a Coffee" = "请我喝杯咖啡";
 "Check Automatically" = "自动检查";

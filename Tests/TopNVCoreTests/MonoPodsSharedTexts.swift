@@ -5,6 +5,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
   "en": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ can check for new versions once a day. You can change this at any time in Options.",
     "About %@": "About %@",
+    "Applies from the next login.": "Applies from the next login.",
     "Automatic Updates": "Automatic Updates",
     "Buy Me a Coffee": "Buy Me a Coffee",
     "Check Automatically": "Check Automatically",
@@ -27,6 +28,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
   "it": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ può verificare una volta al giorno se ci sono nuove versioni. Puoi modificare questa scelta in qualsiasi momento in Opzioni.",
     "About %@": "Informazioni su %@",
+    "Applies from the next login.": "Effettivo dal prossimo login.",
     "Automatic Updates": "Aggiornamenti automatici",
     "Buy Me a Coffee": "Offrimi un caffè",
     "Check Automatically": "Verifica automaticamente",
@@ -49,6 +51,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
   "es": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ puede buscar nuevas versiones una vez al día. Puedes cambiarlo en cualquier momento en Opciones.",
     "About %@": "Acerca de %@",
+    "Applies from the next login.": "Se aplicará en el próximo inicio de sesión.",
     "Automatic Updates": "Actualizaciones automáticas",
     "Buy Me a Coffee": "Invítame a un café",
     "Check Automatically": "Buscar automáticamente",
@@ -71,6 +74,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
   "fr": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ peut rechercher de nouvelles versions une fois par jour. Vous pouvez modifier ce réglage à tout moment dans Options.",
     "About %@": "À propos de %@",
+    "Applies from the next login.": "S’appliquera à la prochaine ouverture de session.",
     "Automatic Updates": "Mises à jour automatiques",
     "Buy Me a Coffee": "Offrez-moi un café",
     "Check Automatically": "Rechercher automatiquement",
@@ -93,6 +97,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
   "de": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ kann einmal täglich nach neuen Versionen suchen. Du kannst dies jederzeit in „Optionen“ ändern.",
     "About %@": "Über %@",
+    "Applies from the next login.": "Gilt ab der nächsten Anmeldung.",
     "Automatic Updates": "Automatische Updates",
     "Buy Me a Coffee": "Spendier mir einen Kaffee",
     "Check Automatically": "Automatisch suchen",
@@ -115,6 +120,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
   "pt-BR": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "O %@ pode buscar novas versões uma vez por dia. Você pode alterar isso a qualquer momento em Opções.",
     "About %@": "Sobre o %@",
+    "Applies from the next login.": "Será aplicado no próximo início de sessão.",
     "Automatic Updates": "Atualizações Automáticas",
     "Buy Me a Coffee": "Me pague um café",
     "Check Automatically": "Buscar Automaticamente",
@@ -137,6 +143,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
   "ja": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@は1日に1回、新しいバージョンを確認できます。この設定は“オプション”でいつでも変更できます。",
     "About %@": "%@について",
+    "Applies from the next login.": "次回のログインから適用されます。",
     "Automatic Updates": "自動アップデート",
     "Buy Me a Coffee": "コーヒーをおごる",
     "Check Automatically": "自動的に確認",
@@ -159,6 +166,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
   "zh-Hans": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ 每天可以检查一次新版本。你可以随时在“选项”中更改此设置。",
     "About %@": "关于 %@",
+    "Applies from the next login.": "将从下次登录起生效。",
     "Automatic Updates": "自动更新",
     "Buy Me a Coffee": "请我喝杯咖啡",
     "Check Automatically": "自动检查",

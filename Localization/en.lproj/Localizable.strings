@@ -1,8 +1,9 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ can check for new versions once a day. You can change this at any time in Options.";
 "About %@" = "About %@";
 "Allow %@ in System Settings > General > Login Items." = "Allow %@ in System Settings > General > Login Items.";
-"Applies To: All Displays" = "Applies To: All Displays";
-"Applies To: Built-in Display" = "Applies To: Built-in Display";
+"Applies from the next login." = "Applies from the next login.";
+"Applies to: All Displays" = "Applies to: All Displays";
+"Applies to: Built-in Display" = "Applies to: Built-in Display";
 "Automatic Updates" = "Automatic Updates";
 "Buy Me a Coffee" = "Buy Me a Coffee";
 "Check Automatically" = "Check Automatically";

@@ -1,8 +1,9 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ kann einmal täglich nach neuen Versionen suchen. Du kannst dies jederzeit in „Optionen“ ändern.";
 "About %@" = "Über %@";
 "Allow %@ in System Settings > General > Login Items." = "Erlaube %@ in Systemeinstellungen > Allgemein > Anmeldeobjekte.";
-"Applies To: All Displays" = "Gilt für: alle Displays";
-"Applies To: Built-in Display" = "Gilt für: integriertes Display";
+"Applies from the next login." = "Gilt ab der nächsten Anmeldung.";
+"Applies to: All Displays" = "Gilt für: alle Displays";
+"Applies to: Built-in Display" = "Gilt für: integriertes Display";
 "Automatic Updates" = "Automatische Updates";
 "Buy Me a Coffee" = "Spendier mir einen Kaffee";
 "Check Automatically" = "Automatisch suchen";

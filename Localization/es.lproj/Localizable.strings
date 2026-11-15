@@ -1,8 +1,9 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ puede buscar nuevas versiones una vez al día. Puedes cambiarlo en cualquier momento en Opciones.";
 "About %@" = "Acerca de %@";
 "Allow %@ in System Settings > General > Login Items." = "Permite %@ en Ajustes del Sistema > General > Ítems de inicio de sesión.";
-"Applies To: All Displays" = "Se aplica a: todas las pantallas";
-"Applies To: Built-in Display" = "Se aplica a: pantalla integrada";
+"Applies from the next login." = "Se aplicará en el próximo inicio de sesión.";
+"Applies to: All Displays" = "Se aplica a: todas las pantallas";
+"Applies to: Built-in Display" = "Se aplica a: pantalla integrada";
 "Automatic Updates" = "Actualizaciones automáticas";
 "Buy Me a Coffee" = "Invítame a un café";
 "Check Automatically" = "Buscar automáticamente";

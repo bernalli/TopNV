@@ -1,8 +1,9 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ peut rechercher de nouvelles versions une fois par jour. Vous pouvez modifier ce réglage à tout moment dans Options.";
 "About %@" = "À propos de %@";
 "Allow %@ in System Settings > General > Login Items." = "Autorisez %@ dans Réglages Système > Général > Ouverture.";
-"Applies To: All Displays" = "S'applique à : tous les écrans";
-"Applies To: Built-in Display" = "S'applique à : écran intégré";
+"Applies from the next login." = "S’appliquera à la prochaine ouverture de session.";
+"Applies to: All Displays" = "S'applique à : tous les écrans";
+"Applies to: Built-in Display" = "S'applique à : écran intégré";
 "Automatic Updates" = "Mises à jour automatiques";
 "Buy Me a Coffee" = "Offrez-moi un café";
 "Check Automatically" = "Rechercher automatiquement";
