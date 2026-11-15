@@ -72,7 +72,7 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Check for Updates…": "Nach Updates suchen …",
     "Don't Check": "Nicht suchen",
     "Hide Menu Bar Icon": "Symbol in der Menüleiste ausblenden",
-    "Launch at Login": "Beim Anmelden öffnen",
+    "Launch at Login": "Bei der Anmeldung öffnen",
     "Open %@ again to bring it back.": "Öffne %@ erneut, um es wieder einzublenden.",
     "Options": "Optionen",
     "Quit %@": "%@ beenden",
@@ -86,12 +86,12 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Check for Updates Automatically?": "Buscar Atualizações Automaticamente?",
     "Check for Updates…": "Buscar Atualizações…",
     "Don't Check": "Não Buscar",
-    "Hide Menu Bar Icon": "Ocultar ícone da barra de menus",
-    "Launch at Login": "Abrir ao iniciar sessão",
+    "Hide Menu Bar Icon": "Ocultar Ícone da Barra de Menus",
+    "Launch at Login": "Abrir no Início da Sessão",
     "Open %@ again to bring it back.": "Abra o %@ novamente para que ele volte a aparecer.",
     "Options": "Opções",
-    "Quit %@": "Encerrar o %@",
-    "Report an Issue…": "Relatar um problema…"
+    "Quit %@": "Encerrar %@",
+    "Report an Issue…": "Relatar um Problema…"
   ],
   "ja": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@は1日に1回、新しいバージョンを確認できます。この設定は“オプション”でいつでも変更できます。",

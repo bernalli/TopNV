@@ -283,6 +283,38 @@ final class LocalizationTests: XCTestCase {
     }
   }
 
+  /// The translation revisions of this release, as a closed list.
+  func testMenuTranslationRevisions() throws {
+    let expected: [String: [String: String]] = [
+      "de": ["Launch at Login": "Bei der Anmeldung öffnen"],
+      "pt-BR": [
+        "Launch at Login": "Abrir no Início da Sessão",
+        "Quit %@": "Encerrar %@",
+        "Hide Menu Bar Icon": "Ocultar Ícone da Barra de Menus",
+        "Report an Issue…": "Relatar um Problema…",
+        "Hide Notch": "Ocultar Entalhe",
+        "Round Corners": "Arredondar Cantos",
+        "Allow %@ in System Settings > General > Login Items.":
+          "Permita o %@ em Ajustes do Sistema > Geral > Itens de Início de Sessão.",
+      ],
+      "es": [
+        "Allow %@ in System Settings > General > Login Items.":
+          "Permite %@ en Ajustes del Sistema > General > Ítems de inicio."
+      ],
+      "ja": [
+        "Allow %@ in System Settings > General > Login Items.":
+          "システム設定 > 一般 > ログイン項目で%@を許可してください。"
+      ],
+    ]
+    for (language, values) in expected {
+      let entries = Dictionary(
+        uniqueKeysWithValues: parseTable(try table(language)).entries.map { ($0.key, $0.value) })
+      for (key, value) in values {
+        XCTAssertEqual(entries[key], value, "\(language): \(key)")
+      }
+    }
+  }
+
   /// The key set of this release, as a closed list per scope.
   func testTheKeySetIsTheOneOfTheMenu() {
     func keys(_ scope: TextKey.Scope) -> Set<String> {
