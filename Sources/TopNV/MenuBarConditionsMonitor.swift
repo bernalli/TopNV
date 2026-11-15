@@ -21,13 +21,20 @@ final class MenuBarConditionsMonitor: NSObject, MenuBarConditionsSource {
   private(set) weak var observedButton: NSStatusBarButton?
   private var appearanceObservation: NSKeyValueObservation?
   private var subscriptions: Set<AnyCancellable> = []
-  private var pendingReport: Task<Void, Never>?
+  private let scheduleReport: GreyBarNoticeCoordinator.Schedule
+  private var cancelReport: (() -> Void)?
+  private var isSettling = false
   private var isStarted = false
 
-  init(settings: AppSettings, statusItem: NSStatusItem, visibility: MenuVisibility) {
+  init(
+    settings: AppSettings, statusItem: NSStatusItem, visibility: MenuVisibility,
+    scheduleReport: @escaping GreyBarNoticeCoordinator.Schedule =
+      GreyBarNoticeCoordinator.sleepSchedule
+  ) {
     self.settings = settings
     self.statusItem = statusItem
     self.visibility = visibility
+    self.scheduleReport = scheduleReport
     super.init()
   }
 
@@ -35,7 +42,7 @@ final class MenuBarConditionsMonitor: NSObject, MenuBarConditionsSource {
     let button = observedButton
     let screen = button?.window?.screen
     return MenuBarConditions(
-      appearance: button.flatMap { Self.appearance(of: $0.effectiveAppearance) },
+      appearance: isSettling ? nil : button.flatMap { Self.appearance(of: $0.effectiveAppearance) },
       hidesNotch: settings.hideNotch,
       hasNotch: screen.map { ScreenGeometry.isNotched(safeAreaTop: $0.safeAreaInsets.top) }
         ?? false,
@@ -53,8 +60,9 @@ final class MenuBarConditionsMonitor: NSObject, MenuBarConditionsSource {
   func start() {
     guard !isStarted else { return }
     isStarted = true
-    // objectWillChange fires before the new value is stored, so both read it a turn later.
+    // Invalidate before publication; read the new values after the band settles.
     visibility.objectWillChange.sink { [weak self] _ in
+      MainActor.assumeIsolated { self?.reportAfterTheBand() }
       Task { @MainActor [weak self] in self?.followVisibility() }
     }.store(in: &subscriptions)
     settings.objectWillChange.sink { [weak self] _ in
@@ -81,14 +89,17 @@ final class MenuBarConditionsMonitor: NSObject, MenuBarConditionsSource {
     subscriptions.removeAll()
     NotificationCenter.default.removeObserver(self)
     NSWorkspace.shared.notificationCenter.removeObserver(self)
-    pendingReport?.cancel()
-    pendingReport = nil
+    cancelReport?()
+    cancelReport = nil
+    isSettling = false
     appearanceObservation = nil
     removeProbe()
+    observedButton = nil
   }
 
   /// Observes TopNV's own button while the icon is visible, the zero-length item otherwise.
   func followVisibility() {
+    guard isStarted else { return }
     let button: NSStatusBarButton?
     if visibility.isVisible {
       removeProbe()
@@ -105,10 +116,12 @@ final class MenuBarConditionsMonitor: NSObject, MenuBarConditionsSource {
       observedButton = button
       appearanceObservation = button?.observe(\.effectiveAppearance, options: [.new]) {
         [weak self] _, _ in
-        Task { @MainActor [weak self] in self?.report() }
+        // AppKit updates this view on the main thread. Preserve intermediate changes
+        // instead of rereading only the last appearance in a later task.
+        MainActor.assumeIsolated { self?.report() }
       }
     }
-    report()
+    reportAfterTheBand()
   }
 
   private func removeProbe() {
@@ -125,16 +138,17 @@ final class MenuBarConditionsMonitor: NSObject, MenuBarConditionsSource {
     reportAfterTheBand()
   }
 
-  /// The overlay rebuilds the band a little after a change; the report waits for it.
+  /// Invalidate immediately, then read again after the overlay has settled.
   private func reportAfterTheBand() {
-    pendingReport?.cancel()
-    pendingReport = Task { @MainActor [weak self] in
-      do {
-        try await Task.sleep(for: Delay.band)
-      } catch {
-        return  // Cancelled by a newer change.
-      }
-      self?.report()
+    guard isStarted else { return }
+    cancelReport?()
+    isSettling = true
+    report()
+    cancelReport = scheduleReport(Delay.band) { [weak self] in
+      guard let self, self.isStarted else { return }
+      self.cancelReport = nil
+      self.isSettling = false
+      self.report()
     }
   }
 

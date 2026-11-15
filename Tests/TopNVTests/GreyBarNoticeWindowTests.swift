@@ -39,7 +39,7 @@ final class GreyBarNoticeWindowTests: XCTestCase {
     XCTAssertEqual(alert.buttons[1].keyEquivalent, "\u{1b}")
     XCTAssertEqual(presented.count, 1)
     XCTAssertTrue(presented.first?.window === alert.window)
-    XCTAssertEqual(presented.first?.activate, true)
+    XCTAssertEqual(presented.first?.activate, false)
     XCTAssertNil(NSApplication.shared.modalWindow)
     XCTAssertTrue(answers.isEmpty)
     XCTAssertEqual(openings, 0)
@@ -131,6 +131,73 @@ final class MenuBarConditionsMonitorTests: XCTestCase {
     monitor.followVisibility()
     XCTAssertNil(monitor.probe)
     XCTAssertTrue(monitor.observedButton === own.button)
+  }
+
+
+  func testChangesInvalidateImmediatelyAndRereadAfterTheBandSettles() throws {
+    let own = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    items.append(own)
+    try XCTUnwrap(own.button).appearance = NSAppearance(named: .aqua)
+    let settings = AppSettings(defaults: defaults)
+    var pending: (@MainActor () -> Void)?
+    let monitor = MenuBarConditionsMonitor(
+      settings: settings, statusItem: own,
+      visibility: MenuVisibility(defaults: defaults, key: AppSettings.showMenuBarIconKey),
+      scheduleReport: { delay, action in
+        XCTAssertEqual(delay, .seconds(1))
+        pending = action
+        return { pending = nil }
+      })
+    monitor.start()
+    defer { monitor.stop() }
+    var samples: [MenuBarConditions] = []
+    monitor.onChange = { samples.append(monitor.conditions) }
+    defer { monitor.onChange = nil }
+
+    func finishReport() {
+      let action = pending
+      pending = nil
+      action?()
+    }
+    finishReport()
+    XCTAssertEqual(samples.last?.appearance, .light)
+
+    let changes: [() -> Void] = [
+      { settings.hideNotch = false },
+      { settings.hideNotch = true },
+      {
+        NotificationCenter.default.post(
+          name: NSApplication.didChangeScreenParametersNotification, object: nil)
+      },
+      {
+        NSWorkspace.shared.notificationCenter.post(
+          name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+      },
+      {
+        NSWorkspace.shared.notificationCenter.post(
+          name: NSWorkspace.didWakeNotification, object: nil)
+      },
+      {
+        NSWorkspace.shared.notificationCenter.post(
+          name: NSWorkspace.screensDidWakeNotification, object: nil)
+      },
+    ]
+    for (index, change) in changes.enumerated() {
+      samples.removeAll()
+      change()
+      XCTAssertEqual(samples.count, 1, "change \(index) must invalidate synchronously")
+      XCTAssertNil(samples.last?.appearance)
+      XCTAssertNotNil(pending)
+      finishReport()
+      XCTAssertEqual(samples.count, 2)
+      XCTAssertEqual(samples.last?.appearance, .light)
+      XCTAssertEqual(samples.last?.hidesNotch, settings.hideNotch)
+    }
+
+    samples.removeAll()
+    own.button?.appearance = NSAppearance(named: .darkAqua)
+    own.button?.appearance = NSAppearance(named: .aqua)
+    XCTAssertEqual(samples.map(\.appearance), [.dark, .light])
   }
 
   func testTheConditionsFollowTheHideNotchSetting() {

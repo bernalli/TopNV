@@ -39,10 +39,10 @@ import TopNVCore
     alert.layout()
   }
 
-  /// Shows the alert and activates the app.
+  /// Shows the alert without activating the app or taking keyboard focus.
   func show() {
     retained = self
-    present(alert.window, true)
+    present(alert.window, false)
   }
 
   /// Only the first click answers; it closes the alert and releases the notice.
