@@ -45,13 +45,16 @@ with tempfile.TemporaryDirectory(dir=root/'build/test-tmp') as tmp:
     result,seen=sign(SPARKLE_ED_PRIVATE_KEY=key)
     assert result.returncode==0,result
     assert seen['argv'][:len(tail)+2]==['--ed-key-file','-']+tail and seen['stdin']==key+'\n' and not seen['env'],seen
+    assert '--account' not in seen['argv'],seen
     for values in ({},{'SPARKLE_ED_PRIVATE_KEY':'!'},{'TOPNV_SPARKLE_KEY':'','SPARKLE_ED_PRIVATE_KEY':''}):
         result,seen=sign(**values); assert result.returncode!=0 and seen is None,(values,result)
-    # keychain: no key validation, no --ed-key-file, no key in stdin, argv or the tool environment.
+    # keychain: the key of the topnv Keychain account; no key validation, no --ed-key-file, no key in
+    # stdin, argv or the tool environment.
     for values in ({},{'SPARKLE_ED_PRIVATE_KEY':'!'},{'SPARKLE_ED_PRIVATE_KEY':key}):
         result,seen=sign(TOPNV_SPARKLE_KEY='keychain',**values)
         assert result.returncode==0,(values,result)
-        assert seen['argv'][:len(tail)]==tail and len(seen['argv'])==len(tail)+1,seen
+        assert seen['argv'][:len(tail)+2]==['--account','topnv']+tail and len(seen['argv'])==len(tail)+3,seen
+        assert '--ed-key-file' not in seen['argv'],seen
         assert seen['stdin']=='' and not seen['env'],seen
         assert key.encode() not in result.stdout+result.stderr
     # keychain: an exported key reaches no child at all, not only generate_appcast.
