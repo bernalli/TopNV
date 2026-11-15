@@ -545,6 +545,26 @@ final class LocalizationTests: XCTestCase {
       Set(parseTable(try driverTable("en").text).entries.map(\.key)), keys)
   }
 
+  /// The update window names the app with one gender, and Later uses the term of the update
+  /// notification of macOS.
+  func testUpdateWindowTranslationRevisions() throws {
+    let expected: [String: [String: String]] = [
+      "it": ["%@ is ready to install.": "%@ è pronto per l’installazione.", "%@ is up to date.": "%@ è aggiornato."],
+      "es": ["%@ is ready to install.": "%@ está listo para instalarse.", "%@ is up to date.": "%@ está actualizado."],
+      "fr": ["%@ is ready to install.": "%@ est prêt à être installé."],
+      "zh-Hans": ["Later": "稍后"],
+    ]
+    for (language, values) in expected {
+      let entries = Dictionary(
+        uniqueKeysWithValues: parseTable(try driverTable(language).text).entries.map {
+          ($0.key, $0.value)
+        })
+      for (key, value) in values {
+        XCTAssertEqual(entries[key], value, "\(language): \(key)")
+      }
+    }
+  }
+
   // MARK: Validator properties
 
   private let sampleBase: [String: BaseKey] = [
