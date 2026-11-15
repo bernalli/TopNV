@@ -3,7 +3,7 @@ import Foundation
 /// User preferences, persisted in `UserDefaults`.
 @MainActor
 final class AppSettings: ObservableObject {
-  /// Shared with the separate visibility model so the scene never observes display settings.
+  /// Shared with the separate visibility model of the menu bar icon.
   nonisolated static let showMenuBarIconKey = "showMenuBarIcon"
 
   private enum Key {
