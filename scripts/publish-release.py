@@ -193,6 +193,15 @@ class Publisher:
                 raise ReleaseError(f'public state indeterminate for release ID {self.release_id}; recovery failed') from None
             if isinstance(error,ReleaseError): raise
             raise ReleaseError('release interrupted or failed; draft recovery attempted') from None
+        self.forget()
+    def forget(self):
+        # The release is published and verified: the record of this run is spent. A record that
+        # another run wrote meanwhile is not ours and stays.
+        path=self.root/'build/release-transaction.json'
+        try:
+            if json.loads(path.read_text())==self.transaction(): path.unlink()
+        except (OSError,ValueError):
+            print('warning: release published, but build/release-transaction.json could not be checked or removed; remove it by hand',file=sys.stderr,flush=True)
     def recover(self):
         path=self.root/'build/release-transaction.json'
         if not path.exists(): return
@@ -202,8 +211,9 @@ class Publisher:
         require(isinstance(self.release_id,int),'invalid recovery ID')
         try: self.rollback()
         except BaseException: raise ReleaseError(f'public state indeterminate for release ID {self.release_id}; recovery failed') from None
+    def transaction(self): return {'release_id':self.release_id,'run_id':self.env.get('GITHUB_RUN_ID'),'sha':self.sha,'tag':self.tag}
     def record(self):
-        record={'release_id':self.release_id,'run_id':self.env.get('GITHUB_RUN_ID'),'sha':self.sha,'tag':self.tag}
+        record=self.transaction()
         (self.root/'build/release-transaction.json').write_text(json.dumps(record)+'\n')
         print(f"Release ID {self.release_id}; run {record['run_id']}",flush=True)
 

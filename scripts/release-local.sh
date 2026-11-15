@@ -32,6 +32,38 @@ step '0 guards'
 readonly VERSION=$1 BUILD=$2
 TOPNV_VERSION="$VERSION" scripts/validate-version.sh
 [[ $BUILD =~ ^[1-9][0-9]{0,9}$ ]] || die 'build must be a positive integer of at most ten digits'
+# The publisher removes its record after a successful publication: a record still in build/ belongs
+# to an earlier run that did not finish, and its recovery would refuse this run.
+if [[ -e build/release-transaction.json || -L build/release-transaction.json ]]; then
+  echo 'error: build/release-transaction.json is the record of an earlier release run that did not finish' >&2
+  python3 - >&2 <<'PY' || true
+import json, re
+try:
+    with open('build/release-transaction.json', encoding='utf-8') as f:
+        record = json.load(f)
+except (OSError, ValueError):
+    record = None
+if not isinstance(record, dict):
+    record = {}
+# Only values of the expected shape reach the suggested command.
+release = record.get('release_id')
+release = release if isinstance(release, int) and not isinstance(release, bool) else '<unknown>'
+run = record.get('run_id')
+match = re.fullmatch(r'local-([0-9]+\.[0-9]+\.[0-9]+)-([1-9][0-9]{0,9})-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}', run) if isinstance(run, str) else None
+run, build = (match[0], match[2]) if match else ('<run id>', '<build>')
+sha = record.get('sha')
+sha = sha if isinstance(sha, str) and re.fullmatch(r'[0-9a-f]{40}', sha) else '<sha>'
+tag = record.get('tag')
+version = tag[1:] if isinstance(tag, str) and re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag) else '<version>'
+print(f'(release {release}, run {run}). Check that release on GitHub before a new run.')
+print('If it may be public by mistake or its state is unknown, recover that run, which turns it back into a draft:')
+print(f'  env GITHUB_EVENT_NAME=workflow_dispatch GITHUB_REF=refs/heads/main INPUT_VERSION={version} INPUT_CHANNEL=stable '
+      f'GITHUB_SHA={sha} GITHUB_RUN_NUMBER={build} GITHUB_RUN_ID={run} scripts/publish-release.sh recover')
+print('then delete the draft on GitHub and remove build/release-transaction.json.')
+print('If that release is already published and correct, remove build/release-transaction.json by hand.')
+PY
+  exit 1
+fi
 STATUS="$(git status --porcelain)"
 [[ -z $STATUS ]] || die 'working tree is not clean'
 BRANCH="$(git symbolic-ref --quiet --short HEAD)" || die 'HEAD is detached; check out main'

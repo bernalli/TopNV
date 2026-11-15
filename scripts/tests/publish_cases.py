@@ -17,7 +17,7 @@ class Fake:
         self.releases=[]; self.tag=None; self.sha='a'*40; self.events=[]; self.fail=None; self.public=False; self.downloads={}; self.status=404
         self.api_status=None; self.api_transport=False; self.deleted=[]; self.off_main=False; self.peeled=None
         self.latest={'tag_name':'v1.0.0','assets':[]}; self.order_failed=False; self.different=None; self.rollback_fails=False
-        self.response_tag=None; self.public_delay=0; self.public_statuses=[]
+        self.response_tag=None; self.public_delay=0; self.public_statuses=[]; self.foreign_record=None
     def git(self, *args):
         if args[0]=='merge-base' and self.off_main: raise module.ReleaseError('Git source validation failed')
         if args[0]=='rev-parse': return self.sha
@@ -56,6 +56,7 @@ class Fake:
             assert not self.public
             if self.fail==name: raise module.ReleaseError('upload failed')
             if self.fail=='tag-moves' and name=='appcast.xml': self.tag={'type':'commit','sha':'b'*40}
+            if self.foreign_record: self.foreign_record.write_text('{"release_id":9,"run_id":"other","sha":"'+'a'*40+'","tag":"v1.1.0"}\n')
             asset_id=len(self.downloads)+1; self.downloads[asset_id]=Path(file).read_bytes()
             return 201,{'id':asset_id}
         if method=='GET' and '/releases/assets/' in path:
@@ -147,10 +148,36 @@ class Cases(unittest.TestCase):
             self.transport=Fake(); p=self.prepared(); self.transport.different=where
             with self.assertRaises(module.ReleaseError): p.publish()
             self.assertFalse(self.transport.public)
+    def record(self): return self.root/'build/release-transaction.json'
     def test_recovery_only_owns_this_run(self):
-        p=self.prepared(); p.publish(); p.recover(); self.assertFalse(self.transport.public)
+        p=self.prepared(); self.transport.fail='appcast.xml'
+        with self.assertRaises(module.ReleaseError): p.publish()
         self.env['GITHUB_RUN_ID']='other'
         with self.assertRaises(module.ReleaseError): self.publisher().recover()
+        self.env['GITHUB_RUN_ID']='7'; self.publisher().recover(); self.assertFalse(self.transport.public)
+    def test_successful_publish_removes_its_record(self):
+        p=self.prepared(); p.publish()
+        self.assertTrue(self.transport.public); self.assertFalse(self.record().exists())
+        # A later recover of the same run finds no record and leaves the published release alone.
+        self.publisher().recover(); self.assertTrue(self.transport.public)
+    def test_failed_publish_keeps_its_record_for_recovery(self):
+        for failure in ['appcast.xml','verify-after-draft','publish','interrupt']:
+            with self.subTest(failure=failure):
+                self.record().unlink(missing_ok=True)
+                self.transport=Fake(); p=self.prepared(); self.transport.fail=failure
+                if failure=='verify-after-draft': self.transport.different='private'; self.transport.fail=None
+                with self.assertRaises(module.ReleaseError): p.publish()
+                self.assertFalse(self.transport.public)
+                self.assertEqual(module.json.loads(self.record().read_text()),{'release_id':5,'run_id':'7','sha':'a'*40,'tag':'v1.1.0'})
+                self.publisher().recover()
+    def test_successful_publish_keeps_a_record_of_another_run(self):
+        p=self.prepared(); self.transport.foreign_record=self.record(); p.publish()
+        self.assertTrue(self.transport.public); self.assertIn('"run_id":"other"',self.record().read_text())
+    def test_recovery_after_a_failure_before_the_draft_succeeds(self):
+        # Without a record left by an earlier run, a recover after a rolled-back failure cannot fail.
+        p=self.prepared(); self.transport.fail='verify'
+        with self.assertRaises(module.ReleaseError): p.publish()
+        self.assertFalse(self.record().exists()); self.publisher().recover(); self.assertFalse(self.transport.public)
     def test_rollback_failure_remains_error(self):
         p=self.prepared(); self.transport.fail='publish'; self.transport.rollback_fails=True
         with self.assertRaisesRegex(module.ReleaseError,'indeterminate.*5'): p.publish()

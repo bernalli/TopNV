@@ -42,10 +42,14 @@ if keychain:
     if lookup.returncode or not account_key: sys.exit('error: cannot read the public key of the topnv Keychain account; output withheld')
     if account_key!=trusted: sys.exit('error: the topnv Keychain account holds a different key than Assets/SparklePublicEDKey.txt; appcast not signed')
 source={'stdin':subprocess.DEVNULL} if keychain else {'input':key+b'\n'}
-with tempfile.TemporaryDirectory(prefix='sign-',dir=root/'build') as tmp:
-    folder=pathlib.Path(tmp)
+# generate_appcast keeps the items of an output feed that already exists: it writes into a new
+# folder, so a build/appcast.xml left by an earlier release never reaches the new feed.
+with tempfile.TemporaryDirectory(prefix='sign-',dir=root/'build') as tmp, tempfile.TemporaryDirectory(prefix='sign-out-',dir=root/'build') as out:
+    folder=pathlib.Path(tmp); feed=pathlib.Path(out)/'appcast.xml'
     shutil.copy2(root/f'build/TopNV-{version}.dmg',folder)
     shutil.copy2(os.environ['TOPNV_RELEASE_NOTES'],folder/f'TopNV-{version}.md')
-    result=subprocess.run([str(tool),*(['--account','topnv'] if keychain else ['--ed-key-file','-']),'--embed-release-notes','--download-url-prefix',prefix,'-o',str(root/'build/appcast.xml'),str(folder)],env=env,capture_output=True,**source)
+    result=subprocess.run([str(tool),*(['--account','topnv'] if keychain else ['--ed-key-file','-']),'--embed-release-notes','--download-url-prefix',prefix,'-o',str(feed),str(folder)],env=env,capture_output=True,**source)
     if result.returncode or (key and (key in result.stdout or key in result.stderr)): sys.exit('error: appcast signing failed; output withheld')
+    if not feed.is_file() or feed.is_symlink(): sys.exit('error: appcast signing produced no appcast')
+    os.replace(feed,root/'build/appcast.xml')
 PY
