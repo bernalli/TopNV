@@ -11,9 +11,12 @@ CALLS = re.compile(
     r'(?<![\w.])(?:Text|Label|Button|Toggle|Picker|Section|Menu|info)\s*\(|'
     r'\.(?:help|accessibilityLabel)\s*\(|'
     r'\b(?:messageText|informativeText)\s*=|'
-    r'\baddButton\s*\(\s*withTitle\s*:')
+    r'\baddButton\s*\(\s*withTitle\s*:|'
+    r'(?<![\w.])title\s*:|'
+    r'\.title\s*=(?!=)')
 LABEL = re.compile(r'\s*[A-Za-z_]\w*\s*:(?!:)')
-ALLOWED = '"TopNV"'
+# The app name, and the empty title of a separator row.
+ALLOWED = re.compile(r'\(*\s*(?:"TopNV"|"")\s*\)*')
 
 
 def strip_comments(source):
@@ -89,7 +92,7 @@ def violations(source):
     found = []
     for match in CALLS.finditer(code):
         text, literals = argument(code, match.end(), match.group(0).endswith('='))
-        allowed_name = re.fullmatch(r'\(*\s*"TopNV"\s*\)*', text) is not None
+        allowed_name = ALLOWED.fullmatch(text) is not None
         if literals and not allowed_name:
             found.append((code.count('\n', 0, match.start()) + 1, match.group(0), text))
     return found
@@ -136,14 +139,42 @@ cases = [
     ('Image(systemName: "link")', False),
     ('// Text("comment")', False),
     ('/* Button("comment") */', False),
-    ('NSMenu(title: "x"); MenuBarLabel(); myText("x")', False),
+    ('MenuBarLabel(); myText("x")', False),
+    ('NSMenu(title: "x")', True),
+    ('MenuRow(id: "x", title: "Hello", symbol: nil, kind: .info)', True),
+    ('item.title = "Hello"', True),
+    ('item.title="Hello"', True),
+    ('MenuRow(id: "x", title: localizer(.details), symbol: "info.circle", kind: .info)', False),
+    ('title: localizer(.details)', False),
+    ('menu.addItem(withTitle: title, action: nil, keyEquivalent: "")', False),
+    ('MenuRow(id: "s", title: "", symbol: nil, kind: .separator)', False),
+    ('if item.title == "Hello" { }', False),
+    ('NSMenu(title: row.title)', False),
 ]
 for fragment, red in cases:
     assert bool(violations(fragment)) == red, (fragment, violations(fragment))
 
+# Direct title literals remain violations when truncated, duplicated or reordered.
+from itertools import permutations
+
+for prefix in ('item.title = ', 'NSMenu(title: ', 'MenuRow(id: "x", title: '):
+    value = prefix + '"Unlocalized text"'
+    for end in range(len(prefix) + 1, len(value)):
+        assert violations(value[:end]), value[:end]
+
+fragments = [
+    'item.title = "Hello"',
+    'item.title = localizer(.details)',
+    'item.title = ""',
+]
+for order in permutations(fragments):
+    assert len(violations("\n".join(order))) == 1, order
+assert len(violations("\n".join([fragments[0]] * 3))) == 3
+
 root = Path(sys.argv[1])
 problems = []
-for path in sorted((root / 'Sources/TopNV').glob('*.swift')):
+sources = sorted((root / 'Sources/TopNV').glob('*.swift')) + [root / 'Sources/TopNVCore/MenuLayout.swift']
+for path in sources:
     for line, call, literal in violations(path.read_text()):
         problems.append(f'{path.relative_to(root)}:{line}: literal {literal} reaches {call}')
 if problems:

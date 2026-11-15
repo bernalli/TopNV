@@ -13,7 +13,8 @@
 //   AppIcon.iconset/icon_{16,32,128,256,512}x{...}[@2x].png
 //   AppIcon.icns                          (the iconset images, written with ImageIO)
 //   MenuBarIcon.png, MenuBarIcon@2x.png   (template images, alpha only)
-//   cover.png                             (1280x640 social preview)
+//   cover.png                             (2560x1280 README cover, design D at 2x)
+//   social-preview.png                    (1280x640 GitHub social preview, same design)
 
 import CoreGraphics
 import CoreText
@@ -96,23 +97,44 @@ func writePNG(_ image: CGImage, to url: URL, dpi: Int = 72) throws {
   guard CGImageDestinationFinalize(dest) else { throw RenderError.write(url.path) }
 }
 
-func linearGradient(_ stops: [(CGFloat, CGColor)]) -> CGGradient? {
-  CGGradient(
-    colorsSpace: srgb,
-    colors: stops.map { $0.1 } as CFArray,
-    locations: stops.map { $0.0 }
-  )
-}
-
-/// Paints a soft radial glow: `hex` at `alpha` in the centre, fully transparent at `radius`.
-func glow(_ ctx: CGContext, center: CGPoint, radius: CGFloat, hex: UInt32, alpha: CGFloat) {
+/// Writes an image as a PNG without metadata, for the pictures published on GitHub: it keeps
+/// the critical chunks (IHDR, IDAT, IEND) and sRGB, and drops every other ancillary chunk
+/// (eXIf, pHYs, text, time).
+func writeBarePNG(_ image: CGImage, to url: URL) throws {
+  let encoded = NSMutableData()
   guard
-    let g = linearGradient([
-      (0, color(hex, alpha)), (0.55, color(hex, alpha * 0.45)), (1, color(hex, 0)),
-    ])
-  else { return }
-  ctx.drawRadialGradient(
-    g, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius, options: [])
+    let dest = CGImageDestinationCreateWithData(
+      encoded as CFMutableData, UTType.png.identifier as CFString, 1, nil)
+  else {
+    throw RenderError.destination(url.path)
+  }
+  CGImageDestinationAddImage(dest, image, nil)
+  guard CGImageDestinationFinalize(dest) else { throw RenderError.write(url.path) }
+  let bytes = [UInt8](encoded as Data)
+  let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+  guard bytes.count >= signature.count, Array(bytes[0..<signature.count]) == signature else {
+    throw RenderError.write(url.path)
+  }
+  var bare = signature
+  var offset = signature.count
+  var ended = false
+  while offset < bytes.count {
+    guard !ended, offset + 12 <= bytes.count else { throw RenderError.write(url.path) }
+    let length =
+      Int(bytes[offset]) << 24 | Int(bytes[offset + 1]) << 16 | Int(bytes[offset + 2]) << 8
+      | Int(bytes[offset + 3])
+    let end = offset + 12 + length
+    guard end <= bytes.count else { throw RenderError.write(url.path) }
+    let type = String(decoding: bytes[(offset + 4)..<(offset + 8)], as: UTF8.self)
+    // A chunk is critical when the first letter of its type is upper case.
+    if type.first?.isUppercase == true || type == "sRGB" {
+      bare += bytes[offset..<end]
+    }
+    ended = type == "IEND"
+    offset = end
+  }
+  guard ended else { throw RenderError.write(url.path) }
+  guard (try? Data(bare).write(to: url)) != nil else { throw RenderError.write(url.path) }
 }
 
 // MARK: - App icon
@@ -183,20 +205,49 @@ func renderMenuBarIcon(scale: Int) throws -> CGImage {
 
 // MARK: - Cover
 
-/// Returns the bold system font, falling back to SF Pro Display and then Helvetica Neue.
-func titleFont(size: CGFloat) -> CTFont {
-  if let ui = CTFontCreateUIFontForLanguage(.emphasizedSystem, size, nil) {
-    return ui
-  }
-  let sf = CTFontCreateWithName("SFProDisplay-Bold" as CFString, size, nil)
-  if (CTFontCopyPostScriptName(sf) as String) == "SFProDisplay-Bold" { return sf }
-  return CTFontCreateWithName("HelveticaNeue-Bold" as CFString, size, nil)
+/// Geometry and copy of cover design D (1280x640 CSS px, y-down). The PNGs render it at a scale.
+enum CoverDesign {
+  static let size = CGSize(width: 1280, height: 640)
+  static let menuBarHeight: CGFloat = 56
+  static let menuBarPadding: CGFloat = 30
+  static let menuFontSize: CGFloat = 19
+  static let menuGap: CGFloat = 28
+  static let statusGap: CGFloat = 24
+  static let menuItems = ["Finder", "File", "Edit", "View", "Go", "Window", "Help"]
+  static let clock = "Sat 15 Nov 10:42"
+  static let screenRadius: CGFloat = 34
+  static let screenColor: UInt32 = 0xF2F2F4
+  static let inkColor: UInt32 = 0x111111
+  static let contentInset: CGFloat = 96
+  static let iconColumn: CGFloat = 330
+  static let columnGap: CGFloat = 64
+  static let iconSide: CGFloat = 350
+  static let iconMarginLeft: CGFloat = -18
+  static let title = "TopNV"
+  static let tagline = [
+    "The notch disappears into a black menu bar.", "The screen gets rounded corners.",
+  ]
+  static let footnote = "Free and open source \u{00B7} macOS 14 or later"
 }
 
-/// Returns the regular system font, falling back to Helvetica Neue.
-func bodyFont(size: CGFloat) -> CTFont {
-  CTFontCreateUIFontForLanguage(.system, size, nil)
-    ?? CTFontCreateWithName("HelveticaNeue" as CFString, size, nil)
+/// CSS font weights mapped to CoreText weight traits of the system font (SF Pro).
+enum FontWeight {
+  static let regular: CGFloat = 0  // 400
+  static let medium: CGFloat = 0.23  // 500
+  static let semibold: CGFloat = 0.3  // 600
+  static let bold: CGFloat = 0.4  // 700
+  static let heavy: CGFloat = 0.56  // 800
+}
+
+/// Returns the system font (SF Pro) at `size` with a weight trait; falls back to Helvetica Neue.
+func systemFont(size: CGFloat, weight: CGFloat) -> CTFont {
+  guard let base = CTFontCreateUIFontForLanguage(.system, size, nil) else {
+    return CTFontCreateWithName("HelveticaNeue" as CFString, size, nil)
+  }
+  let attrs: [CFString: Any] = [kCTFontTraitsAttribute: [kCTFontWeightTrait: weight]]
+  let descriptor = CTFontDescriptorCreateCopyWithAttributes(
+    CTFontCopyFontDescriptor(base), attrs as CFDictionary)
+  return CTFontCreateWithFontDescriptor(descriptor, size, nil)
 }
 
 func makeLine(_ text: String, font: CTFont, color fg: CGColor, kern: CGFloat = 0) -> CTLine {
@@ -213,88 +264,142 @@ func lineWidth(_ line: CTLine) -> CGFloat {
   CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
 }
 
-/// Builds a line at `size`, shrinking the font until the line fits in `maxWidth`.
-func fittedLine(
-  _ text: String, size: CGFloat, maxWidth: CGFloat, color fg: CGColor, kern: CGFloat = 0,
-  font: (CGFloat) -> CTFont
-) -> (CTLine, CGFloat) {
-  var current = size
-  var line = makeLine(text, font: font(current), color: fg, kern: kern)
-  while lineWidth(line) > maxWidth && current > 8 {
-    current -= 1
-    line = makeLine(text, font: font(current), color: fg, kern: kern * current / size)
-  }
-  return (line, current)
+/// Offset from the top of a CSS line box of height `lineHeight` to the baseline of `font`.
+func baselineOffset(_ font: CTFont, lineHeight: CGFloat) -> CGFloat {
+  let ascent = CTFontGetAscent(font)
+  let content = ascent + CTFontGetDescent(font)
+  return (lineHeight - content) / 2 + ascent
 }
 
-func renderCover(icon: CGImage) throws -> CGImage {
-  let width = 1280
-  let height = 640
+/// CSS `line-height: normal` of `font`.
+func normalLineHeight(_ font: CTFont) -> CGFloat {
+  CTFontGetAscent(font) + CTFontGetDescent(font) + CTFontGetLeading(font)
+}
+
+/// Draws a line with its baseline at `origin` in a y-down context whose text matrix is flipped.
+func drawLine(_ ctx: CGContext, _ line: CTLine, at origin: CGPoint) {
+  ctx.textPosition = origin
+  CTLineDraw(line, ctx)
+}
+
+/// Draws an image upright into `rect` of a y-down context.
+func drawImage(_ ctx: CGContext, _ image: CGImage, in rect: CGRect) {
+  ctx.saveGState()
+  ctx.translateBy(x: rect.minX, y: rect.maxY)
+  ctx.scaleBy(x: 1, y: -1)
+  ctx.draw(image, in: CGRect(origin: .zero, size: rect.size))
+  ctx.restoreGState()
+}
+
+/// Renders cover design D: a black macOS menu bar over a light screen with four rounded corners.
+/// `icon` is the 1024px app icon (AppIcon.iconset/icon_512x512@2x.png); the menu bar shows the
+/// MenuBarIcon template at the same scale. `scale` 2 gives 2560x1280.
+func renderCover(icon: CGImage, scale: Int) throws -> CGImage {
+  typealias D = CoverDesign
+  let s = CGFloat(scale)
+  let width = Int(D.size.width) * scale
+  let height = Int(D.size.height) * scale
   let ctx = try makeContext(width: width, height: height)
-  let W = CGFloat(width)
-  let H = CGFloat(height)
-  // y-up space here: CoreText draws upright without extra flips.
+  flipToTopLeft(ctx, height: height)
+  ctx.scaleBy(x: s, y: s)
+  ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)  // upright glyphs in the y-down space
 
-  if let bg = linearGradient([(0, color(0x101010)), (0.55, color(0x161616)), (1, color(0x1B1B1B))])
-  {
-    ctx.drawLinearGradient(bg, start: CGPoint(x: 0, y: H), end: CGPoint(x: W, y: 0), options: [])
+  let W = D.size.width
+  let H = D.size.height
+  ctx.setFillColor(color(0x000000))
+  ctx.fill(CGRect(x: 0, y: 0, width: W, height: H))
+
+  // Menu bar: Finder menus on the left; TopNV's menu bar icon, battery and clock on the right.
+  let barMid = D.menuBarHeight / 2
+  let white = color(0xFFFFFF)
+  let menuRegular = systemFont(size: D.menuFontSize, weight: FontWeight.regular)
+  let menuBold = systemFont(size: D.menuFontSize, weight: FontWeight.bold)
+  func menuBaseline(_ font: CTFont) -> CGFloat {
+    barMid - normalLineHeight(font) / 2 + baselineOffset(font, lineHeight: normalLineHeight(font))
   }
-  let iconSide: CGFloat = 440  // body of the icon is ~354 px
-  let iconRect = CGRect(x: 78, y: (H - iconSide) / 2 - 6, width: iconSide, height: iconSide)
-  glow(
-    ctx, center: CGPoint(x: iconRect.midX, y: iconRect.midY), radius: 360, hex: 0xFFFFFF,
-    alpha: 0.10)
-
-  ctx.interpolationQuality = .high
-  ctx.draw(icon, in: iconRect)
-
-  // Text block on the right.
-  let textX: CGFloat = 590
-  let maxWidth = W - textX - 96
-  let (title, _) = fittedLine(
-    "TopNV", size: 132, maxWidth: maxWidth, color: color(0xFFFFFF), kern: -2.5, font: titleFont)
-  let (tag1, tagSize) = fittedLine(
-    "Hide the notch.", size: 44, maxWidth: maxWidth, color: color(0xEEEEEE, 0.95), font: bodyFont)
-  let (tag2, _) = fittedLine(
-    "Keep your wallpaper.", size: tagSize, maxWidth: maxWidth, color: color(0xEEEEEE, 0.95),
-    font: bodyFont)
-  let (small, _) = fittedLine(
-    "Black menu bar \u{00B7} rounded corners \u{00B7} animated wallpapers",
-    size: 24, maxWidth: maxWidth, color: color(0xA7A7A7), font: bodyFont)
-
-  func metrics(_ line: CTLine) -> (ascent: CGFloat, descent: CGFloat) {
-    var a: CGFloat = 0
-    var d: CGFloat = 0
-    var l: CGFloat = 0
-    _ = CTLineGetTypographicBounds(line, &a, &d, &l)
-    return (a, d)
+  var x = D.menuBarPadding
+  for (index, item) in D.menuItems.enumerated() {
+    let font = index == 0 ? menuBold : menuRegular
+    let line = makeLine(item, font: font, color: white)
+    drawLine(ctx, line, at: CGPoint(x: x, y: menuBaseline(font)))
+    x += lineWidth(line) + D.menuGap
   }
-  let mt = metrics(title)
-  let m1 = metrics(tag1)
-  let ms = metrics(small)
-  let gapTitle: CGFloat = 26
-  let tagLeading: CGFloat = tagSize * 1.25
-  let gapSmall: CGFloat = 34
-  let blockHeight =
-    mt.ascent + mt.descent + gapTitle + m1.ascent + tagLeading + m1.descent + gapSmall + ms.ascent
-    + ms.descent
-  var y = (H + blockHeight) / 2 - mt.ascent  // baseline of the title
-  let centerY = iconRect.midY
-  y += centerY - H / 2
 
-  ctx.textPosition = CGPoint(x: textX - 4, y: y)
-  CTLineDraw(title, ctx)
-  y -= mt.descent + gapTitle + m1.ascent
-  ctx.textPosition = CGPoint(x: textX, y: y)
-  CTLineDraw(tag1, ctx)
-  y -= tagLeading
-  ctx.textPosition = CGPoint(x: textX, y: y)
-  CTLineDraw(tag2, ctx)
-  y -= m1.descent + gapSmall + ms.ascent
-  ctx.textPosition = CGPoint(x: textX, y: y)
-  CTLineDraw(small, ctx)
+  let clock = makeLine(D.clock, font: menuRegular, color: white)
+  let clockX = W - D.menuBarPadding - lineWidth(clock)
+  drawLine(ctx, clock, at: CGPoint(x: clockX, y: menuBaseline(menuRegular)))
 
-  guard let image = ctx.makeImage() else { throw RenderError.image("cover") }
+  let battery = CGRect(x: clockX - D.statusGap - 28, y: barMid - 7, width: 28, height: 14)
+  ctx.setStrokeColor(white)
+  ctx.setLineWidth(2)
+  ctx.addPath(
+    CGPath(
+      roundedRect: battery.insetBy(dx: 1, dy: 1), cornerWidth: 3, cornerHeight: 3, transform: nil))
+  ctx.strokePath()
+
+  // TopNV's own menu bar template (MenuBarIcon.png / @2x), 18 pt, filled white like the text.
+  let statusIconSide: CGFloat = 18
+  let template = try renderMenuBarIcon(scale: scale)
+  let statusRect = CGRect(
+    x: battery.minX - D.statusGap - statusIconSide, y: barMid - statusIconSide / 2,
+    width: statusIconSide, height: statusIconSide)
+  ctx.saveGState()
+  ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+  drawImage(ctx, template, in: statusRect)
+  ctx.setBlendMode(.sourceIn)  // keep the template's alpha, replace its colour
+  ctx.setFillColor(white)
+  ctx.fill(statusRect)
+  ctx.endTransparencyLayer()
+  ctx.restoreGState()
+
+  // Screen: light panel under the bar, all four corners rounded.
+  let screen = CGRect(x: 0, y: D.menuBarHeight, width: W, height: H - D.menuBarHeight)
+  ctx.setFillColor(color(D.screenColor))
+  ctx.addPath(
+    CGPath(
+      roundedRect: screen, cornerWidth: D.screenRadius, cornerHeight: D.screenRadius,
+      transform: nil))
+  ctx.fillPath()
+
+  // App icon, vertically centred, with drop-shadow(0 26px 36px rgba(0,0,0,0.18)).
+  let iconRect = CGRect(
+    x: D.contentInset + D.iconMarginLeft, y: screen.midY - D.iconSide / 2,
+    width: D.iconSide, height: D.iconSide)
+  ctx.saveGState()
+  // Shadow parameters live in device space (y-up, unscaled).
+  ctx.setShadow(offset: CGSize(width: 0, height: -26 * s), blur: 36 * s, color: color(0, 0.18))
+  drawImage(ctx, icon, in: iconRect)
+  ctx.restoreGState()
+
+  // Text column: title, two-line tagline, footnote; 22px gaps, vertically centred.
+  let ink = color(D.inkColor)
+  let textX = D.contentInset + D.iconColumn + D.columnGap
+  let titleFont = systemFont(size: 136, weight: FontWeight.heavy)
+  let tagFont = systemFont(size: 34, weight: FontWeight.semibold)
+  let footFont = systemFont(size: 22, weight: FontWeight.medium)
+  let titleLH: CGFloat = 136 * 0.9
+  let tagLH: CGFloat = 34 * 1.25
+  let footLH = normalLineHeight(footFont)
+  let gap: CGFloat = 22
+  let blockHeight = titleLH + gap + tagLH * CGFloat(D.tagline.count) + gap + footLH
+  var top = screen.midY - blockHeight / 2
+
+  drawLine(
+    ctx, makeLine(D.title, font: titleFont, color: ink, kern: -5),
+    at: CGPoint(x: textX, y: top + baselineOffset(titleFont, lineHeight: titleLH)))
+  top += titleLH + gap
+  for text in D.tagline {
+    drawLine(
+      ctx, makeLine(text, font: tagFont, color: ink),
+      at: CGPoint(x: textX, y: top + baselineOffset(tagFont, lineHeight: tagLH)))
+    top += tagLH
+  }
+  top += gap
+  drawLine(
+    ctx, makeLine(D.footnote, font: footFont, color: color(D.inkColor, 0.6)),
+    at: CGPoint(x: textX, y: top + baselineOffset(footFont, lineHeight: footLH)))
+
+  guard let image = ctx.makeImage() else { throw RenderError.image("cover @\(scale)x") }
   return image
 }
 
@@ -349,8 +454,14 @@ func run() throws {
     try renderMenuBarIcon(scale: 2), to: out.appendingPathComponent("MenuBarIcon@2x.png"), dpi: 144)
   print("wrote MenuBarIcon.png (18px), MenuBarIcon@2x.png (36px)")
 
-  try writePNG(try renderCover(icon: try icon(1024)), to: out.appendingPathComponent("cover.png"))
-  print("wrote cover.png (1280x640)")
+  // The cover uses the 1024px icon, the same image written as icon_512x512@2x.png.
+  try writeBarePNG(
+    try renderCover(icon: try icon(1024), scale: 2), to: out.appendingPathComponent("cover.png"))
+  print("wrote cover.png (2560x1280, README cover)")
+  try writeBarePNG(
+    try renderCover(icon: try icon(1024), scale: 1),
+    to: out.appendingPathComponent("social-preview.png"))
+  print("wrote social-preview.png (1280x640, GitHub social preview)")
 }
 
 do {

@@ -51,7 +51,8 @@ def run_tests(kind):
             for value in (b'', b'!', base64.b64encode(bytes(31)), base64.b64encode(bytes(33)), b' ' + original):
                 public.write_bytes(value); rejected()
             public.unlink(); rejected(); public.write_bytes(original)
-            for name in ('LICENSE', 'Licenses/Sparkle.txt'):
+            for name in ('LICENSE', 'Licenses/Sparkle.txt', 'Assets/Fonts/PlusJakartaSans-OFL.txt',
+                         'Assets/Fonts/PlusJakartaSans-SemiBold.ttf', 'Assets/GitHubMark.pdf'):
                 path = root / name; saved = path.read_bytes()
                 path.write_bytes(saved + b'!'); rejected()
                 path.unlink(); rejected(); path.write_bytes(saved)
@@ -79,6 +80,12 @@ def run_tests(kind):
                 name = language + '.lproj/Localizable.strings'
                 assert (app / 'Contents/Resources' / name).read_bytes() == (root / 'Localization' / name).read_bytes(), name
             assert (app / 'Contents/Resources/it.lproj/AppleStyleUpdateDriver.strings').read_bytes() == extra.read_bytes()
+            # The About font with its license, and the vector GitHub mark, land in Resources.
+            for source, bundled in [('Assets/Fonts/PlusJakartaSans-SemiBold.ttf', 'PlusJakartaSans-SemiBold.ttf'),
+                                    ('Assets/Fonts/PlusJakartaSans-OFL.txt', 'Licenses/PlusJakartaSans-OFL.txt'),
+                                    ('Assets/GitHubMark.pdf', 'GitHubMark.pdf')]:
+                assert (app / 'Contents/Resources' / bundled).read_bytes() == (REPO / source).read_bytes(), bundled
+            assert not list((app / 'Contents/Resources').glob('GitHubMark*.png'))
             # The update window's own tables from the repository land beside Localizable.strings.
             for language in LANGUAGES:
                 name = language + '.lproj/AppleStyleUpdateDriver.strings'
@@ -128,7 +135,7 @@ def run_tests(kind):
             assert calls == [['--force', '--sign', identity, '--timestamp=none', str(probe)]], calls
             assert sentinel.read_text() == 'original' and sorted(p.name for p in app.iterdir()) == ['sentinel']
             assert not probe.exists()
-            print('PASS bundle input matrix; rejected inputs preserve original app; languages bundled; signing order')
+            print('PASS bundle input matrix; rejected inputs preserve original app; languages, About font and mark bundled; signing order')
             return
         # Platform operations are replaced at the command boundary; plist and filesystem checks are real.
         bindir = root / 'bin'; bindir.mkdir()
@@ -145,6 +152,9 @@ def run_tests(kind):
         licenses = contents / 'Resources/Licenses'; licenses.mkdir(parents=True)
         shutil.copy(root / 'LICENSE', licenses / 'TopNV.txt')
         shutil.copy(root / 'Licenses/Sparkle.txt', licenses / 'Sparkle.txt')
+        shutil.copy(root / 'Assets/Fonts/PlusJakartaSans-OFL.txt', licenses / 'PlusJakartaSans-OFL.txt')
+        shutil.copy(root / 'Assets/Fonts/PlusJakartaSans-SemiBold.ttf', contents / 'Resources/PlusJakartaSans-SemiBold.ttf')
+        shutil.copy(root / 'Assets/GitHubMark.pdf', contents / 'Resources/GitHubMark.pdf')
         framework = contents / 'Frameworks/Sparkle.framework'; version = framework / 'Versions/B'; version.mkdir(parents=True)
         (framework / 'Versions/Current').symlink_to('B')
         for name in ('Sparkle', 'Autoupdate', 'Updater.app', 'XPCServices', 'Resources', 'Headers', 'Modules', 'PrivateHeaders'):
@@ -205,8 +215,13 @@ def run_tests(kind):
             p.unlink(); p.symlink_to('missing'); verify('V6'); p.unlink(); p.symlink_to(dest)
         fplist.write_bytes(plistlib.dumps({'CFBundleShortVersionString': '0'})); verify('V5')
         fplist.write_bytes(plistlib.dumps({'CFBundleShortVersionString': '2.10.1'}))
-        for name,code in [('TopNV.txt','V12'),('Sparkle.txt','V11')]:
+        for name,code in [('TopNV.txt','V12'),('Sparkle.txt','V11'),('PlusJakartaSans-OFL.txt','V17')]:
             p=licenses/name; old=p.read_bytes(); p.write_bytes(b'changed'); verify(code); p.write_bytes(old)
+            p.unlink(); verify(code); p.write_bytes(old)
+        font = contents / 'Resources/PlusJakartaSans-SemiBold.ttf'; old = font.read_bytes()
+        font.write_bytes(old + b'!'); verify('V16'); font.unlink(); verify('V16'); font.write_bytes(old); verify()
+        mark = contents / 'Resources/GitHubMark.pdf'; old = mark.read_bytes()
+        mark.write_bytes(old + b'!'); verify('V18'); mark.unlink(); verify('V18'); mark.write_bytes(old); verify()
         for name, script, code in [('otool','exit 0','V7'),('codesign','exit 1','V8'),('codesign','echo "flags=0x10000(runtime)" >&2','V9'),('lipo','echo arm64','V10'),('plutil','exit 1','V0')]:
             (bindir/name).write_text('#!/bin/bash\n'+script+'\n'); verify(code)
             (bindir/name).write_text('#!/bin/bash\n'+responses[name]+'\n')
@@ -264,6 +279,6 @@ def run_tests(kind):
         # Ad hoc mode never accepts a Developer ID signature, and never looks at the components.
         signed(); env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'; verify('V9')
         (bindir/'codesign').write_text('#!/bin/bash\n'+responses['codesign']+'\n')
-        verify(); print('PASS verifier V0-V15 mutations; signature modes')
+        verify(); print('PASS verifier V0-V18 mutations; signature modes')
 
 run_tests(sys.argv[1])

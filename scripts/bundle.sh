@@ -70,9 +70,10 @@ mkdir -p "$APP_DIR/Contents/Frameworks" "$APP_DIR/Contents/Resources/Licenses"
 cp -R "$FRAMEWORK" "$APP_DIR/Contents/Frameworks/"
 cp "$ROOT/Licenses/Sparkle.txt" "$APP_DIR/Contents/Resources/Licenses/Sparkle.txt"
 cp "$ROOT/LICENSE" "$APP_DIR/Contents/Resources/Licenses/TopNV.txt"
+cp "$ROOT/Assets/Fonts/PlusJakartaSans-OFL.txt" "$APP_DIR/Contents/Resources/Licenses/PlusJakartaSans-OFL.txt"
 cp "$EXECUTABLE" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "$ROOT/Assets/AppIcon.icns" "$ROOT/Assets/MenuBarIcon.png" "$ROOT/Assets/MenuBarIcon@2x.png" \
-  "$ROOT/Assets/GitHubMark.png" "$ROOT/Assets/GitHubMark@2x.png" \
+  "$ROOT/Assets/GitHubMark.pdf" "$ROOT/Assets/Fonts/PlusJakartaSans-SemiBold.ttf" \
   "$APP_DIR/Contents/Resources/"
 # Whole folders: a language may carry more tables than Localizable.strings.
 for language in "${LANGUAGES[@]}"; do

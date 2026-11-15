@@ -11,6 +11,9 @@ public enum ScreenCorner: String, CaseIterable, Sendable {
 /// Pure geometry for the overlay windows. All inputs and outputs are in global AppKit
 /// screen coordinates, so the functions can be tested without a window server.
 public enum ScreenGeometry {
+  /// The corner radius, in points. It is fixed: the app has no setting for it.
+  public static let cornerRadius: CGFloat = 15
+
   /// A screen has a notch (camera housing) when the system reports a non-zero top safe-area inset.
   public static func isNotched(safeAreaTop: CGFloat) -> Bool {
     safeAreaTop > 0

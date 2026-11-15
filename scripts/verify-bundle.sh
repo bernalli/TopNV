@@ -91,5 +91,5 @@ if [[ ${TOPNV_EXPECT_UNIVERSAL-0} == 1 ]]; then
     [[ " $ARCHS " == *' arm64 '* && " $ARCHS " == *' x86_64 '* ]] || fail 'V10: missing universal slices'
   done
 fi
-[[ $failed == 0 ]] && echo 'V0-V15: passed'
+[[ $failed == 0 ]] && echo 'V0-V18: passed'
 exit "$failed"

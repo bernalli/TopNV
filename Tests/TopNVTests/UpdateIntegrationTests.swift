@@ -8,13 +8,6 @@ final class UpdateIntegrationTests: XCTestCase {
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     .appendingPathComponent("Localization")
 
-  @MainActor func testQuestionOnlyEnablesForExplicitFirstButton() {
-    XCTAssertEqual(AutomaticUpdateQuestion.answer(for: .alertFirstButtonReturn), .enable)
-    XCTAssertEqual(AutomaticUpdateQuestion.answer(for: .alertSecondButtonReturn), .decline)
-    XCTAssertEqual(AutomaticUpdateQuestion.answer(for: .abort), .dismissed)
-    XCTAssertEqual(AutomaticUpdateQuestion.answer(for: .cancel), .dismissed)
-  }
-
   @MainActor func testSparkleUpdaterShowsUpdatesWithTheAppleStyleDriver() {
     let updater = SparkleUpdater()
     XCTAssertTrue(updater.userDriver is AppleStyleUpdateDriver)

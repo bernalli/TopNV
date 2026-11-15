@@ -1,7 +1,8 @@
 import Combine
 import Foundation
 
-/// Only visibility invalidates the menu bar scene; display and login settings stay in its content.
+/// Whether the menu bar icon is shown: the Hide Menu Bar Icon switch, or the user removing the
+/// icon with Command-drag. Reopening the app shows it again.
 @MainActor
 public final class MenuVisibility: ObservableObject {
   @Published public private(set) var isVisible: Bool
@@ -22,8 +23,8 @@ public final class MenuVisibility: ObservableObject {
     isVisible = defaults.object(forKey: key) as? Bool ?? true
   }
 
-  /// SwiftUI can write isInserted back during a scene update. Defer publication to avoid
-  /// re-entering that update; a newer request or explicit reopen supersedes pending work.
+  /// AppKit reports a removed status item while it updates the menu bar. Defer publication to
+  /// avoid re-entering that update; a newer request or explicit reopen supersedes pending work.
   public func requestMenuVisible(_ visible: Bool) {
     generation &+= 1
     let requestedGeneration = generation

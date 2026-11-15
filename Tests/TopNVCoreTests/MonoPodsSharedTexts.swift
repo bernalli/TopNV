@@ -1,12 +1,13 @@
 // swiftlint:disable line_length - one entry per line, as in the tables
-/// The shared texts of MonoPods (its Localizable.strings at 0ade59b), by language and key.
-/// TopNV must show the same translation for every shared key.
+/// The shared texts of MonoPods (its Localizable.strings at fb3070e), by language and key.
+/// TopNV must show the same translation for every shared key. The About window texts are not
+/// here: the About window is English in every language.
 let monoPodsSharedTexts: [String: [String: String]] = [
   "en": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ can check for new versions once a day. You can change this at any time in Options.",
     "About %@": "About %@",
+    "Applies from the next login.": "Applies from the next login.",
     "Automatic Updates": "Automatic Updates",
-    "Buy Me a Coffee": "Buy Me a Coffee",
     "Check Automatically": "Check Automatically",
     "Check for Updates Automatically?": "Check for Updates Automatically?",
     "Check for Updates…": "Check for Updates…",
@@ -19,16 +20,13 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "Quit %@",
     "Report an Issue…": "Report an Issue…",
     "Version %@": "Version %@",
-    "Version %@ (%@)": "Version %@ (%@)",
-    "Version Unavailable": "Version Unavailable",
-    "Version Unavailable (Build %@)": "Version Unavailable (Build %@)",
-    "View %@ on GitHub": "View %@ on GitHub"
+    "Version Unavailable": "Version Unavailable"
   ],
   "it": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ può verificare una volta al giorno se ci sono nuove versioni. Puoi modificare questa scelta in qualsiasi momento in Opzioni.",
     "About %@": "Informazioni su %@",
+    "Applies from the next login.": "Effettivo dal prossimo login.",
     "Automatic Updates": "Aggiornamenti automatici",
-    "Buy Me a Coffee": "Offrimi un caffè",
     "Check Automatically": "Verifica automaticamente",
     "Check for Updates Automatically?": "Verificare automaticamente gli aggiornamenti?",
     "Check for Updates…": "Verifica aggiornamenti…",
@@ -41,16 +39,13 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "Esci da %@",
     "Report an Issue…": "Segnala un problema…",
     "Version %@": "Versione %@",
-    "Version %@ (%@)": "Versione %@ (%@)",
-    "Version Unavailable": "Versione non disponibile",
-    "Version Unavailable (Build %@)": "Versione non disponibile (build %@)",
-    "View %@ on GitHub": "Vedi %@ su GitHub"
+    "Version Unavailable": "Versione non disponibile"
   ],
   "es": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ puede buscar nuevas versiones una vez al día. Puedes cambiarlo en cualquier momento en Opciones.",
     "About %@": "Acerca de %@",
+    "Applies from the next login.": "Se aplicará en el próximo inicio de sesión.",
     "Automatic Updates": "Actualizaciones automáticas",
-    "Buy Me a Coffee": "Invítame a un café",
     "Check Automatically": "Buscar automáticamente",
     "Check for Updates Automatically?": "¿Buscar actualizaciones automáticamente?",
     "Check for Updates…": "Buscar actualizaciones…",
@@ -63,38 +58,32 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "Salir de %@",
     "Report an Issue…": "Informar de un problema…",
     "Version %@": "Versión %@",
-    "Version %@ (%@)": "Versión %@ (%@)",
-    "Version Unavailable": "Versión no disponible",
-    "Version Unavailable (Build %@)": "Versión no disponible (compilación %@)",
-    "View %@ on GitHub": "Ver %@ en GitHub"
+    "Version Unavailable": "Versión no disponible"
   ],
   "fr": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ peut rechercher de nouvelles versions une fois par jour. Vous pouvez modifier ce réglage à tout moment dans Options.",
     "About %@": "À propos de %@",
+    "Applies from the next login.": "S’appliquera à la prochaine ouverture de session.",
     "Automatic Updates": "Mises à jour automatiques",
-    "Buy Me a Coffee": "Offrez-moi un café",
     "Check Automatically": "Rechercher automatiquement",
     "Check for Updates Automatically?": "Rechercher automatiquement les mises à jour ?",
     "Check for Updates…": "Rechercher les mises à jour…",
     "Details": "Détails",
     "Don't Check": "Ne pas rechercher",
     "Hide Menu Bar Icon": "Masquer l’icône de la barre des menus",
-    "Launch at Login": "Ouvrir à la connexion",
+    "Launch at Login": "Ouvrir avec la session",
     "Open %@ again to bring it back.": "Rouvrez %@ pour la faire réapparaître.",
     "Options": "Options",
     "Quit %@": "Quitter %@",
     "Report an Issue…": "Signaler un problème…",
     "Version %@": "Version %@",
-    "Version %@ (%@)": "Version %@ (%@)",
-    "Version Unavailable": "Version indisponible",
-    "Version Unavailable (Build %@)": "Version indisponible (build %@)",
-    "View %@ on GitHub": "Voir %@ sur GitHub"
+    "Version Unavailable": "Version indisponible"
   ],
   "de": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ kann einmal täglich nach neuen Versionen suchen. Du kannst dies jederzeit in „Optionen“ ändern.",
     "About %@": "Über %@",
+    "Applies from the next login.": "Gilt ab der nächsten Anmeldung.",
     "Automatic Updates": "Automatische Updates",
-    "Buy Me a Coffee": "Spendier mir einen Kaffee",
     "Check Automatically": "Automatisch suchen",
     "Check for Updates Automatically?": "Automatisch nach Updates suchen?",
     "Check for Updates…": "Nach Updates suchen …",
@@ -107,16 +96,13 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "%@ beenden",
     "Report an Issue…": "Problem melden …",
     "Version %@": "Version %@",
-    "Version %@ (%@)": "Version %@ (%@)",
-    "Version Unavailable": "Version nicht verfügbar",
-    "Version Unavailable (Build %@)": "Version nicht verfügbar (Build %@)",
-    "View %@ on GitHub": "%@ auf GitHub ansehen"
+    "Version Unavailable": "Version nicht verfügbar"
   ],
   "pt-BR": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "O %@ pode buscar novas versões uma vez por dia. Você pode alterar isso a qualquer momento em Opções.",
     "About %@": "Sobre o %@",
+    "Applies from the next login.": "Será aplicado no próximo início de sessão.",
     "Automatic Updates": "Atualizações Automáticas",
-    "Buy Me a Coffee": "Me pague um café",
     "Check Automatically": "Buscar Automaticamente",
     "Check for Updates Automatically?": "Buscar Atualizações Automaticamente?",
     "Check for Updates…": "Buscar Atualizações…",
@@ -129,54 +115,45 @@ let monoPodsSharedTexts: [String: [String: String]] = [
     "Quit %@": "Encerrar o %@",
     "Report an Issue…": "Relatar um problema…",
     "Version %@": "Versão %@",
-    "Version %@ (%@)": "Versão %@ (%@)",
-    "Version Unavailable": "Versão indisponível",
-    "Version Unavailable (Build %@)": "Versão indisponível (compilação %@)",
-    "View %@ on GitHub": "Ver o %@ no GitHub"
+    "Version Unavailable": "Versão indisponível"
   ],
   "ja": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@は1日に1回、新しいバージョンを確認できます。この設定は“オプション”でいつでも変更できます。",
     "About %@": "%@について",
+    "Applies from the next login.": "次回のログインから適用されます。",
     "Automatic Updates": "自動アップデート",
-    "Buy Me a Coffee": "コーヒーをおごる",
     "Check Automatically": "自動的に確認",
     "Check for Updates Automatically?": "アップデートを自動的に確認しますか？",
     "Check for Updates…": "アップデートを確認…",
     "Details": "詳細",
     "Don't Check": "確認しない",
     "Hide Menu Bar Icon": "メニューバーのアイコンを非表示",
-    "Launch at Login": "ログイン時に起動",
+    "Launch at Login": "ログイン時に開く",
     "Open %@ again to bring it back.": "もう一度表示するには、%@を再度開いてください。",
     "Options": "オプション",
     "Quit %@": "%@を終了",
     "Report an Issue…": "問題を報告…",
     "Version %@": "バージョン %@",
-    "Version %@ (%@)": "バージョン %@（%@）",
-    "Version Unavailable": "バージョン不明",
-    "Version Unavailable (Build %@)": "バージョン不明（ビルド %@）",
-    "View %@ on GitHub": "GitHubで%@を表示"
+    "Version Unavailable": "バージョン不明"
   ],
   "zh-Hans": [
     "%@ can check for new versions once a day. You can change this at any time in Options.": "%@ 每天可以检查一次新版本。你可以随时在“选项”中更改此设置。",
     "About %@": "关于 %@",
+    "Applies from the next login.": "将从下次登录起生效。",
     "Automatic Updates": "自动更新",
-    "Buy Me a Coffee": "请我喝杯咖啡",
     "Check Automatically": "自动检查",
     "Check for Updates Automatically?": "要自动检查更新吗？",
     "Check for Updates…": "检查更新…",
     "Details": "详细信息",
     "Don't Check": "不检查",
     "Hide Menu Bar Icon": "隐藏菜单栏图标",
-    "Launch at Login": "登录时启动",
+    "Launch at Login": "登录时打开",
     "Open %@ again to bring it back.": "再次打开 %@ 即可重新显示。",
     "Options": "选项",
     "Quit %@": "退出 %@",
     "Report an Issue…": "报告问题…",
     "Version %@": "版本 %@",
-    "Version %@ (%@)": "版本 %@（%@）",
-    "Version Unavailable": "版本不可用",
-    "Version Unavailable (Build %@)": "版本不可用（构建版本 %@）",
-    "View %@ on GitHub": "在 GitHub 上查看 %@"
+    "Version Unavailable": "版本不可用"
   ]
 ]
 // swiftlint:enable line_length

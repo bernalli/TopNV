@@ -1,17 +1,16 @@
 import Foundation
 
+/// The version line of the menu and of the About window. The build number is never shown;
+/// CFBundleVersion stays in Info.plist, where Sparkle reads it.
 public struct AppVersion {
   public let title: String
 
-  public init(shortVersion: String?, build: String?, localizer: Localizer = .main) {
-    let version = Self.nonblank(shortVersion)
-    let build = Self.nonblank(build)
-    switch (version, build) {
-    case (.some(let version), .some(let build)): title = localizer(.versionWithBuild, version, build)
-    case (.some(let version), .none): title = localizer(.version, version)
-    case (.none, .some(let build)): title = localizer(.versionUnavailableWithBuild, build)
-    case (.none, .none): title = localizer(.versionUnavailable)
+  public init(shortVersion: String?, localizer: Localizer = .main) {
+    guard let version = Self.nonblank(shortVersion) else {
+      title = localizer(.versionUnavailable)
+      return
     }
+    title = localizer(.version, version)
   }
 
   private static func nonblank(_ value: String?) -> String? {
