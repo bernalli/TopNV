@@ -97,6 +97,46 @@ func writePNG(_ image: CGImage, to url: URL, dpi: Int = 72) throws {
   guard CGImageDestinationFinalize(dest) else { throw RenderError.write(url.path) }
 }
 
+/// Writes an image as a PNG without metadata, for the pictures published on GitHub: it keeps
+/// the critical chunks (IHDR, IDAT, IEND) and sRGB, and drops every other ancillary chunk
+/// (eXIf, pHYs, text, time).
+func writeBarePNG(_ image: CGImage, to url: URL) throws {
+  let encoded = NSMutableData()
+  guard
+    let dest = CGImageDestinationCreateWithData(
+      encoded as CFMutableData, UTType.png.identifier as CFString, 1, nil)
+  else {
+    throw RenderError.destination(url.path)
+  }
+  CGImageDestinationAddImage(dest, image, nil)
+  guard CGImageDestinationFinalize(dest) else { throw RenderError.write(url.path) }
+  let bytes = [UInt8](encoded as Data)
+  let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+  guard bytes.count >= signature.count, Array(bytes[0..<signature.count]) == signature else {
+    throw RenderError.write(url.path)
+  }
+  var bare = signature
+  var offset = signature.count
+  var ended = false
+  while offset < bytes.count {
+    guard !ended, offset + 12 <= bytes.count else { throw RenderError.write(url.path) }
+    let length =
+      Int(bytes[offset]) << 24 | Int(bytes[offset + 1]) << 16 | Int(bytes[offset + 2]) << 8
+      | Int(bytes[offset + 3])
+    let end = offset + 12 + length
+    guard end <= bytes.count else { throw RenderError.write(url.path) }
+    let type = String(decoding: bytes[(offset + 4)..<(offset + 8)], as: UTF8.self)
+    // A chunk is critical when the first letter of its type is upper case.
+    if type.first?.isUppercase == true || type == "sRGB" {
+      bare += bytes[offset..<end]
+    }
+    ended = type == "IEND"
+    offset = end
+  }
+  guard ended else { throw RenderError.write(url.path) }
+  guard (try? Data(bare).write(to: url)) != nil else { throw RenderError.write(url.path) }
+}
+
 // MARK: - App icon
 
 /// Loads the full-canvas Icon Composer render before writing any output.
@@ -415,13 +455,12 @@ func run() throws {
   print("wrote MenuBarIcon.png (18px), MenuBarIcon@2x.png (36px)")
 
   // The cover uses the 1024px icon, the same image written as icon_512x512@2x.png.
-  try writePNG(
-    try renderCover(icon: try icon(1024), scale: 2), to: out.appendingPathComponent("cover.png"),
-    dpi: 144)
+  try writeBarePNG(
+    try renderCover(icon: try icon(1024), scale: 2), to: out.appendingPathComponent("cover.png"))
   print("wrote cover.png (2560x1280, README cover)")
-  try writePNG(
+  try writeBarePNG(
     try renderCover(icon: try icon(1024), scale: 1),
-    to: out.appendingPathComponent("social-preview.png"), dpi: 72)
+    to: out.appendingPathComponent("social-preview.png"))
   print("wrote social-preview.png (1280x640, GitHub social preview)")
 }
 
