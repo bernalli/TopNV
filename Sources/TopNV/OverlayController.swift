@@ -128,6 +128,9 @@ final class OverlayController: NSObject {
       }
     }
 
+    // A Space switch is not a topology change for the corners either: a screen that is missing
+    // from the list at that moment keeps its corners until a screen or settings event.
+    guard event != .spaceChanged else { return }
     for key in windows.keys where !desiredKeys.contains(key) {
       windows[key]?.orderOut(nil)
       windows[key]?.close()
