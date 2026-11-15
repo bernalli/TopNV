@@ -13,9 +13,13 @@ EXPECTED = {
     "Sources/TopNV/AboutTitleFont.swift":
         "2f5d9ad11f78953ff4fb76929d1b71b42d0c61a93489d4f64eb00759c7aafc27",
     "Sources/TopNV/AboutView.swift":
-        "5147c6a2346d4d5616dc89d6956168b8eb3eb894655b858c70c2310ef5d2098e",
+        "9bc2c6765ecc88ddcc7c78812d169ab24dd7bc44318b080d531a66b678a76286",
     "Sources/TopNV/AboutWindowController.swift":
         "12625a3cb72d7ae1aa04d581ffcf4a628e848ea0a8b70e797572987caa0ec932",
+    # Not matched by the About* globs below, so listed here: the sponsor
+    # button style, MonoPods' CoffeeButtonStyle.swift at d5517ff verbatim.
+    "Sources/TopNV/CoffeeButtonStyle.swift":
+        "be5c7fe2991986468abadd9ac1696b4d10be8200c4e4e504ed74997d3c67a741",
     "Sources/TopNVCore/AboutInformation.swift":
         "718a46794d2c9c649705b3ae6a9e679ebb72ea339872ae5e3b0cb8d0a20f4710",
     "Sources/TopNVCore/AboutText.swift":

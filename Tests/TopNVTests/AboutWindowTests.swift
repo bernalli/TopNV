@@ -14,9 +14,11 @@ final class AboutWindowTests: XCTestCase {
   nonisolated private static let repository = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
   nonisolated private static let assets = repository.appendingPathComponent("Assets")
-  nonisolated private static let wordmark = assets.appendingPathComponent("Fonts/PlusJakartaSans-SemiBold.ttf")
+  nonisolated private static let wordmark = assets.appendingPathComponent(
+    "Fonts/PlusJakartaSans-SemiBold.ttf")
   nonisolated private static let gitHubMark = assets.appendingPathComponent("GitHubMark.pdf")
-  nonisolated private static let italian = repository.appendingPathComponent("Localization/it.lproj")
+  nonisolated private static let italian = repository.appendingPathComponent(
+    "Localization/it.lproj")
 
   private var opened: [URL] = []
   private var activations = 0
@@ -172,6 +174,76 @@ final class AboutWindowTests: XCTestCase {
       XCTAssertEqual(AboutTitleFont.load(contentsOf: url), fallback, url.lastPathComponent)
     }
     XCTAssertEqual(try view(of: controller(titleFontURL: nil)).titleFont, fallback)
+  }
+
+  // MARK: Sponsor button (D-36)
+
+  nonisolated private static let coffeeStyle = repository.appendingPathComponent(
+    "Sources/TopNV/CoffeeButtonStyle.swift")
+
+  /// The style is MonoPods' CoffeeButtonStyle.swift at d5517ff, copied byte for byte.
+  func testTheCoffeeStyleIsTheUnmodifiedMonoPodsFile() throws {
+    let digest = SHA256.hash(data: try Data(contentsOf: Self.coffeeStyle))
+    XCTAssertEqual(
+      digest.map { String(format: "%02x", $0) }.joined(),
+      "be5c7fe2991986468abadd9ac1696b4d10be8200c4e4e504ed74997d3c67a741")
+  }
+
+  /// The sponsor button is written as in MonoPods' AboutWindow.swift at d5517ff.
+  func testTheSponsorButtonUsesTheCapsuleStyle() throws {
+    let source = try String(
+      contentsOf: Self.repository.appendingPathComponent("Sources/TopNV/AboutView.swift"),
+      encoding: .utf8)
+    let start = try XCTUnwrap(source.range(of: "Button(action: openSponsors)"))
+    let end = try XCTUnwrap(
+      source.range(of: ".padding(.top, 14)", range: start.upperBound..<source.endIndex))
+    let button = String(source[start.lowerBound..<end.lowerBound])
+    XCTAssertTrue(
+      button.contains(#"Label(AboutText.sponsor, systemImage: "cup.and.saucer.fill")"#), button)
+    XCTAssertTrue(button.contains(".buttonStyle(CoffeeButtonStyle())"), button)
+    XCTAssertTrue(button.contains(".focusEffectDisabled()"), button)
+    XCTAssertFalse(button.contains(".controlSize("), button)
+  }
+
+  /// A capsule leaves the corners of its frame empty and draws a faint primary-colour fill.
+  func testTheCoffeeButtonIsDrawnAsALowContrastCapsule() throws {
+    let button = Button {
+    } label: {
+      Label(AboutText.sponsor, systemImage: "cup.and.saucer.fill")
+    }
+    .buttonStyle(CoffeeButtonStyle())
+    for name in [NSAppearance.Name.aqua, .darkAqua] {
+      let appearance = try XCTUnwrap(NSAppearance(named: name))
+      let hosting = NSHostingView(rootView: button)
+      hosting.appearance = appearance
+      hosting.frame = NSRect(origin: .zero, size: hosting.fittingSize)
+      hosting.layoutSubtreeIfNeeded()
+      let bitmap = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
+      appearance.performAsCurrentDrawingAppearance {
+        hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+      }
+      let width = bitmap.pixelsWide
+      let height = bitmap.pixelsHigh
+      let scale = CGFloat(width) / bitmap.size.width
+      XCTAssertTrue(width > height && height > 0, name.rawValue)
+      func alpha(_ column: Int, _ row: Int) -> CGFloat {
+        bitmap.colorAt(x: column, y: row)?.alphaComponent ?? -1
+      }
+      for (column, row) in [(0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1)] {
+        XCTAssertEqual(alpha(column, row), 0, "\(name.rawValue) corner \(column),\(row)")
+      }
+      XCTAssertGreaterThan(alpha(0, height / 2), 0, "\(name.rawValue) left edge")
+      XCTAssertGreaterThan(alpha(width - 1, height / 2), 0, "\(name.rawValue) right edge")
+      let inside = Int((4 * scale).rounded())
+      let fill = try XCTUnwrap(bitmap.colorAt(x: inside, y: height / 2)?.usingColorSpace(.sRGB))
+      XCTAssertTrue(
+        fill.alphaComponent >= 0.02 && fill.alphaComponent <= 0.08, "\(name.rawValue) fill")
+      if name == .aqua {
+        XCTAssertLessThan(fill.brightnessComponent, 0.5, "light fill")
+      } else {
+        XCTAssertGreaterThan(fill.brightnessComponent, 0.5, "dark fill")
+      }
+    }
   }
 
   // MARK: GitHub mark
