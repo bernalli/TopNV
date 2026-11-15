@@ -199,8 +199,18 @@ class Publisher:
         # another run wrote meanwhile is not ours and stays.
         path=self.root/'build/release-transaction.json'
         try:
-            if json.loads(path.read_text())==self.transaction(): path.unlink()
-        except (OSError,ValueError):
+            def unique(pairs):
+                record={}
+                for key,value in pairs:
+                    if key in record: raise ValueError('duplicate transaction field')
+                    record[key]=value
+                return record
+            record=json.loads(path.read_text(),object_pairs_hook=unique)
+            expected=self.transaction()
+            if (type(record) is dict and record.keys()==expected.keys()
+                and all(type(record[k]) is type(v) and record[k]==v for k,v in expected.items())):
+                path.unlink()
+        except (OSError,ValueError,RecursionError):
             print('warning: release published, but build/release-transaction.json could not be checked or removed; remove it by hand',file=sys.stderr,flush=True)
     def recover(self):
         path=self.root/'build/release-transaction.json'

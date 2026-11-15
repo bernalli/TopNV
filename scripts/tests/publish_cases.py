@@ -7,6 +7,10 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+import contextlib
+import io
+import itertools
+import json
 
 ROOT=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('publisher',ROOT/'scripts/publish-release.py')
@@ -270,6 +274,96 @@ class Cases(unittest.TestCase):
         self.proof(); p=self.prepared(); self.transport.public_delay=100
         with self.assertRaisesRegex(module.ReleaseError,'public readback'): p.publish()
         self.assertFalse(self.transport.public)
+
+class TransactionCleanup(unittest.TestCase):
+    def setUp(self):
+        self.transport=mock.Mock()
+        self.p=module.Publisher(ROOT,{
+            'GITHUB_EVENT_NAME':'workflow_dispatch',
+            'GITHUB_REF':'refs/heads/main',
+            'INPUT_VERSION':'1.1.0',
+            'GITHUB_SHA':'a'*40,
+            'GITHUB_RUN_NUMBER':'2',
+            'GITHUB_RUN_ID':'7',
+        },self.transport)
+        self.p.release_id=5
+
+    def cleanup_record(self,raw='',read_error=None,unlink_error=None):
+        errors=io.StringIO()
+        with (
+            mock.patch.object(module.Path,'read_text',
+                              return_value=raw,side_effect=read_error),
+            mock.patch.object(module.Path,'unlink',
+                              side_effect=unlink_error) as remove,
+            contextlib.redirect_stderr(errors),
+        ):
+            self.p.forget()
+        self.assertEqual(self.transport.mock_calls,[])
+        return remove.call_count,errors.getvalue()
+
+    def test_own_record_is_removed_regardless_of_key_order(self):
+        for pairs in itertools.permutations(self.p.transaction().items()):
+            with self.subTest(pairs=pairs):
+                self.assertEqual(self.cleanup_record(json.dumps(dict(pairs))),(1,''))
+
+    def test_foreign_missing_extra_and_wrong_types_are_preserved(self):
+        own=self.p.transaction()
+        records=[None,[],True,5,'record']
+        foreign={'release_id':6,'run_id':'8','sha':'b'*40,'tag':'v1.1.1'}
+        records.extend(dict(own,release_id=value) for value in (-1,0,10**40))
+        for key,value in own.items():
+            missing=dict(own)
+            del missing[key]
+            records.append(missing)
+            records.append(dict(own,**{key:foreign[key]}))
+            for wrong in (None,[],{},False,5.0,'5' if key=='release_id' else 5):
+                records.append(dict(own,**{key:wrong}))
+        records.append(dict(own,extra='field'))
+        for record in records:
+            with self.subTest(record=record):
+                self.assertEqual(self.cleanup_record(json.dumps(record))[0],0)
+        self.p.release_id=1
+        self.assertEqual(self.cleanup_record(
+            json.dumps(dict(self.p.transaction(),release_id=True))
+        )[0],0)
+
+    def test_duplicate_fields_are_rejected_in_either_order(self):
+        own=self.p.transaction()
+        for key,value in own.items():
+            foreign=6 if key=='release_id' else value+'other'
+            for repeated in (value,foreign):
+                pair=json.dumps(key)+':'+json.dumps(repeated)
+                for raw in (
+                    '{'+pair+','+json.dumps(own)[1:],
+                    json.dumps(own)[:-1]+','+pair+'}',
+                ):
+                    with self.subTest(raw=raw):
+                        removed,warning=self.cleanup_record(raw)
+                        self.assertEqual(removed,0)
+                        self.assertIn('warning:',warning)
+
+    def test_unreadable_or_unremovable_record_warns_without_recovery(self):
+        own=json.dumps(self.p.transaction())
+        for raw in ('','{',own[:-1]):
+            with self.subTest(raw=raw):
+                removed,warning=self.cleanup_record(raw)
+                self.assertEqual(removed,0)
+                self.assertIn('warning:',warning)
+        self.assertEqual(self.cleanup_record('['*2000+'0'+']'*2000)[0],0)
+        for error in (
+            PermissionError('denied'),
+            FileNotFoundError('missing'),
+            UnicodeDecodeError('utf-8',b'\xff',0,1,'invalid'),
+        ):
+            removed,warning=self.cleanup_record(read_error=error)
+            self.assertEqual(removed,0)
+            self.assertIn('warning:',warning)
+        removed,warning=self.cleanup_record(
+            own,unlink_error=PermissionError('denied')
+        )
+        self.assertEqual(removed,1)
+        self.assertIn('warning:',warning)
+
 
 class RealVerify(unittest.TestCase):
     def test_downloaded_bundle_must_carry_a_developer_id_signature(self):
