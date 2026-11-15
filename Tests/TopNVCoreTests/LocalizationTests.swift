@@ -197,7 +197,7 @@ final class LocalizationTests: XCTestCase {
   /// Shared keys must carry the MonoPods text of the language; own keys only need to exist.
   private static func textKeyBase(_ language: String) -> [String: BaseKey] {
     Dictionary(
-      uniqueKeysWithValues: TextKey.allCases.map {
+      uniqueKeysWithValues: TextKey.allCases.filter(\.isInTables).map {
         let shared = $0.isShared ? monoPodsSharedTexts[language]?[$0.rawValue] : nil
         return ($0.rawValue, BaseKey(isShared: $0.isShared, value: shared ?? $0.rawValue))
       })
@@ -227,7 +227,7 @@ final class LocalizationTests: XCTestCase {
 
   func testEnglishKeysAreExactlyTheTextKeys() throws {
     let keys = parseTable(try table("en")).entries.map(\.key)
-    XCTAssertEqual(Set(keys), Set(TextKey.allCases.map(\.rawValue)))
+    XCTAssertEqual(Set(keys), Set(TextKey.allCases.filter(\.isInTables).map(\.rawValue)))
   }
 
   func testEveryLanguageHasEachEnglishKeyExactlyOnce() throws {
@@ -281,6 +281,105 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(values[key], expected[key], "\(language): \(key)")
       }
     }
+  }
+
+  /// The key set of this release, as a closed list per scope.
+  func testTheKeySetIsTheOneOfTheMenu() {
+    func keys(_ scope: TextKey.Scope) -> Set<String> {
+      Set(TextKey.allCases.filter { $0.scope == scope }.map(\.rawValue))
+    }
+    XCTAssertEqual(
+      keys(.topNV),
+      [
+        "Hide Notch", "Round Corners", "Round Corners on All Displays",
+        "Launch at Login (Requires Approval)", "Allow %@ in System Settings > General > Login Items.",
+      ])
+    XCTAssertEqual(
+      keys(.shared),
+      [
+        "Options", "Launch at Login", "Hide Menu Bar Icon", "Open %@ again to bring it back.",
+        "Check for Updates Automatically", "Check for Updates…", "About %@", "Report an Issue…",
+        "Quit %@", "Check for Updates Automatically?",
+        "%@ can check for new versions once a day. You can change this at any time in Options.",
+        "Check Automatically", "Don't Check",
+      ])
+    XCTAssertEqual(keys(.englishOnly), ["Version %@", "Version Unavailable"])
+  }
+
+  /// The About window is English: its texts are in no table.
+  func testEnglishOnlyKeysAreInNoTable() throws {
+    let englishOnly = TextKey.allCases.filter { !$0.isInTables }.map(\.rawValue)
+    XCTAssertFalse(englishOnly.isEmpty)
+    for language in Self.languages {
+      let keys = Set(parseTable(try table(language)).entries.map(\.key))
+      for key in englishOnly {
+        XCTAssertFalse(keys.contains(key), "\(language): \(key)")
+      }
+    }
+  }
+
+  // MARK: Keys used by the code
+
+  private enum KeyScanError: Error { case unsupportedCall(String) }
+
+  /// The TextKey case names that a source passes as a literal to a localizer. A call with any
+  /// other first argument throws, because this scan cannot follow it. Text after `//` is ignored.
+  static func localizedCaseNames(in source: String) throws -> Set<String> {
+    let code = source.components(separatedBy: "\n").map { line -> String in
+      guard let range = line.range(of: "//") else { return line }
+      return String(line[..<range.lowerBound])
+    }.joined(separator: "\n")
+    let call = try NSRegularExpression(
+      pattern: #"(?<![\w.])(?:localizer|Localizer\.main|Localizer\.english)\s*\("#)
+    let literal = try NSRegularExpression(pattern: #"\A\s*\.([a-z]\w*)\s*[,)]"#)
+    let text = code as NSString
+    var names: Set<String> = []
+    for match in call.matches(in: code, range: NSRange(location: 0, length: text.length)) {
+      let rest = text.substring(from: match.range.location + match.range.length)
+      let restText = rest as NSString
+      guard
+        let found = literal.firstMatch(
+          in: rest, range: NSRange(location: 0, length: restText.length))
+      else { throw KeyScanError.unsupportedCall(String(rest.prefix(40))) }
+      names.insert(restText.substring(with: found.range(at: 1)))
+    }
+    return names
+  }
+
+  func testTheKeyScanReadsLiteralKeysAndRejectsOtherArguments() throws {
+    XCTAssertEqual(
+      try Self.localizedCaseNames(
+        in: "localizer(.hideNotch)\nlocalizer( .about, name)\nLocalizer.english(.version, v)\n"
+          + "Localizer.main(.options)\nlocalizer(\n  .quit, name)"),
+      ["hideNotch", "about", "version", "options", "quit"])
+    XCTAssertEqual(
+      try Self.localizedCaseNames(
+        in: "// localizer(.details)\nlet localizer: Localizer = .main\nrun(localizer: localizer)\n"
+          + "myLocalizer(.x)\nLocalizer(bundle: .main)"),
+      [])
+    for fragment in [
+      "localizer(scope)", "localizer(flag ? .a : .b)", "Localizer.main(key)", "localizer(\n key)",
+      "localizer()",
+    ] {
+      XCTAssertThrowsError(try Self.localizedCaseNames(in: fragment), fragment)
+    }
+  }
+
+  /// Every key is shown by some code, and the code looks up no key that does not exist.
+  func testEveryKeyIsUsedAndEveryLookupHasAKey() throws {
+    var used: Set<String> = []
+    for folder in ["Sources/TopNV", "Sources/TopNVCore"] {
+      let url = Self.repository.appendingPathComponent(folder)
+      for name in try FileManager.default.contentsOfDirectory(atPath: url.path)
+      where name.hasSuffix(".swift") {
+        let source = try String(contentsOf: url.appendingPathComponent(name), encoding: .utf8)
+        used.formUnion(try Self.localizedCaseNames(in: source))
+      }
+    }
+    let cases = Set(TextKey.allCases.map { "\($0)" })
+    XCTAssertGreaterThan(used.count, 10, "the scan must read the real sources")
+    XCTAssertEqual(cases.subtracting(used), [], "keys that no code shows")
+    XCTAssertEqual(used.subtracting(cases), [], "lookups of keys that do not exist")
   }
 
   // MARK: Update window table
@@ -566,8 +665,11 @@ final class LocalizationTests: XCTestCase {
     XCTAssertEqual(Localizer(bundle: .main)(.hideNotch), "Hide Notch")
     XCTAssertEqual(Localizer(bundle: .main)(.about, "TopNV"), "About TopNV")
 
-    XCTAssertEqual(
-      MenuStatus(hideNotch: true, roundCorners: false, localizer: italian).title,
-      values[TextKey.notchHidden.rawValue])
+    let rows = MenuLayout.rows(
+      for: MenuState(
+        hideNotch: true, roundCorners: true, cornersOnAllDisplays: false, launchAtLogin: false,
+        loginNeedsApproval: false, loginError: nil, updates: .hidden),
+      localizer: italian)
+    XCTAssertEqual(rows.first { $0.id == "hideNotch" }?.title, values[TextKey.hideNotch.rawValue])
   }
 }

@@ -41,8 +41,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     configuration: updateConfiguration, updater: sparkleUpdater, defaults: .standard,
     ask: AutomaticUpdateQuestion.ask, onReady: { [weak self] in self?.updates.updaterDidStart() },
     onFailed: { [weak self] in self?.updates.updaterDidFail() })
-  private let version = AppVersion(
-    shortVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
   {
@@ -52,8 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     Application.statusMenu = StatusMenuController(
-      settings: settings, loginItem: loginItem, updates: updates, visibility: menuVisibility,
-      version: version.title)
+      settings: settings, loginItem: loginItem, updates: updates, visibility: menuVisibility)
     let controller = OverlayController(settings: settings)
     controller.start()
     overlay = controller

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The version line of the menu and of the About window. The build number is never shown;
+/// The version line of the About window. The build number is never shown;
 /// CFBundleVersion stays in Info.plist, where Sparkle reads it.
 public struct AppVersion {
   public let title: String

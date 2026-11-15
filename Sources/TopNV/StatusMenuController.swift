@@ -15,7 +15,6 @@ import TopNVCore
   private let loginItem: LoginItem
   private let updates: UpdateMenuModel
   private let visibility: MenuVisibility
-  private let version: String
   private var renderer: MenuRenderer?
   private var subscriptions: Set<AnyCancellable> = []
   private var visibilityObservation: NSKeyValueObservation?
@@ -32,13 +31,12 @@ import TopNVCore
 
   init(
     settings: AppSettings, loginItem: LoginItem, updates: UpdateMenuModel,
-    visibility: MenuVisibility, version: String
+    visibility: MenuVisibility
   ) {
     self.settings = settings
     self.loginItem = loginItem
     self.updates = updates
     self.visibility = visibility
-    self.version = version
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     super.init()
     renderer = MenuRenderer { [weak self] command in self?.perform(command) }
@@ -94,9 +92,7 @@ import TopNVCore
       hideNotch: settings.hideNotch, roundCorners: settings.roundCorners,
       cornersOnAllDisplays: settings.cornersOnAllDisplays, launchAtLogin: loginItem.isEnabled,
       loginNeedsApproval: loginItem.needsApproval, loginError: loginItem.errorMessage,
-      updatesAvailable: updates.isAvailable, canCheckForUpdates: updates.canCheckForUpdates,
-      automaticUpdates: updates.automaticallyChecksForUpdates, menuVisible: visibility.isVisible,
-      versionTitle: version)
+      updates: updates.items)
   }
 
   /// The login item does not publish approval changes made in System Settings; opening the menu
@@ -113,7 +109,7 @@ import TopNVCore
     case .cornersOnAllDisplays: settings.cornersOnAllDisplays.toggle()
     case .launchAtLogin: loginItem.setEnabled(!loginItem.isEnabled)
     case .automaticUpdates: updates.setAutomaticallyChecks(!updates.automaticallyChecksForUpdates)
-    case .hideMenuBarIcon: visibility.setMenuVisible(!visibility.isVisible)
+    case .hideMenuBarIcon: visibility.setMenuVisible(false)
     case .checkForUpdates: updates.checkForUpdates()
     case .about: AboutWindowController.shared.show()
     case .reportIssue:

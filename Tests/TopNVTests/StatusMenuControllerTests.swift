@@ -23,13 +23,15 @@ final class StatusMenuControllerTests: XCTestCase {
     defaults = nil
   }
 
-  private func makeController() -> (StatusMenuController, MenuVisibility, AppSettings) {
+  private func makeController(updates: UpdateMenuModel? = nil)
+    -> (StatusMenuController, MenuVisibility, AppSettings)
+  {
     let settings = AppSettings(defaults: defaults)
     let visibility = MenuVisibility(
       defaults: defaults, key: AppSettings.showMenuBarIconKey, schedule: { $0() })
     let controller = StatusMenuController(
-      settings: settings, loginItem: LoginItem(), updates: UpdateMenuModel(updater: nil),
-      visibility: visibility, version: "Version 1.2.0")
+      settings: settings, loginItem: LoginItem(), updates: updates ?? UpdateMenuModel(updater: nil),
+      visibility: visibility)
     self.controller = controller
     return (controller, visibility, settings)
   }
@@ -70,12 +72,20 @@ final class StatusMenuControllerTests: XCTestCase {
     XCTAssertEqual(defaults.object(forKey: AppSettings.showMenuBarIconKey) as? Bool, true)
   }
 
-  func testTheHideSwitchHidesTheIcon() {
+  /// Hide Menu Bar Icon is a command: it hides the icon and never shows it again.
+  func testTheHideCommandOnlyHidesTheIcon() throws {
     let (controller, visibility, _) = makeController()
+    let options = try XCTUnwrap(controller.menu.items.first { $0.title == "Options" }?.submenu)
+    let hide = try XCTUnwrap(options.items.first { $0.title == "Hide Menu Bar Icon" })
+    XCTAssertEqual(hide.state, .off)
     controller.perform(.hideMenuBarIcon)
     controller.refresh()
     XCTAssertFalse(visibility.isVisible)
     XCTAssertFalse(controller.statusItem.isVisible)
+    controller.perform(.hideMenuBarIcon)
+    controller.refresh()
+    XCTAssertFalse(visibility.isVisible)
+    XCTAssertEqual(hide.state, .off)
   }
 
   func testSwitchCommandsChangeTheSettings() {
@@ -105,4 +115,40 @@ final class StatusMenuControllerTests: XCTestCase {
     let (controller, _, _) = makeController()
     XCTAssertFalse(controller.menu.items.contains { $0.title == "Check for Updates…" })
   }
+
+  /// Before the first-launch answer the update items are shown and dimmed.
+  func testUpdateItemsAreDimmedUntilTheUpdaterStarts() throws {
+    let updates = UpdateMenuModel(updater: StartableUpdater(), schedule: { $0() })
+    let (controller, _, _) = makeController(updates: updates)
+    let check = try XCTUnwrap(controller.menu.items.first { $0.title == "Check for Updates…" })
+    let options = try XCTUnwrap(controller.menu.items.first { $0.title == "Options" }?.submenu)
+    let automatic = try XCTUnwrap(
+      options.items.first { $0.title == "Check for Updates Automatically" })
+    XCTAssertFalse(check.isEnabled)
+    XCTAssertFalse(automatic.isEnabled)
+    XCTAssertEqual(automatic.state, .off)
+    updates.updaterDidStart()
+    controller.refresh()
+    XCTAssertTrue(check.isEnabled)
+    XCTAssertTrue(automatic.isEnabled)
+  }
+
+  /// An updater that cannot start leaves no update items.
+  func testAFailedUpdaterHidesTheUpdateItems() throws {
+    let updates = UpdateMenuModel(updater: StartableUpdater(), schedule: { $0() })
+    let (controller, _, _) = makeController(updates: updates)
+    XCTAssertTrue(controller.menu.items.contains { $0.title == "Check for Updates…" })
+    updates.updaterDidFail()
+    controller.refresh()
+    XCTAssertFalse(controller.menu.items.contains { $0.title == "Check for Updates…" })
+    let options = try XCTUnwrap(controller.menu.items.first { $0.title == "Options" }?.submenu)
+    XCTAssertFalse(options.items.contains { $0.title == "Check for Updates Automatically" })
+  }
+}
+
+@MainActor private final class StartableUpdater: UpdaterControlling {
+  var canCheckForUpdates = true
+  var automaticallyChecksForUpdates = false
+  func start() throws {}
+  func checkForUpdates() {}
 }

@@ -2,233 +2,339 @@ import XCTest
 
 @testable import TopNVCore
 
+/// The approved menu tree, checked on every state the menu can show and in every language.
 final class MenuLayoutTests: XCTestCase {
+  private static let localization = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    .appendingPathComponent("Localization")
+  private static let languages = ["en", "it", "es", "fr", "de", "pt-BR", "ja", "zh-Hans"]
+  private static let longError = String(
+    repeating: "The login item could not be registered. ", count: 4)
+  private static let loginErrors: [String?] = [
+    nil, "", "   ", "\n\t ", "Operation not permitted.", longError,
+  ]
+  private static let updateStates: [UpdateItems] = [
+    .hidden, .waiting,
+    .ready(canCheck: true, checksAutomatically: true),
+    .ready(canCheck: true, checksAutomatically: false),
+    .ready(canCheck: false, checksAutomatically: true),
+    .ready(canCheck: false, checksAutomatically: false),
+  ]
   private let english = Localizer(bundle: .main)
 
-  private func state(
+  private static func state(
     hideNotch: Bool = true, roundCorners: Bool = true, cornersOnAllDisplays: Bool = false,
     launchAtLogin: Bool = false, loginNeedsApproval: Bool = false, loginError: String? = nil,
-    updatesAvailable: Bool = true, canCheckForUpdates: Bool = true,
-    automaticUpdates: Bool = false, menuVisible: Bool = true
+    updates: UpdateItems = .ready(canCheck: true, checksAutomatically: false)
   ) -> MenuState {
     MenuState(
-      hideNotch: hideNotch, roundCorners: roundCorners,
-      cornersOnAllDisplays: cornersOnAllDisplays, launchAtLogin: launchAtLogin,
-      loginNeedsApproval: loginNeedsApproval, loginError: loginError,
-      updatesAvailable: updatesAvailable, canCheckForUpdates: canCheckForUpdates,
-      automaticUpdates: automaticUpdates, menuVisible: menuVisible,
-      versionTitle: "Version 1.2.0")
+      hideNotch: hideNotch, roundCorners: roundCorners, cornersOnAllDisplays: cornersOnAllDisplays,
+      launchAtLogin: launchAtLogin, loginNeedsApproval: loginNeedsApproval, loginError: loginError,
+      updates: updates)
   }
 
-  private func rows(_ state: MenuState) -> [MenuRow] {
-    MenuLayout.rows(for: state, localizer: english)
+  /// Five switches, six login errors and six updater states: 1152 states.
+  private static var everyState: [MenuState] {
+    var states: [MenuState] = []
+    for mask in 0..<(1 << 5) {
+      func bit(_ index: Int) -> Bool { mask & (1 << index) != 0 }
+      for error in loginErrors {
+        for updates in updateStates {
+          states.append(
+            state(
+              hideNotch: bit(0), roundCorners: bit(1), cornersOnAllDisplays: bit(2),
+              launchAtLogin: bit(3), loginNeedsApproval: bit(4), loginError: error,
+              updates: updates))
+        }
+      }
+    }
+    return states
   }
 
-  private func children(_ id: String, in rows: [MenuRow]) -> [MenuRow]? {
-    for row in rows where row.id == id {
+  private func rows(_ state: MenuState, _ localizer: Localizer? = nil) -> [MenuRow] {
+    MenuLayout.rows(for: state, localizer: localizer ?? english)
+  }
+
+  private static func options(in rows: [MenuRow]) -> [MenuRow] {
+    for row in rows where row.id == "options" {
       if case .submenu(let children, _) = row.kind { return children }
     }
-    return nil
+    return []
   }
 
-  private func row(_ id: String, in rows: [MenuRow]) -> MenuRow? {
+  private static func row(_ id: String, in rows: [MenuRow]) -> MenuRow? {
     rows.first { $0.id == id }
   }
 
-  private func allRows(_ rows: [MenuRow]) -> [MenuRow] {
-    rows.flatMap { row -> [MenuRow] in
-      if case .submenu(let children, _) = row.kind { return [row] + allRows(children) }
-      return [row]
+  private static func hasLoginProblem(_ state: MenuState) -> Bool {
+    state.loginNeedsApproval
+      || !(state.loginError ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  /// The ids of one level, with the rows of one caption (`x.caption.0`, `x.caption.1`…) as one entry.
+  private static func collapsed(_ ids: [String]) -> [String] {
+    var result: [String] = []
+    for id in ids {
+      var name = id
+      if let range = id.range(of: #"\.caption\.[0-9]+$"#, options: .regularExpression) {
+        name = String(id[..<range.lowerBound]) + ".caption"
+      }
+      if name.hasSuffix(".caption"), result.last == name { continue }
+      result.append(name)
     }
+    return result
   }
 
-  /// Every combination of the nine switches of `MenuState`.
-  private var everyState: [MenuState] {
-    (0..<(1 << 9)).map { mask in
-      func bit(_ index: Int) -> Bool { mask & (1 << index) != 0 }
-      return state(
-        hideNotch: bit(0), roundCorners: bit(1), cornersOnAllDisplays: bit(2),
-        launchAtLogin: bit(3), loginNeedsApproval: bit(4), updatesAvailable: bit(5),
-        canCheckForUpdates: bit(6), automaticUpdates: bit(7), menuVisible: bit(8))
+  /// The top level of the approved tree, written from the tree and not from MenuLayout.
+  private static func expectedTop(_ state: MenuState) -> [String] {
+    var ids = [
+      "topnv", "hideNotch", "roundCorners", "separator.options", "options", "separator.app",
+      "about",
+    ]
+    if state.updates != .hidden { ids.append("check") }
+    return ids + ["report", "separator.quit", "quit"]
+  }
+
+  /// Options of the approved tree.
+  private static func expectedOptions(_ state: MenuState) -> [String] {
+    var ids = ["cornersOnAllDisplays", "options.separator.login", "login"]
+    if hasLoginProblem(state) { ids.append("login.caption") }
+    if state.updates != .hidden { ids.append("automatic") }
+    return ids + ["options.separator", "hide", "hide.caption"]
+  }
+
+  /// Problems with the separators of one menu level.
+  static func separatorProblems(_ level: [MenuRow]) -> [String] {
+    var problems: [String] = []
+    if level.first?.kind == .separator { problems.append("first") }
+    if level.last?.kind == .separator { problems.append("last") }
+    for (left, right) in zip(level, level.dropFirst())
+    where left.kind == .separator && right.kind == .separator {
+      problems.append("double at \(right.id)")
     }
-  }
-
-  // MARK: Order and content
-
-  func testTheMenuHasTheOrderOfMonoPods() throws {
-    let rows = rows(state())
-    XCTAssertEqual(
-      rows.map(\.id),
-      [
-        "topnv", "status.0", "hideNotch", "roundCorners", "details", "options",
-        "separator.app", "version.0", "check", "about", "report", "separator.quit", "quit",
-      ])
-    XCTAssertEqual(
-      try XCTUnwrap(children("details", in: rows)).map(\.id),
-      ["display.0", "permissions.0", "macOS.0"])
-    XCTAssertEqual(
-      try XCTUnwrap(children("options", in: rows)).map(\.id),
-      [
-        "cornersOnAllDisplays", "login", "login.caption.0", "automatic", "options.separator",
-        "hide", "hide.caption.0",
-      ])
-  }
-
-  func testTitlesAndSymbolsAreTheOnesOfTheMenu() throws {
-    let rows = rows(state())
-    XCTAssertEqual(rows[0], MenuRow(id: "topnv", title: "TopNV", symbol: nil, kind: .header))
-    XCTAssertEqual(
-      rows[1],
-      MenuRow(
-        id: "status.0", title: "Notch Hidden, Corners Rounded", symbol: "display", kind: .info))
-    XCTAssertEqual(row("hideNotch", in: rows)?.title, "Hide Notch")
-    XCTAssertEqual(row("hideNotch", in: rows)?.symbol, "menubar.rectangle")
-    XCTAssertEqual(row("roundCorners", in: rows)?.title, "Round Corners")
-    XCTAssertEqual(row("roundCorners", in: rows)?.symbol, "rectangle")
-    XCTAssertEqual(row("details", in: rows)?.title, "Details")
-    XCTAssertEqual(row("details", in: rows)?.symbol, "info.circle")
-    XCTAssertEqual(row("options", in: rows)?.title, "Options")
-    XCTAssertEqual(row("options", in: rows)?.symbol, "gearshape")
-    XCTAssertEqual(
-      row("version.0", in: rows),
-      MenuRow(id: "version.0", title: "Version 1.2.0", symbol: nil, kind: .info))
-    XCTAssertEqual(row("check", in: rows)?.title, "Check for Updates…")
-    XCTAssertEqual(row("about", in: rows)?.kind, .action(.about, enabled: true, key: ""))
-    XCTAssertEqual(row("about", in: rows)?.title, "About TopNV")
-    XCTAssertEqual(row("report", in: rows)?.title, "Report an Issue…")
-    XCTAssertEqual(row("report", in: rows)?.kind, .action(.reportIssue, enabled: true, key: ""))
-    XCTAssertEqual(
-      row("quit", in: rows),
-      MenuRow(
-        id: "quit", title: "Quit TopNV", symbol: nil, kind: .action(.quit, enabled: true, key: "q"))
-    )
-    for id in ["check", "about", "report", "quit", "version.0"] {
-      XCTAssertNil(row(id, in: rows)?.symbol, id)
+    for row in level where row.kind == .separator && (!row.title.isEmpty || row.symbol != nil) {
+      problems.append("separator \(row.id) has content")
     }
-
-    let details = try XCTUnwrap(children("details", in: rows))
-    XCTAssertEqual(
-      details.map(\.title),
-      ["Applies to: Built-in Display", "Permissions: None Required", "Requires macOS 14 or Later"])
-    XCTAssertTrue(details.allSatisfy { $0.kind == .info && $0.symbol == nil })
-    let allDisplays = try XCTUnwrap(
-      children("details", in: self.rows(state(cornersOnAllDisplays: true))))
-    XCTAssertEqual(allDisplays.first?.title, "Applies to: All Displays")
-
-    let options = try XCTUnwrap(children("options", in: rows))
-    XCTAssertEqual(row("cornersOnAllDisplays", in: options)?.title, "Corners on All Displays")
-    XCTAssertEqual(row("cornersOnAllDisplays", in: options)?.symbol, "display.2")
-    XCTAssertEqual(row("login", in: options)?.title, "Launch at Login")
-    XCTAssertEqual(row("login", in: options)?.symbol, "power")
-    XCTAssertEqual(row("automatic", in: options)?.title, "Automatic Updates")
-    XCTAssertEqual(row("automatic", in: options)?.symbol, "arrow.triangle.2.circlepath")
-    XCTAssertEqual(row("hide", in: options)?.title, "Hide Menu Bar Icon")
-    XCTAssertEqual(row("hide", in: options)?.symbol, "menubar.rectangle")
-    XCTAssertEqual(
-      row("hide.caption.0", in: options),
-      MenuRow(
-        id: "hide.caption.0", title: "Open TopNV again to bring it back.", symbol: nil,
-        kind: .info))
-    XCTAssertEqual(row("options.separator", in: options)?.kind, .separator)
+    return problems
   }
 
-  /// As in MonoPods, the TopNV group runs straight into Details and Options.
-  func testNoSeparatorBetweenTheTopNVGroupAndDetails() throws {
-    let rows = rows(state())
-    let details = try XCTUnwrap(rows.firstIndex { $0.id == "details" })
-    XCTAssertFalse(rows[..<details].contains { $0.kind == .separator })
-  }
+  // MARK: Structure
 
-  func testStatusFollowsTheTwoSwitches() {
-    for (hide, round) in [(true, true), (true, false), (false, true), (false, false)] {
-      let status = MenuStatus(hideNotch: hide, roundCorners: round, localizer: english)
-      XCTAssertEqual(
-        rows(state(hideNotch: hide, roundCorners: round))[1],
-        MenuRow(id: "status.0", title: status.title, symbol: status.symbol, kind: .info))
-    }
-  }
-
-  // MARK: Switches and enabling
-
-  func testSwitchesShowTheirStateAndEnabling() throws {
-    for current in everyState {
-      let rows = rows(current)
-      XCTAssertEqual(
-        row("hideNotch", in: rows)?.kind,
-        .toggle(.hideNotch, isOn: current.hideNotch, enabled: true))
-      XCTAssertEqual(
-        row("roundCorners", in: rows)?.kind,
-        .toggle(.roundCorners, isOn: current.roundCorners, enabled: true))
-      XCTAssertEqual(row("details", in: rows)?.kind.isEnabledSubmenu, true)
-      XCTAssertEqual(row("options", in: rows)?.kind.isEnabledSubmenu, true)
-      let options = try XCTUnwrap(children("options", in: rows))
-      XCTAssertEqual(
-        row("cornersOnAllDisplays", in: options)?.kind,
-        .toggle(
-          .cornersOnAllDisplays, isOn: current.cornersOnAllDisplays,
-          enabled: current.roundCorners))
-      XCTAssertEqual(
-        row("login", in: options)?.kind,
-        .toggle(.launchAtLogin, isOn: current.launchAtLogin, enabled: true))
-      XCTAssertEqual(
-        row("hide", in: options)?.kind,
-        .toggle(.hideMenuBarIcon, isOn: !current.menuVisible, enabled: true))
-    }
-  }
-
-  /// Without an updater, MonoPods hides both update items instead of disabling them.
-  func testUpdateItemsAppearOnlyWithAnUpdater() throws {
-    for current in everyState {
-      let rows = rows(current)
-      let options = try XCTUnwrap(children("options", in: rows))
-      if current.updatesAvailable {
-        XCTAssertEqual(
-          row("automatic", in: options)?.kind,
-          .toggle(.automaticUpdates, isOn: current.automaticUpdates, enabled: true))
-        XCTAssertEqual(
-          row("check", in: rows)?.kind,
-          .action(.checkForUpdates, enabled: current.canCheckForUpdates, key: ""))
-      } else {
-        XCTAssertNil(row("automatic", in: options))
-        XCTAssertNil(row("check", in: rows))
+  func testTheTreeIsTheApprovedOneInEveryState() {
+    for current in Self.everyState {
+      let top = rows(current)
+      let options = Self.options(in: top)
+      XCTAssertEqual(top.map(\.id), Self.expectedTop(current), "\(current)")
+      XCTAssertEqual(Self.collapsed(options.map(\.id)), Self.expectedOptions(current), "\(current)")
+      for prefix in ["login.caption.", "hide.caption."] {
+        let ids = options.map(\.id).filter { $0.hasPrefix(prefix) }
+        XCTAssertEqual(ids, ids.indices.map { "\(prefix)\($0)" }, "\(current)")
       }
     }
   }
 
-  // MARK: Login caption
-
-  func testLoginCaptionIsAlwaysShown() throws {
-    func caption(_ state: MenuState) throws -> [String] {
-      try XCTUnwrap(children("options", in: rows(state)))
-        .filter { $0.id.hasPrefix("login.caption.") }.map(\.title)
+  func testTheSeparatorCheckFindsMalformedLevels() {
+    let item = MenuRow(
+      id: "a", title: "A", symbol: nil, kind: .action(.about, enabled: true, key: ""))
+    func line(_ id: String, title: String = "") -> MenuRow {
+      MenuRow(id: id, title: title, symbol: nil, kind: .separator)
     }
-    XCTAssertEqual(try caption(state()), ["Applies from the next login."])
-    XCTAssertEqual(try caption(state(launchAtLogin: true)), ["Applies from the next login."])
+    XCTAssertEqual(Self.separatorProblems([item, line("s"), item]), [])
+    XCTAssertEqual(Self.separatorProblems([]), [])
+    XCTAssertEqual(Self.separatorProblems([line("s"), item]), ["first"])
+    XCTAssertEqual(Self.separatorProblems([item, line("s")]), ["last"])
+    XCTAssertEqual(Self.separatorProblems([item, line("s"), line("t"), item]), ["double at t"])
     XCTAssertEqual(
-      try caption(state(launchAtLogin: true, loginNeedsApproval: true)),
-      ["Allow TopNV in System Settings > General >", "Login Items."])
-    XCTAssertEqual(
-      try caption(state(loginNeedsApproval: true, loginError: "Operation not permitted.")),
-      ["Operation not permitted."])
-    for blank in ["", "   ", "\n\t "] {
-      XCTAssertEqual(try caption(state(loginError: blank)), ["Applies from the next login."])
-      XCTAssertEqual(
-        try caption(state(loginNeedsApproval: true, loginError: blank)),
-        ["Allow TopNV in System Settings > General >", "Login Items."])
+      Self.separatorProblems([item, line("s", title: "x"), item]), ["separator s has content"])
+  }
+
+  func testSeparatorsAreNeverFirstLastOrDoubledInEveryState() {
+    for current in Self.everyState {
+      let top = rows(current)
+      XCTAssertEqual(Self.separatorProblems(top), [], "\(current)")
+      XCTAssertEqual(Self.separatorProblems(Self.options(in: top)), [], "\(current)")
     }
   }
 
-  func testALongLoginErrorIsSplitIntoShortRows() throws {
-    let error = String(repeating: "The login item could not be registered. ", count: 4)
-    let captions = try XCTUnwrap(children("options", in: rows(state(loginError: error))))
+  // MARK: Items
+
+  func testTheSwitchesAndCommandsFollowTheState() {
+    for current in Self.everyState {
+      let top = rows(current)
+      let options = Self.options(in: top)
+      func kind(_ id: String) -> MenuRow.Kind? {
+        (Self.row(id, in: top) ?? Self.row(id, in: options))?.kind
+      }
+      XCTAssertEqual(kind("hideNotch"), .toggle(.hideNotch, isOn: current.hideNotch, enabled: true))
+      XCTAssertEqual(
+        kind("roundCorners"), .toggle(.roundCorners, isOn: current.roundCorners, enabled: true))
+      XCTAssertEqual(
+        kind("cornersOnAllDisplays"),
+        .toggle(
+          .cornersOnAllDisplays, isOn: current.cornersOnAllDisplays, enabled: current.roundCorners))
+      XCTAssertEqual(
+        kind("login"), .toggle(.launchAtLogin, isOn: current.launchAtLogin, enabled: true))
+      XCTAssertEqual(kind("hide"), .action(.hideMenuBarIcon, enabled: true, key: ""))
+      XCTAssertEqual(kind("about"), .action(.about, enabled: true, key: ""))
+      XCTAssertEqual(kind("report"), .action(.reportIssue, enabled: true, key: ""))
+      XCTAssertEqual(kind("quit"), .action(.quit, enabled: true, key: "q"))
+      if case .submenu(_, let enabled)? = kind("options") {
+        XCTAssertTrue(enabled)
+      } else {
+        XCTFail("Options is not a submenu")
+      }
+      switch current.updates {
+      case .hidden:
+        XCTAssertNil(kind("check"))
+        XCTAssertNil(kind("automatic"))
+      case .waiting:
+        XCTAssertEqual(kind("check"), .action(.checkForUpdates, enabled: false, key: ""))
+        XCTAssertEqual(kind("automatic"), .toggle(.automaticUpdates, isOn: false, enabled: false))
+      case .ready(let canCheck, let automatic):
+        XCTAssertEqual(kind("check"), .action(.checkForUpdates, enabled: canCheck, key: ""))
+        XCTAssertEqual(
+          kind("automatic"), .toggle(.automaticUpdates, isOn: automatic, enabled: true))
+      }
+      let withKeys = (top + options).compactMap { row -> String? in
+        if case .action(_, _, let key) = row.kind, !key.isEmpty { return row.id }
+        return nil
+      }
+      XCTAssertEqual(withKeys, ["quit"])
+    }
+  }
+
+  func testGreyRowsOnlyForALoginProblemAndTheIconRecovery() {
+    for current in Self.everyState {
+      let top = rows(current)
+      let options = Self.options(in: top)
+      XCTAssertFalse(top.contains { $0.kind == .info }, "\(current)")
+      let info = options.filter { $0.kind == .info }
+      XCTAssertTrue(
+        info.allSatisfy { $0.id.hasPrefix("login.caption.") || $0.id.hasPrefix("hide.caption.") },
+        "\(current)")
+      XCTAssertTrue(info.allSatisfy { $0.title.count <= 44 && $0.symbol == nil }, "\(current)")
+      let login = info.filter { $0.id.hasPrefix("login.caption.") }.map(\.title)
+        .joined(separator: " ")
+      let error = (current.loginError ?? "").split(whereSeparator: \.isWhitespace)
+        .joined(separator: " ")
+      if !error.isEmpty {
+        XCTAssertEqual(login, error)
+      } else if current.loginNeedsApproval {
+        XCTAssertEqual(login, "Allow TopNV in System Settings > General > Login Items.")
+      } else {
+        XCTAssertEqual(login, "", "no grey row while the login item works")
+      }
+      XCTAssertEqual(
+        info.filter { $0.id.hasPrefix("hide.caption.") }.map(\.title).joined(separator: " "),
+        "Open TopNV again to bring it back.")
+    }
+  }
+
+  func testTheLoginItemSaysWhenApprovalIsPending() {
+    for current in Self.everyState {
+      XCTAssertEqual(
+        Self.row("login", in: Self.options(in: rows(current)))?.title,
+        current.loginNeedsApproval ? "Launch at Login (Requires Approval)" : "Launch at Login")
+    }
+  }
+
+  func testTitlesAndSymbolsOfTheMenu() {
+    let top = rows(Self.state())
+    let options = Self.options(in: top)
+    let expected: [(String, String, String?)] = [
+      ("topnv", "TopNV", nil), ("hideNotch", "Hide Notch", "menubar.rectangle"),
+      ("roundCorners", "Round Corners", "rectangle"), ("options", "Options", "gearshape"),
+      ("about", "About TopNV", nil), ("check", "Check for Updates…", nil),
+      ("report", "Report an Issue…", nil), ("quit", "Quit TopNV", nil),
+      ("cornersOnAllDisplays", "Round Corners on All Displays", "display.2"),
+      ("login", "Launch at Login", "power"),
+      ("automatic", "Check for Updates Automatically", "arrow.triangle.2.circlepath"),
+      ("hide", "Hide Menu Bar Icon", "menubar.rectangle"),
+      ("hide.caption.0", "Open TopNV again to bring it back.", nil),
+    ]
+    for (id, title, symbol) in expected {
+      let found = Self.row(id, in: top) ?? Self.row(id, in: options)
+      XCTAssertEqual(found?.title, title, id)
+      XCTAssertEqual(found?.symbol, symbol, id)
+    }
+    XCTAssertEqual(Self.row("topnv", in: top)?.kind, .header)
+  }
+
+  func testTheRowsTakenOutOfTheMenuAreGone() {
+    let removedIDs = ["status", "details", "display", "permissions", "macOS", "version"]
+    let removedTexts = [
+      "Notch Hidden", "Corners Rounded", "Inactive", "Details", "Applies", "Permissions",
+      "Requires macOS", "Version", "Automatic Updates",
+    ]
+    for current in Self.everyState {
+      let top = rows(current)
+      for row in top + Self.options(in: top) {
+        let base = row.id.split(separator: ".").first.map(String.init) ?? row.id
+        XCTAssertFalse(removedIDs.contains(base), row.id)
+        XCTAssertNotEqual(row.title, "Corners on All Displays", row.id)
+        for text in removedTexts {
+          XCTAssertFalse(row.title.contains(text), "\(row.id): \(row.title)")
+        }
+      }
+    }
+  }
+
+  func testIdsAreUniqueAndTitlesAreNotBlankInEveryState() {
+    for current in Self.everyState {
+      let top = rows(current)
+      let all = top + Self.options(in: top)
+      let ids = all.map(\.id)
+      XCTAssertEqual(Set(ids).count, ids.count, "\(current)")
+      for row in all where row.kind != .separator {
+        XCTAssertFalse(row.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, row.id)
+        XCTAssertFalse(row.id.lowercased().contains("radius"), row.id)
+        XCTAssertFalse(row.title.lowercased().contains("radius"), row.title)
+      }
+    }
+  }
+
+  // MARK: Languages
+
+  func testEveryLanguageGivesTheSameTree() throws {
+    let errors: [String?] = [nil, "Operation not permitted."]
+    for language in Self.languages {
+      let path = Self.localization.appendingPathComponent("\(language).lproj").path
+      let localizer = Localizer(bundle: try XCTUnwrap(Bundle(path: path), language))
+      for current in Self.everyState where errors.contains(current.loginError) {
+        let top = rows(current, localizer)
+        let options = Self.options(in: top)
+        XCTAssertEqual(top.map(\.id), Self.expectedTop(current), language)
+        XCTAssertEqual(Self.collapsed(options.map(\.id)), Self.expectedOptions(current), language)
+        for row in top + options where row.kind != .separator {
+          XCTAssertFalse(
+            row.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            "\(language) \(row.id)")
+          if row.kind == .info {
+            XCTAssertLessThanOrEqual(row.title.count, 44, "\(language) \(row.id)")
+          }
+        }
+      }
+      if language != "en" {
+        for key in [
+          TextKey.roundCornersOnAllDisplays, .launchAtLoginNeedsApproval,
+          .checkForUpdatesAutomatically,
+        ] {
+          XCTAssertNotEqual(localizer(key), key.rawValue, "\(language): \(key.rawValue)")
+        }
+      }
+    }
+  }
+
+  // MARK: Information rows
+
+  func testALongLoginErrorIsSplitIntoShortRows() {
+    let captions = Self.options(in: rows(Self.state(loginError: Self.longError)))
       .filter { $0.id.hasPrefix("login.caption.") }
     XCTAssertGreaterThan(captions.count, 1)
-    XCTAssertEqual(captions.map(\.id), captions.indices.map { "login.caption.\($0)" })
-    XCTAssertTrue(captions.allSatisfy { $0.title.count <= 44 && $0.kind == .info })
-    XCTAssertTrue(captions.allSatisfy { $0.symbol == nil })
+    XCTAssertTrue(captions.allSatisfy { $0.title.count <= 44 && $0.kind == .info && $0.symbol == nil })
     XCTAssertEqual(
       captions.map(\.title).joined(separator: " "),
-      error.split(whereSeparator: \.isWhitespace).joined(separator: " "))
+      Self.longError.split(whereSeparator: \.isWhitespace).joined(separator: " "))
   }
 
   func testOnlyTheFirstLineOfAnInformationRowCarriesTheSymbol() throws {
@@ -239,42 +345,5 @@ final class MenuLayoutTests: XCTestCase {
     XCTAssertTrue(long.dropFirst().allSatisfy { $0.symbol == nil })
     XCTAssertEqual(long.map(\.id), long.indices.map { "x.\($0)" })
     XCTAssertTrue(MenuLayout.info("  ", id: "blank").isEmpty)
-  }
-
-  // MARK: Properties over every state
-
-  func testPropertiesHoldInEveryState() {
-    for current in everyState {
-      let every = allRows(rows(current))
-      let ids = every.map(\.id)
-      XCTAssertEqual(Set(ids).count, ids.count, "\(current)")
-      for row in every {
-        if row.kind == .separator {
-          XCTAssertTrue(row.title.isEmpty, row.id)
-        } else {
-          XCTAssertFalse(row.title.trimmingCharacters(in: .whitespaces).isEmpty, row.id)
-        }
-        XCTAssertFalse(row.id.lowercased().contains("radius"), row.id)
-        XCTAssertFalse(row.title.lowercased().contains("radius"), row.title)
-        if row.kind == .info {
-          XCTAssertNil(row.kind.command, row.id)
-        }
-      }
-    }
-  }
-}
-
-extension MenuRow.Kind {
-  fileprivate var isEnabledSubmenu: Bool? {
-    if case .submenu(_, let enabled) = self { return enabled }
-    return nil
-  }
-
-  /// The command a row runs when chosen; nil for rows that cannot be chosen.
-  fileprivate var command: MenuCommand? {
-    switch self {
-    case .toggle(let command, _, _), .action(let command, _, _): return command
-    case .header, .info, .submenu, .separator: return nil
-    }
   }
 }

@@ -26,18 +26,19 @@ final class AboutTextTests: XCTestCase {
     XCTAssertEqual(information.version.title, "Version 1.2.0")
   }
 
-  /// The menu still shows About and the version in the system language.
-  func testTheMenuKeepsItsTranslatedAboutAndVersion() throws {
+  /// The menu still shows About in the system language; the version is only in the English
+  /// About window, so no table translates it.
+  func testTheMenuKeepsItsTranslatedAboutAndTheVersionIsEnglish() throws {
     let italian = Localizer(
       bundle: try XCTUnwrap(Bundle(path: Self.localization.appendingPathComponent("it.lproj").path))
     )
     XCTAssertEqual(italian(.about, "TopNV"), "Informazioni su TopNV")
-    XCTAssertEqual(italian(.version, "1.2.0"), "Versione 1.2.0")
+    XCTAssertEqual(italian(.version, "1.2.0"), "Version 1.2.0")
     XCTAssertEqual(
       AboutInformation(
         infoDictionary: ["CFBundleShortVersionString": "1.2.0", "CFBundleVersion": "7"],
         localizer: italian
-      ).version.title, "Versione 1.2.0")
+      ).version.title, "Version 1.2.0")
   }
 
   /// Texts that only the About window shows have no entry in any table.
