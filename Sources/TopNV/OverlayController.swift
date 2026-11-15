@@ -7,15 +7,18 @@ import TopNVCore
 @MainActor
 final class OverlayController: NSObject {
   private enum Delay {
-    /// Screen and Space notifications arrive in bursts; wait for the layout to settle.
+    /// Screen configuration notifications arrive in bursts; wait for the layout to settle.
     static let system: Duration = .milliseconds(250)
     /// Short enough for a menu switch to look immediate.
     static let settings: Duration = .milliseconds(30)
   }
 
   private let settings: AppSettings
+  private var bandState = BandState()
+  private var barWindows: [UInt32: OverlayWindow] = [:]
   private var windows: [String: OverlayWindow] = [:]
-  private var pendingRebuild: Task<Void, Never>?
+  private var pendingScreenRebuild: Task<Void, Never>?
+  private var pendingSettingsRebuild: Task<Void, Never>?
   private var settingsSubscription: AnyCancellable?
 
   init(settings: AppSettings) {
@@ -43,47 +46,72 @@ final class OverlayController: NSObject {
       .receive(on: DispatchQueue.main)
       .sink { [weak self] _ in
         MainActor.assumeIsolated {
-          self?.scheduleRebuild(after: Delay.settings)
+          self?.scheduleRebuild(.settingsChanged, after: Delay.settings)
         }
       }
 
-    rebuild()
+    rebuild(.screenConfigurationChanged)
   }
 
   @objc private func systemDidChange(_ notification: Notification) {
-    scheduleRebuild(after: Delay.system)
-  }
-
-  private func scheduleRebuild(after delay: Duration) {
-    pendingRebuild?.cancel()
-    pendingRebuild = Task { @MainActor [weak self] in
-      do {
-        try await Task.sleep(for: delay)
-      } catch {
-        return  // Cancelled by a newer request.
-      }
-      self?.rebuild()
+    if notification.name == NSWorkspace.activeSpaceDidChangeNotification {
+      rebuild(.spaceChanged)
+    } else {
+      // Both system wake and display wake require a fresh, confirmed layout.
+      scheduleRebuild(.screenConfigurationChanged, after: Delay.system)
     }
   }
 
-  /// Reconciles the existing windows with the desired set: reuses windows whose key still
-  /// exists (so the bar does not flicker on Space changes) and closes the rest.
-  private func rebuild() {
+  private func scheduleRebuild(_ event: BandState.Event, after delay: Duration) {
+    // A settings change must not cancel a pending screen-configuration measurement.
+    if event == .screenConfigurationChanged {
+      pendingScreenRebuild?.cancel()
+    } else {
+      pendingSettingsRebuild?.cancel()
+    }
+    let task = Task { @MainActor [weak self] in
+      do {
+        try await Task.sleep(for: delay)
+      } catch {
+        return  // Cancelled by a newer request of the same kind.
+      }
+      self?.rebuild(event)
+    }
+    if event == .screenConfigurationChanged {
+      pendingScreenRebuild = task
+    } else {
+      pendingSettingsRebuild = task
+    }
+  }
+
+  private func rebuild(_ event: BandState.Event) {
+    let screens = NSScreen.screens
+    let measurements = screens.compactMap { screen -> BandState.Screen? in
+      guard let id = screen.displayID else { return nil }
+      return BandState.Screen(
+        id: id, frame: screen.frame, visibleFrame: screen.visibleFrame,
+        safeAreaTop: screen.safeAreaInsets.top)
+    }
+    for action in bandState.update(event, screens: measurements, hideNotch: settings.hideNotch) {
+      switch action {
+      case .show(let id, let frame):
+        let window = barWindows[id] ?? BarWindow(frame: frame)
+        barWindows[id] = window
+        if window.frame != frame {
+          window.setFrame(frame, display: false)
+        }
+        window.orderFrontRegardless()
+      case .close(let id):
+        barWindows[id]?.orderOut(nil)
+        barWindows[id]?.close()
+        barWindows[id] = nil
+      }
+    }
+
     var desiredKeys: Set<String> = []
 
-    for screen in NSScreen.screens {
+    for screen in screens {
       guard let displayID = screen.displayID else { continue }
-
-      let barRect = settings.hideNotch
-        ? ScreenGeometry.barRect(
-          frame: screen.frame, visibleFrame: screen.visibleFrame,
-          safeAreaTop: screen.safeAreaInsets.top)
-        : nil
-      if let rect = barRect {
-        let key = "\(displayID).bar"
-        desiredKeys.insert(key)
-        show(key: key, frame: rect) { BarWindow(frame: rect) }
-      }
 
       let wantsCorners =
         settings.roundCorners
@@ -91,7 +119,7 @@ final class OverlayController: NSObject {
       if wantsCorners {
         let rects = ScreenGeometry.cornerRects(
           frame: screen.frame, radius: ScreenGeometry.cornerRadius,
-          topInset: barRect?.height ?? 0)
+          topInset: bandState.frames[displayID]?.height ?? 0)
         for (corner, rect) in rects {
           let key = "\(displayID).\(corner.rawValue)"
           desiredKeys.insert(key)
