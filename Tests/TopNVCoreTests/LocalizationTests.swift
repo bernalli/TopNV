@@ -288,7 +288,7 @@ final class LocalizationTests: XCTestCase {
     let expected: [String: [String: String]] = [
       "de": ["Launch at Login": "Bei der Anmeldung öffnen"],
       "pt-BR": [
-        "Launch at Login": "Abrir no Início da Sessão",
+        "Launch at Login": "Abrir ao Iniciar Sessão",
         "Quit %@": "Encerrar %@",
         "Hide Menu Bar Icon": "Ocultar Ícone da Barra de Menus",
         "Report an Issue…": "Relatar um Problema…",

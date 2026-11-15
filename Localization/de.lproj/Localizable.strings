@@ -10,7 +10,7 @@
 "Hide Notch" = "Notch ausblenden";
 "Launch at Login (Requires Approval)" = "Bei der Anmeldung öffnen (Genehmigung erforderlich)";
 "Launch at Login" = "Bei der Anmeldung öffnen";
-"Open %@ again to bring it back." = "Öffne %@ erneut, um es wieder einzublenden.";
+"Open %@ again to bring it back." = "Öffne %@ erneut, um es einzublenden.";
 "Options" = "Optionen";
 "Quit %@" = "%@ beenden";
 "Report an Issue…" = "Problem melden …";

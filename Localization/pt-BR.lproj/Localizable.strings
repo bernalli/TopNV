@@ -8,9 +8,9 @@
 "Don't Check" = "Não Buscar";
 "Hide Menu Bar Icon" = "Ocultar Ícone da Barra de Menus";
 "Hide Notch" = "Ocultar Entalhe";
-"Launch at Login (Requires Approval)" = "Abrir no Início da Sessão (Requer Aprovação)";
-"Launch at Login" = "Abrir no Início da Sessão";
-"Open %@ again to bring it back." = "Abra o %@ novamente para que ele volte a aparecer.";
+"Launch at Login (Requires Approval)" = "Abrir ao Iniciar Sessão (Requer Aprovação)";
+"Launch at Login" = "Abrir ao Iniciar Sessão";
+"Open %@ again to bring it back." = "Abra o %@ novamente para exibi-lo.";
 "Options" = "Opções";
 "Quit %@" = "Encerrar %@";
 "Report an Issue…" = "Relatar um Problema…";
