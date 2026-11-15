@@ -17,6 +17,7 @@ import TopNVCore
     let delegate = AppDelegate()
     Application.delegate = delegate
     application.delegate = delegate
+    application.mainMenu = ApplicationMenu.make { NSApp.terminate(nil) }
     application.run()
   }
 }

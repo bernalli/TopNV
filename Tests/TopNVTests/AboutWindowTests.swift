@@ -11,12 +11,12 @@ import XCTest
 /// browser or activates the app.
 @MainActor
 final class AboutWindowTests: XCTestCase {
-  private static let repository = URL(fileURLWithPath: #filePath)
+  nonisolated private static let repository = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-  private static let assets = repository.appendingPathComponent("Assets")
-  private static let wordmark = assets.appendingPathComponent("Fonts/PlusJakartaSans-SemiBold.ttf")
-  private static let gitHubMark = assets.appendingPathComponent("GitHubMark.pdf")
-  private static let italian = repository.appendingPathComponent("Localization/it.lproj")
+  nonisolated private static let assets = repository.appendingPathComponent("Assets")
+  nonisolated private static let wordmark = assets.appendingPathComponent("Fonts/PlusJakartaSans-SemiBold.ttf")
+  nonisolated private static let gitHubMark = assets.appendingPathComponent("GitHubMark.pdf")
+  nonisolated private static let italian = repository.appendingPathComponent("Localization/it.lproj")
 
   private var opened: [URL] = []
   private var activations = 0
