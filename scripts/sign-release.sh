@@ -7,7 +7,8 @@ fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # TOPNV_SPARKLE_KEY=keychain: generate_appcast reads the EdDSA key from the login Keychain (local
-# release). Unset: the key comes from SPARKLE_ED_PRIVATE_KEY through stdin only (hosted release).
+# release), under the topnv account where scripts create it; the tool default (ed25519) is not ours.
+# Unset: the key comes from SPARKLE_ED_PRIVATE_KEY through stdin only (hosted release).
 case "${TOPNV_SPARKLE_KEY-}" in
   '') scripts/require-signing-key.sh ;;
   keychain) ;;
@@ -30,6 +31,6 @@ with tempfile.TemporaryDirectory(prefix='sign-',dir=root/'build') as tmp:
     folder=pathlib.Path(tmp)
     shutil.copy2(root/f'build/TopNV-{version}.dmg',folder)
     shutil.copy2(os.environ['TOPNV_RELEASE_NOTES'],folder/f'TopNV-{version}.md')
-    result=subprocess.run([str(tool),*([] if keychain else ['--ed-key-file','-']),'--embed-release-notes','--download-url-prefix',prefix,'-o',str(root/'build/appcast.xml'),str(folder)],env=env,capture_output=True,**source)
+    result=subprocess.run([str(tool),*(['--account','topnv'] if keychain else ['--ed-key-file','-']),'--embed-release-notes','--download-url-prefix',prefix,'-o',str(root/'build/appcast.xml'),str(folder)],env=env,capture_output=True,**source)
     if result.returncode or (key and (key in result.stdout or key in result.stderr)): sys.exit('error: appcast signing failed; output withheld')
 PY
