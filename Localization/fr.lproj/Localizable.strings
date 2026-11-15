@@ -2,8 +2,8 @@
 "About %@" = "À propos de %@";
 "Allow %@ in System Settings > General > Login Items." = "Autorisez %@ dans Réglages Système > Général > Ouverture.";
 "Applies from the next login." = "S’appliquera à la prochaine ouverture de session.";
-"Applies to: All Displays" = "S'applique à : tous les écrans";
-"Applies to: Built-in Display" = "S'applique à : écran intégré";
+"Applies to: All Displays" = "S’applique à : tous les écrans";
+"Applies to: Built-in Display" = "S’applique à : écran intégré";
 "Automatic Updates" = "Mises à jour automatiques";
 "Check Automatically" = "Rechercher automatiquement";
 "Check for Updates Automatically?" = "Rechercher automatiquement les mises à jour ?";
@@ -13,7 +13,7 @@
 "Details" = "Détails";
 "Don't Check" = "Ne pas rechercher";
 "Hide Menu Bar Icon" = "Masquer l’icône de la barre des menus";
-"Hide Notch" = "Masquer l'encoche";
+"Hide Notch" = "Masquer l’encoche";
 "Inactive" = "Inactif";
 "Launch at Login" = "Ouvrir à la connexion";
 "Notch Hidden" = "Encoche masquée";
