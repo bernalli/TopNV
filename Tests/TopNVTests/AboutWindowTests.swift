@@ -115,11 +115,11 @@ final class AboutWindowTests: XCTestCase {
 
   // MARK: English in every language (D-35)
 
-  /// The About window reads no table: with the Italian table as its bundle it stays in English.
+  /// Checks About data and window title while Localizer.main uses the Italian table.
   func testTheWindowStaysInEnglishWithTheItalianTable() throws {
     let italian = try XCTUnwrap(Bundle(path: Self.italian.path))
-    // The Italian table answers the default lookups too, so a window that read `Localizer.main`
-    // or `Bundle.main` would turn Italian here.
+    // This override affects Localizer.main only, not Foundation or SwiftUI localization.
+    // scripts/tests/test-about-english.sh guards changes to the reviewed About source path.
     try Localizer.$bundleOverride.withValue(italian) {
       try checkTheWindowInEnglish(italian: italian)
     }
