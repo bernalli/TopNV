@@ -26,8 +26,10 @@ with tempfile.TemporaryDirectory(dir=root/'build/test-tmp') as tmp:
     copy=pathlib.Path(tmp)
     shutil.copytree(root/'scripts',copy/'scripts',ignore=shutil.ignore_patterns('__pycache__','tests'))
     tool=copy/'.build/artifacts/sparkle/Sparkle/bin/generate_appcast'; tool.parent.mkdir(parents=True)
+    # Like the real tool, the fake keeps the items of an output feed that already exists.
     tool.write_text('#!/usr/bin/env python3\nimport json,os,pathlib,sys\n'
-                    "pathlib.Path(sys.argv[sys.argv.index('-o')+1]).write_text('feed')\n"
+                    "out=pathlib.Path(sys.argv[sys.argv.index('-o')+1]); old=out.read_text() if out.exists() else ''\n"
+                    "out.write_text(old+'<item>new</item>\\n')\n"
                     "json.dump({'argv':sys.argv[1:],'stdin':sys.stdin.read(),'env':'SPARKLE_ED_PRIVATE_KEY' in os.environ},open(os.environ['FAKE_RECORD'],'w'))\n")
     tool.chmod(0o755)
     # The public key lookup of the Keychain account: records its call and prints FAKE_KEYS_OUT.
@@ -53,11 +55,21 @@ with tempfile.TemporaryDirectory(dir=root/'build/test-tmp') as tmp:
         record.unlink(missing_ok=True); looked_up.unlink(missing_ok=True)
         result=subprocess.run(['bash',str(copy/'scripts/sign-release.sh')],env=dict(base,**values),stdin=subprocess.DEVNULL,capture_output=True)
         return result,read(record),read(looked_up)
-    tail=['--embed-release-notes','--download-url-prefix',prefix,'-o',str(copy/'build/appcast.xml')]
+    tail=['--embed-release-notes','--download-url-prefix',prefix,'-o']
+    # A feed left by an earlier release must never reach generate_appcast: the tool writes into
+    # a new folder, and build/appcast.xml holds only the item of this release afterwards.
+    appcast=copy/'build/appcast.xml'; appcast.write_text('<item>1.1.0</item>\n')
+    def written(seen,keys):
+        argv=seen['argv']
+        assert argv[:len(keys)+len(tail)]==keys+tail and len(argv)==len(keys)+len(tail)+2,seen
+        out,folder=pathlib.Path(argv[-2]),pathlib.Path(argv[-1])
+        assert out!=appcast and out.parent!=folder and out.parent.parent==copy/'build',seen
+        assert appcast.read_text()=='<item>new</item>\n',appcast.read_text()
+        assert sorted(p.name for p in (copy/'build').iterdir())==['TopNV-1.2.0.dmg','appcast.xml']
     # Without TOPNV_SPARKLE_KEY: today's flow, the key from the environment through stdin only.
     result,seen,asked=sign(SPARKLE_ED_PRIVATE_KEY=key)
     assert result.returncode==0,result
-    assert seen['argv'][:len(tail)+2]==['--ed-key-file','-']+tail and len(seen['argv'])==len(tail)+3,seen
+    written(seen,['--ed-key-file','-'])
     assert seen['stdin']==key+'\n' and not seen['env'],seen
     assert '--account' not in seen['argv'],seen
     # The hosted flow never asks the Keychain, not even when the account would fail.
@@ -72,7 +84,7 @@ with tempfile.TemporaryDirectory(dir=root/'build/test-tmp') as tmp:
         result,seen,asked=sign(TOPNV_SPARKLE_KEY='keychain',**values)
         assert result.returncode==0,(values,result)
         assert asked=={'argv':['--account','topnv','-p'],'stdin':'','env':False},asked
-        assert seen['argv'][:len(tail)+2]==['--account','topnv']+tail and len(seen['argv'])==len(tail)+3,seen
+        written(seen,['--account','topnv'])
         assert '--ed-key-file' not in seen['argv'],seen
         assert seen['stdin']=='' and not seen['env'],seen
         assert key.encode() not in result.stdout+result.stderr

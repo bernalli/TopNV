@@ -90,6 +90,19 @@ with tempfile.TemporaryDirectory(dir=root/'build/test-tmp') as tmp:
     git('push','-q','origin','main'); git('reset','-q','--hard','HEAD~1'); refused('1.2.0','6')
     git('reset','-q','--hard','origin/main')
     refused('9.9.9','6'); refused('1.3.0','6')
+    # A transaction record left by an earlier run stops step 0 and names the command that finishes it.
+    (repo/'build').mkdir(exist_ok=True); stale_record=repo/'build/release-transaction.json'
+    stale_record.write_text(json.dumps({'release_id':42,'run_id':'local-1.2.0-5-'+ID,'sha':'f'*40,'tag':'v1.2.0'})+'\n')
+    refused('1.2.0','6'); result,calls=release('1.2.0','6')
+    for text in ('build/release-transaction.json','release 42','GITHUB_RUN_ID=local-1.2.0-5-'+ID,'GITHUB_SHA='+'f'*40,
+                 'INPUT_VERSION=1.2.0','GITHUB_RUN_NUMBER=5','scripts/publish-release.sh recover','already published'):
+        assert text in result.stderr,(text,result.stderr)
+    # A malformed or hostile record still stops, and none of its values reaches the suggested command.
+    for content in ('not json\n','[]\n',json.dumps({'release_id':'$(touch pwned)','run_id':'$(touch pwned)','sha':'`id`','tag':'v1.2.0;id'})+'\n'):
+        stale_record.write_text(content); refused('1.2.0','6'); result,calls=release('1.2.0','6')
+        assert 'scripts/publish-release.sh recover' in result.stderr and 'pwned' not in result.stderr and '`id`' not in result.stderr,result.stderr
+        assert not (repo/'pwned').exists()
+    stale_record.unlink()
     marker=repo/'Localization/en.lproj/Localizable.strings'; saved=marker.read_text()
     marker.write_text('/* PENDING-MONOPODS */\n'+saved); git('commit','-qam','pending'); git('push','-q','origin','main')
     refused('1.2.0','6')
@@ -173,5 +186,24 @@ with tempfile.TemporaryDirectory(dir=root/'build/test-tmp') as tmp:
     ids=run_ids(first_calls)+run_ids(second_calls)
     assert len(ids)==3 and ids[1]==ids[2] and ids[0]!=ids[1] and all(re.fullmatch(RUN_ID,i) for i in ids),ids
     assert git('status','--porcelain')=='' and git('rev-parse','HEAD')==head
+    # An appcast left by an earlier release neither stops step 0 nor enters the new feed: here the
+    # real sign-release.sh runs, with generate_appcast and generate_keys replaced.
+    shutil.copy2(root/'scripts/sign-release.sh',repo/'scripts/sign-release.sh')
+    public='ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8='
+    (repo/'Assets').mkdir(); (repo/'Assets/SparklePublicEDKey.txt').write_text(public+'\n')
+    (repo/'.gitignore').write_text('build/\n.build/\n')
+    git('add','-A'); git('commit','-qm','real signing'); git('push','-q','origin','main')
+    tools=repo/'.build/artifacts/sparkle/Sparkle/bin'; tools.mkdir(parents=True)
+    fake(tools/'generate_keys',(),f"print({public!r})\n")
+    # Like the real tool, the fake keeps the items of an output feed that already exists.
+    fake(tools/'generate_appcast',(),"out=sys.argv[sys.argv.index('-o')+1]; old=open(out).read() if os.path.exists(out) else ''\n"
+         "open(out,'w').write(old+'<item>1.2.0</item>\\n')\n")
+    appcast=repo/'build/appcast.xml'; appcast.write_text('<item>1.1.0</item>\n')
+    result,calls=release('1.2.0','6')
+    assert result.returncode==0 and result.stdout.splitlines()[-1]=='___RELEASE_END ok___',result
+    assert appcast.read_text()=='<item>1.2.0</item>\n',appcast.read_text()
+    signed=[c['args'] for c in calls if c['tool']=='generate_appcast']
+    assert len(signed)==1 and signed[0][signed[0].index('-o')+1] not in ('build/appcast.xml',str(appcast)),signed
+    assert not [p for p in (repo/'build').iterdir() if p.name.startswith('sign-')]
 print('PASS release-local guards stop before any build; sequence, notarization, Gatekeeper and recovery')
 PY

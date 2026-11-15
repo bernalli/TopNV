@@ -7,6 +7,10 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+import contextlib
+import io
+import itertools
+import json
 
 ROOT=Path(__file__).resolve().parents[2]
 spec=importlib.util.spec_from_file_location('publisher',ROOT/'scripts/publish-release.py')
@@ -17,7 +21,7 @@ class Fake:
         self.releases=[]; self.tag=None; self.sha='a'*40; self.events=[]; self.fail=None; self.public=False; self.downloads={}; self.status=404
         self.api_status=None; self.api_transport=False; self.deleted=[]; self.off_main=False; self.peeled=None
         self.latest={'tag_name':'v1.0.0','assets':[]}; self.order_failed=False; self.different=None; self.rollback_fails=False
-        self.response_tag=None; self.public_delay=0; self.public_statuses=[]
+        self.response_tag=None; self.public_delay=0; self.public_statuses=[]; self.foreign_record=None
     def git(self, *args):
         if args[0]=='merge-base' and self.off_main: raise module.ReleaseError('Git source validation failed')
         if args[0]=='rev-parse': return self.sha
@@ -56,6 +60,7 @@ class Fake:
             assert not self.public
             if self.fail==name: raise module.ReleaseError('upload failed')
             if self.fail=='tag-moves' and name=='appcast.xml': self.tag={'type':'commit','sha':'b'*40}
+            if self.foreign_record: self.foreign_record.write_text('{"release_id":9,"run_id":"other","sha":"'+'a'*40+'","tag":"v1.1.0"}\n')
             asset_id=len(self.downloads)+1; self.downloads[asset_id]=Path(file).read_bytes()
             return 201,{'id':asset_id}
         if method=='GET' and '/releases/assets/' in path:
@@ -147,10 +152,36 @@ class Cases(unittest.TestCase):
             self.transport=Fake(); p=self.prepared(); self.transport.different=where
             with self.assertRaises(module.ReleaseError): p.publish()
             self.assertFalse(self.transport.public)
+    def record(self): return self.root/'build/release-transaction.json'
     def test_recovery_only_owns_this_run(self):
-        p=self.prepared(); p.publish(); p.recover(); self.assertFalse(self.transport.public)
+        p=self.prepared(); self.transport.fail='appcast.xml'
+        with self.assertRaises(module.ReleaseError): p.publish()
         self.env['GITHUB_RUN_ID']='other'
         with self.assertRaises(module.ReleaseError): self.publisher().recover()
+        self.env['GITHUB_RUN_ID']='7'; self.publisher().recover(); self.assertFalse(self.transport.public)
+    def test_successful_publish_removes_its_record(self):
+        p=self.prepared(); p.publish()
+        self.assertTrue(self.transport.public); self.assertFalse(self.record().exists())
+        # A later recover of the same run finds no record and leaves the published release alone.
+        self.publisher().recover(); self.assertTrue(self.transport.public)
+    def test_failed_publish_keeps_its_record_for_recovery(self):
+        for failure in ['appcast.xml','verify-after-draft','publish','interrupt']:
+            with self.subTest(failure=failure):
+                self.record().unlink(missing_ok=True)
+                self.transport=Fake(); p=self.prepared(); self.transport.fail=failure
+                if failure=='verify-after-draft': self.transport.different='private'; self.transport.fail=None
+                with self.assertRaises(module.ReleaseError): p.publish()
+                self.assertFalse(self.transport.public)
+                self.assertEqual(module.json.loads(self.record().read_text()),{'release_id':5,'run_id':'7','sha':'a'*40,'tag':'v1.1.0'})
+                self.publisher().recover()
+    def test_successful_publish_keeps_a_record_of_another_run(self):
+        p=self.prepared(); self.transport.foreign_record=self.record(); p.publish()
+        self.assertTrue(self.transport.public); self.assertIn('"run_id":"other"',self.record().read_text())
+    def test_recovery_after_a_failure_before_the_draft_succeeds(self):
+        # Without a record left by an earlier run, a recover after a rolled-back failure cannot fail.
+        p=self.prepared(); self.transport.fail='verify'
+        with self.assertRaises(module.ReleaseError): p.publish()
+        self.assertFalse(self.record().exists()); self.publisher().recover(); self.assertFalse(self.transport.public)
     def test_rollback_failure_remains_error(self):
         p=self.prepared(); self.transport.fail='publish'; self.transport.rollback_fails=True
         with self.assertRaisesRegex(module.ReleaseError,'indeterminate.*5'): p.publish()
@@ -243,6 +274,96 @@ class Cases(unittest.TestCase):
         self.proof(); p=self.prepared(); self.transport.public_delay=100
         with self.assertRaisesRegex(module.ReleaseError,'public readback'): p.publish()
         self.assertFalse(self.transport.public)
+
+class TransactionCleanup(unittest.TestCase):
+    def setUp(self):
+        self.transport=mock.Mock()
+        self.p=module.Publisher(ROOT,{
+            'GITHUB_EVENT_NAME':'workflow_dispatch',
+            'GITHUB_REF':'refs/heads/main',
+            'INPUT_VERSION':'1.1.0',
+            'GITHUB_SHA':'a'*40,
+            'GITHUB_RUN_NUMBER':'2',
+            'GITHUB_RUN_ID':'7',
+        },self.transport)
+        self.p.release_id=5
+
+    def cleanup_record(self,raw='',read_error=None,unlink_error=None):
+        errors=io.StringIO()
+        with (
+            mock.patch.object(module.Path,'read_text',
+                              return_value=raw,side_effect=read_error),
+            mock.patch.object(module.Path,'unlink',
+                              side_effect=unlink_error) as remove,
+            contextlib.redirect_stderr(errors),
+        ):
+            self.p.forget()
+        self.assertEqual(self.transport.mock_calls,[])
+        return remove.call_count,errors.getvalue()
+
+    def test_own_record_is_removed_regardless_of_key_order(self):
+        for pairs in itertools.permutations(self.p.transaction().items()):
+            with self.subTest(pairs=pairs):
+                self.assertEqual(self.cleanup_record(json.dumps(dict(pairs))),(1,''))
+
+    def test_foreign_missing_extra_and_wrong_types_are_preserved(self):
+        own=self.p.transaction()
+        records=[None,[],True,5,'record']
+        foreign={'release_id':6,'run_id':'8','sha':'b'*40,'tag':'v1.1.1'}
+        records.extend(dict(own,release_id=value) for value in (-1,0,10**40))
+        for key,value in own.items():
+            missing=dict(own)
+            del missing[key]
+            records.append(missing)
+            records.append(dict(own,**{key:foreign[key]}))
+            for wrong in (None,[],{},False,5.0,'5' if key=='release_id' else 5):
+                records.append(dict(own,**{key:wrong}))
+        records.append(dict(own,extra='field'))
+        for record in records:
+            with self.subTest(record=record):
+                self.assertEqual(self.cleanup_record(json.dumps(record))[0],0)
+        self.p.release_id=1
+        self.assertEqual(self.cleanup_record(
+            json.dumps(dict(self.p.transaction(),release_id=True))
+        )[0],0)
+
+    def test_duplicate_fields_are_rejected_in_either_order(self):
+        own=self.p.transaction()
+        for key,value in own.items():
+            foreign=6 if key=='release_id' else value+'other'
+            for repeated in (value,foreign):
+                pair=json.dumps(key)+':'+json.dumps(repeated)
+                for raw in (
+                    '{'+pair+','+json.dumps(own)[1:],
+                    json.dumps(own)[:-1]+','+pair+'}',
+                ):
+                    with self.subTest(raw=raw):
+                        removed,warning=self.cleanup_record(raw)
+                        self.assertEqual(removed,0)
+                        self.assertIn('warning:',warning)
+
+    def test_unreadable_or_unremovable_record_warns_without_recovery(self):
+        own=json.dumps(self.p.transaction())
+        for raw in ('','{',own[:-1]):
+            with self.subTest(raw=raw):
+                removed,warning=self.cleanup_record(raw)
+                self.assertEqual(removed,0)
+                self.assertIn('warning:',warning)
+        self.assertEqual(self.cleanup_record('['*2000+'0'+']'*2000)[0],0)
+        for error in (
+            PermissionError('denied'),
+            FileNotFoundError('missing'),
+            UnicodeDecodeError('utf-8',b'\xff',0,1,'invalid'),
+        ):
+            removed,warning=self.cleanup_record(read_error=error)
+            self.assertEqual(removed,0)
+            self.assertIn('warning:',warning)
+        removed,warning=self.cleanup_record(
+            own,unlink_error=PermissionError('denied')
+        )
+        self.assertEqual(removed,1)
+        self.assertIn('warning:',warning)
+
 
 class RealVerify(unittest.TestCase):
     def test_downloaded_bundle_must_carry_a_developer_id_signature(self):
