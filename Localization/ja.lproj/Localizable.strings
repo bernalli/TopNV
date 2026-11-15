@@ -5,7 +5,6 @@
 "Applies to: All Displays" = "適用先：すべてのディスプレイ";
 "Applies to: Built-in Display" = "適用先：内蔵ディスプレイ";
 "Automatic Updates" = "自動アップデート";
-"Buy Me a Coffee" = "コーヒーをおごる";
 "Check Automatically" = "自動的に確認";
 "Check for Updates Automatically?" = "アップデートを自動的に確認しますか？";
 "Check for Updates…" = "アップデートを確認…";
@@ -30,4 +29,3 @@
 "Version %@" = "バージョン %@";
 "Version Unavailable (Build %@)" = "バージョン不明（ビルド %@）";
 "Version Unavailable" = "バージョン不明";
-"View %@ on GitHub" = "GitHubで%@を表示";

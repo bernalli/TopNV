@@ -38,7 +38,7 @@ Click the menu-bar icon to see the current configuration and change it directly.
 | Details | Show the selected display scope and system requirements; open the source, release notes or issue tracker. |
 | Options | Set **Corners on All Displays**, **Launch at Login**, **Automatically Check for Updates** and **Hide Menu Bar Icon**. |
 | Check for Updates… | Check manually, including when automatic checks are off. |
-| Version / About TopNV | Show the installed version and the About window with a GitHub icon and a Buy Me a Coffee button. |
+| Version / About TopNV | Show the installed version and the About window, in English in every language, with a GitHub icon and a Buy Me a Coffee button. |
 | Quit TopNV · ⌘Q | Stop the app and remove its overlays. |
 
 Corners on All Displays is disabled while Round Corners is off.
@@ -129,6 +129,9 @@ the result is `build/TopNV.dmg`.
 TopNV is released under the [MIT License](LICENSE). Sparkle and its bundled
 components retain their complete [license notices](Licenses/Sparkle.txt), also
 included alongside the TopNV license inside the app.
+The About window shows the app name in Plus Jakarta Sans SemiBold, under the
+[SIL Open Font License 1.1](Assets/Fonts/PlusJakartaSans-OFL.txt); the license is
+included inside the app too.
 
 ## Support
 

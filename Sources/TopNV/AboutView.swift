@@ -2,45 +2,70 @@ import AppKit
 import SwiftUI
 import TopNVCore
 
+enum AboutArtwork {
+  /// Loads a vector mark as a template image, so it is drawn in the text colour: black in light
+  /// mode and white in dark mode, with its own proportions.
+  static func templateImage(contentsOf url: URL?) -> NSImage? {
+    guard let url, let image = NSImage(contentsOf: url) else { return nil }
+    image.isTemplate = true
+    return image
+  }
+}
+
+/// The content of the standard About panel (icon, name, version, copyright) plus a GitHub link
+/// beside the version and a sponsor button, as in MonoPods. Its texts are always English (D-35).
 struct AboutView: View {
   let information: AboutInformation
-  private let localizer = Localizer.main
+  let icon: NSImage?
+  let gitHubMark: NSImage?
+  let titleFont: NSFont
+  let openRepository: @MainActor () -> Void
+  let openSponsors: @MainActor () -> Void
+
+  private static let iconSide: CGFloat = 64
+  private static let detailSize = NSFont.smallSystemFontSize
+  private static let markSide: CGFloat = 12
+  private static let width: CGFloat = 280
 
   var body: some View {
     VStack(spacing: 0) {
-      Image(nsImage: NSApp.applicationIconImage)
-        .resizable()
-        .scaledToFit()
-        .frame(width: 64, height: 64)
-        .accessibilityHidden(true)
+      if let icon {
+        Image(nsImage: icon)
+          .resizable()
+          .interpolation(.high)
+          .frame(width: Self.iconSide, height: Self.iconSide)
+          .accessibilityHidden(true)
+      }
       Text(verbatim: information.name)
-        .font(.system(size: 16, weight: .bold))
+        .font(Font(titleFont))
         .padding(.top, 10)
       HStack(spacing: 5) {
         Text(verbatim: information.version.title)
-        Button {
-          open(.source)
-        } label: {
-          GitHubMark()
+        if let gitHubMark {
+          Button(action: openRepository) {
+            Image(nsImage: gitHubMark)
+              .renderingMode(.template)
+              .resizable()
+              .scaledToFit()
+              .frame(width: Self.markSide, height: Self.markSide)
+          }
+          .buttonStyle(.plain)
+          .foregroundStyle(.primary)
+          .help(AboutText.gitHubHelp)
+          .accessibilityLabel(AboutText.gitHubHelp)
         }
-        .buttonStyle(.plain)
-        .focusEffectDisabled()
-        .help(localizer(.viewOnGitHub, information.name))
-        .accessibilityLabel(localizer(.viewOnGitHub, information.name))
       }
-      .font(.system(size: NSFont.smallSystemFontSize))
+      .font(.system(size: Self.detailSize))
       .foregroundStyle(.secondary)
       .padding(.top, 4)
       if let copyright = information.copyright {
         Text(verbatim: copyright)
-          .font(.system(size: NSFont.smallSystemFontSize))
+          .font(.system(size: Self.detailSize))
           .foregroundStyle(.secondary)
           .padding(.top, 10)
       }
-      Button {
-        open(.sponsor)
-      } label: {
-        Label(localizer(.buyMeACoffee), systemImage: "cup.and.saucer")
+      Button(action: openSponsors) {
+        Label(AboutText.sponsor, systemImage: "cup.and.saucer")
       }
       .controlSize(.small)
       .padding(.top, 14)
@@ -50,32 +75,6 @@ struct AboutView: View {
     .padding(.horizontal, 20)
     .padding(.top, 6)
     .padding(.bottom, 20)
-    .frame(width: 280)
-  }
-
-  private func open(_ link: AppLink) {
-    guard let url = link.url else { return }
-    NSWorkspace.shared.open(url)
-  }
-}
-
-/// The GitHub mark from the app bundle, or an SF Symbol when run unbundled.
-private struct GitHubMark: View {
-  private static let image: NSImage? = {
-    guard let image = Bundle.main.image(forResource: "GitHubMark") else { return nil }
-    image.isTemplate = true
-    image.size = NSSize(width: 12, height: 12)
-    return image
-  }()
-
-  var body: some View {
-    Group {
-      if let image = Self.image {
-        Image(nsImage: image)
-      } else {
-        Image(systemName: "link")
-      }
-    }
-    .foregroundStyle(.secondary)
+    .frame(width: Self.width)
   }
 }

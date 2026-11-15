@@ -5,7 +5,6 @@
 "Applies to: All Displays" = "Se aplica a: todas las pantallas";
 "Applies to: Built-in Display" = "Se aplica a: pantalla integrada";
 "Automatic Updates" = "Actualizaciones automáticas";
-"Buy Me a Coffee" = "Invítame a un café";
 "Check Automatically" = "Buscar automáticamente";
 "Check for Updates Automatically?" = "¿Buscar actualizaciones automáticamente?";
 "Check for Updates…" = "Buscar actualizaciones…";
@@ -30,4 +29,3 @@
 "Version %@" = "Versión %@";
 "Version Unavailable (Build %@)" = "Versión no disponible (compilación %@)";
 "Version Unavailable" = "Versión no disponible";
-"View %@ on GitHub" = "Ver %@ en GitHub";

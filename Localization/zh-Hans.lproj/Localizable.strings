@@ -5,7 +5,6 @@
 "Applies to: All Displays" = "适用于：所有显示器";
 "Applies to: Built-in Display" = "适用于：内建显示器";
 "Automatic Updates" = "自动更新";
-"Buy Me a Coffee" = "请我喝杯咖啡";
 "Check Automatically" = "自动检查";
 "Check for Updates Automatically?" = "要自动检查更新吗？";
 "Check for Updates…" = "检查更新…";
@@ -30,4 +29,3 @@
 "Version %@" = "版本 %@";
 "Version Unavailable (Build %@)" = "版本不可用（构建版本 %@）";
 "Version Unavailable" = "版本不可用";
-"View %@ on GitHub" = "在 GitHub 上查看 %@";

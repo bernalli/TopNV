@@ -33,8 +33,6 @@ public enum TextKey: String, CaseIterable {
   case versionWithBuild = "Version %@ (%@)"
   case versionUnavailable = "Version Unavailable"
   case versionUnavailableWithBuild = "Version Unavailable (Build %@)"
-  case viewOnGitHub = "View %@ on GitHub"
-  case buyMeACoffee = "Buy Me a Coffee"
   case updateQuestionTitle = "Check for Updates Automatically?"
   case updateQuestionMessage =
     "%@ can check for new versions once a day. You can change this at any time in Options."
@@ -61,15 +59,23 @@ public struct Localizer {
   /// The app name is not translated.
   public static let appName = "TopNV"
 
-  private let bundle: Bundle
+  /// Reads no table: the English text of every key, in every language (the About window, D-35).
+  public static let english = Localizer(table: nil)
+
+  private let bundle: Bundle?
 
   public init(bundle: Bundle) {
     self.bundle = bundle
   }
 
+  private init(table bundle: Bundle?) {
+    self.bundle = bundle
+  }
+
   public func callAsFunction(_ key: TextKey, _ arguments: CVarArg...) -> String {
-    let format = bundle.localizedString(
-      forKey: key.rawValue, value: key.rawValue, table: "Localizable")
+    let format =
+      bundle?.localizedString(forKey: key.rawValue, value: key.rawValue, table: "Localizable")
+      ?? key.rawValue
     return arguments.isEmpty ? format : String(format: format, arguments: arguments)
   }
 }

@@ -10,6 +10,11 @@ import sys
 
 SPARKLE_HASH = '389a4e4e9a32f059775b13a06e25a591445ba229d2838d26dd3e7c0c45127cfe'
 MIT_HASH = 'd0d211e1fb7d9926f5e1693cab1e843b42152cdc39d38638a5cf83b3530feaaa'
+# Plus Jakarta Sans SemiBold for the About title, its SIL Open Font License, and the official
+# GitHub mark: the same files as MonoPods 0ade59b.
+FONT_HASH = '65dbcedb6596a41c30869729eb31cb57d1f5edfe365684314bba8a1994eaa4cb'
+OFL_HASH = '995c7199cab65954f545996326755daee7b63cc6b42b06c13da1f9502ab08a99'
+MARK_HASH = '9d30aac7deaf046f3e6ca4a46a6d03bcc347c595c64521dc103f4bad313aaf65'
 STABLE = 'https://github.com/bernalli/TopNV/releases/latest/download/appcast.xml'
 LANGUAGES = ['en', 'it', 'es', 'fr', 'de', 'pt-BR', 'ja', 'zh-Hans']
 FEED = r'https://github\.com/bernalli/TopNV/releases/(latest/download|download/update-proof)/appcast\.xml'
@@ -41,6 +46,9 @@ def main():
             ('public key missing or invalid', lambda: key((root/'Assets/SparklePublicEDKey.txt').read_text().rstrip())),
             ('Sparkle license missing or altered', lambda: hash_matches(root/'Licenses/Sparkle.txt', SPARKLE_HASH)),
             ('TopNV license missing or altered', lambda: hash_matches(root/'LICENSE', MIT_HASH)),
+            ('About font missing or altered', lambda: hash_matches(root/'Assets/Fonts/PlusJakartaSans-SemiBold.ttf', FONT_HASH)),
+            ('About font license missing or altered', lambda: hash_matches(root/'Assets/Fonts/PlusJakartaSans-OFL.txt', OFL_HASH)),
+            ('GitHub mark missing or altered', lambda: hash_matches(root/'Assets/GitHubMark.pdf', MARK_HASH)),
             ('AUTHORS is empty', lambda: bool((root/'AUTHORS').read_text().splitlines()[0].strip())),
             ('localizations missing or incomplete', lambda: languages_complete(root/'Localization')),
         ]
@@ -56,6 +64,8 @@ def main():
             ('V4: invalid identity or version', lambda: version(p.get('CFBundleShortVersionString')) and build(p.get('CFBundleVersion')) and p.get('CFBundleIdentifier') == 'io.github.bernalli.topnv' and p.get('LSMinimumSystemVersion') == '14.0'),
             ('V11: Sparkle license mismatch', lambda: hash_matches(resources/'Sparkle.txt',SPARKLE_HASH)),
             ('V12: TopNV license mismatch', lambda: hash_matches(resources/'TopNV.txt',MIT_HASH)),
+            ('V16: About font mismatch', lambda: hash_matches(app/'Contents/Resources/PlusJakartaSans-SemiBold.ttf',FONT_HASH)),
+            ('V17: About font license mismatch', lambda: hash_matches(resources/'PlusJakartaSans-OFL.txt',OFL_HASH)),
             ('V15: localizations missing or incomplete', lambda: p.get('CFBundleLocalizations') == LANGUAGES and all((app/'Contents/Resources'/(l + '.lproj')/'Localizable.strings').is_file() for l in LANGUAGES)),
             ('V13: copyright mismatch', lambda: p.get('NSHumanReadableCopyright') == 'Copyright (c) 2026 ' + (root/'AUTHORS').read_text().splitlines()[0] and 'All rights reserved' not in p['NSHumanReadableCopyright']),
         ]
