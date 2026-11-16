@@ -3,6 +3,7 @@ import Foundation
 /// What a selectable menu item does. The app target maps each command to an action.
 public enum MenuCommand: String, CaseIterable, Sendable {
   case hideNotch
+  case blackMenuBar
   case roundCorners
   case cornersOnAllDisplays
   case launchAtLogin
@@ -44,6 +45,7 @@ public struct MenuRow: Equatable, Sendable {
 /// Everything the menu shows, read from the settings, the login item and the updater at one moment.
 public struct MenuState: Equatable, Sendable {
   public var hideNotch: Bool
+  public var blackMenuBar: Bool
   public var roundCorners: Bool
   public var cornersOnAllDisplays: Bool
   public var launchAtLogin: Bool
@@ -54,9 +56,10 @@ public struct MenuState: Equatable, Sendable {
 
   public init(
     hideNotch: Bool, roundCorners: Bool, cornersOnAllDisplays: Bool, launchAtLogin: Bool,
-    loginNeedsApproval: Bool, loginError: String?, updates: UpdateItems
+    loginNeedsApproval: Bool, loginError: String?, updates: UpdateItems, blackMenuBar: Bool = true
   ) {
     self.hideNotch = hideNotch
+    self.blackMenuBar = blackMenuBar
     self.roundCorners = roundCorners
     self.cornersOnAllDisplays = cornersOnAllDisplays
     self.launchAtLogin = launchAtLogin
@@ -114,6 +117,9 @@ public enum MenuLayout {
     let loginTitle =
       state.loginNeedsApproval ? localizer(.launchAtLoginNeedsApproval) : localizer(.launchAtLogin)
     var options = [
+      MenuRow(
+        id: "blackMenuBar", title: localizer(.blackMenuBar), symbol: "menubar.rectangle",
+        kind: .toggle(.blackMenuBar, isOn: state.blackMenuBar, enabled: state.hideNotch)),
       MenuRow(
         id: "cornersOnAllDisplays", title: localizer(.roundCornersOnAllDisplays),
         symbol: "display.2",

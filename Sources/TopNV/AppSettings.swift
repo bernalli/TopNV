@@ -8,6 +8,7 @@ final class AppSettings: ObservableObject {
 
   private enum Key {
     static let hideNotch = "hideNotch"
+    static let blackMenuBar = "blackMenuBar"
     static let roundCorners = "roundCorners"
     /// Written by versions before the radius was fixed at 15 points; removed at launch.
     static let legacyCornerRadius = "cornerRadius"
@@ -28,6 +29,10 @@ final class AppSettings: ObservableObject {
     didSet { defaults.set(hideNotch, forKey: Key.hideNotch) }
   }
 
+  @Published var blackMenuBar: Bool {
+    didSet { defaults.set(blackMenuBar, forKey: Key.blackMenuBar) }
+  }
+
   @Published var roundCorners: Bool {
     didSet { defaults.set(roundCorners, forKey: Key.roundCorners) }
   }
@@ -42,11 +47,13 @@ final class AppSettings: ObservableObject {
     defaults.removeObject(forKey: Key.legacyCornerRadius)
     defaults.register(defaults: [
       Key.hideNotch: Default.hideNotch,
+      Key.blackMenuBar: true,
       Key.roundCorners: Default.roundCorners,
       Key.cornersOnAllDisplays: Default.cornersOnAllDisplays,
       Key.showMenuBarIcon: Default.showMenuBarIcon,
     ])
     hideNotch = defaults.bool(forKey: Key.hideNotch)
+    blackMenuBar = defaults.bool(forKey: Key.blackMenuBar)
     roundCorners = defaults.bool(forKey: Key.roundCorners)
     cornersOnAllDisplays = defaults.bool(forKey: Key.cornersOnAllDisplays)
   }

@@ -1,6 +1,7 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@は1日に1回、新しいバージョンを確認できます。この設定は“オプション”でいつでも変更できます。";
 "About %@" = "%@について";
 "Allow %@ in System Settings > General > Login Items." = "システム設定 > 一般 > ログイン項目で%@を許可してください。";
+"Black menu bar on light wallpapers" = "明るい壁紙でメニューバーを黒くする";
 "Check Automatically" = "自動的に確認";
 "Check for Updates Automatically" = "アップデートを自動的に確認";
 "Check for Updates Automatically?" = "アップデートを自動的に確認しますか？";

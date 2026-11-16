@@ -1,6 +1,7 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ kann einmal täglich nach neuen Versionen suchen. Du kannst dies jederzeit in „Optionen“ ändern.";
 "About %@" = "Über %@";
 "Allow %@ in System Settings > General > Login Items." = "Erlaube %@ in Systemeinstellungen > Allgemein > Anmeldeobjekte.";
+"Black menu bar on light wallpapers" = "Schwarze Menüleiste bei hellen Hintergrundbildern";
 "Check Automatically" = "Automatisch suchen";
 "Check for Updates Automatically" = "Automatisch nach Updates suchen";
 "Check for Updates Automatically?" = "Automatisch nach Updates suchen?";

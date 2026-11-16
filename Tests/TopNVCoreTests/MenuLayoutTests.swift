@@ -25,18 +25,18 @@ final class MenuLayoutTests: XCTestCase {
   private static func state(
     hideNotch: Bool = true, roundCorners: Bool = true, cornersOnAllDisplays: Bool = false,
     launchAtLogin: Bool = false, loginNeedsApproval: Bool = false, loginError: String? = nil,
-    updates: UpdateItems = .ready(canCheck: true, checksAutomatically: false)
+    updates: UpdateItems = .ready(canCheck: true, checksAutomatically: false), blackMenuBar: Bool = true
   ) -> MenuState {
     MenuState(
       hideNotch: hideNotch, roundCorners: roundCorners, cornersOnAllDisplays: cornersOnAllDisplays,
       launchAtLogin: launchAtLogin, loginNeedsApproval: loginNeedsApproval, loginError: loginError,
-      updates: updates)
+      updates: updates, blackMenuBar: blackMenuBar)
   }
 
-  /// Five switches, six login errors and six updater states: 1152 states.
+  /// Six switches, six login errors and six updater states: 2304 states.
   private static var everyState: [MenuState] {
     var states: [MenuState] = []
-    for mask in 0..<(1 << 5) {
+    for mask in 0..<(1 << 6) {
       func bit(_ index: Int) -> Bool { mask & (1 << index) != 0 }
       for error in loginErrors {
         for updates in updateStates {
@@ -44,7 +44,7 @@ final class MenuLayoutTests: XCTestCase {
             state(
               hideNotch: bit(0), roundCorners: bit(1), cornersOnAllDisplays: bit(2),
               launchAtLogin: bit(3), loginNeedsApproval: bit(4), loginError: error,
-              updates: updates))
+              updates: updates, blackMenuBar: bit(5)))
         }
       }
     }
@@ -97,7 +97,7 @@ final class MenuLayoutTests: XCTestCase {
 
   /// Options of the approved tree.
   private static func expectedOptions(_ state: MenuState) -> [String] {
-    var ids = ["cornersOnAllDisplays", "options.separator.login", "login"]
+    var ids = ["blackMenuBar", "cornersOnAllDisplays", "options.separator.login", "login"]
     if hasLoginProblem(state) { ids.append("login.caption") }
     if state.updates != .hidden { ids.append("automatic") }
     return ids + ["options.separator", "hide", "hide.caption"]
@@ -166,6 +166,8 @@ final class MenuLayoutTests: XCTestCase {
         (Self.row(id, in: top) ?? Self.row(id, in: options))?.kind
       }
       XCTAssertEqual(kind("hideNotch"), .toggle(.hideNotch, isOn: current.hideNotch, enabled: true))
+      XCTAssertEqual(kind("blackMenuBar"),
+                     .toggle(.blackMenuBar, isOn: current.blackMenuBar, enabled: current.hideNotch))
       XCTAssertEqual(
         kind("roundCorners"), .toggle(.roundCorners, isOn: current.roundCorners, enabled: true))
       XCTAssertEqual(
@@ -247,6 +249,7 @@ final class MenuLayoutTests: XCTestCase {
       ("about", "About TopNV", nil), ("check", "Check for Updates…", nil),
       ("report", "Report an Issue…", nil), ("quit", "Quit TopNV", nil),
       ("cornersOnAllDisplays", "Round Corners on All Displays", "display.2"),
+      ("blackMenuBar", "Black menu bar on light wallpapers", "menubar.rectangle"),
       ("login", "Launch at Login", "power"),
       ("automatic", "Check for Updates Automatically", "arrow.triangle.2.circlepath"),
       ("hide", "Hide Menu Bar Icon", "menubar.rectangle"),
@@ -316,7 +319,7 @@ final class MenuLayoutTests: XCTestCase {
       }
       if language != "en" {
         for key in [
-          TextKey.roundCornersOnAllDisplays, .launchAtLoginNeedsApproval,
+          TextKey.blackMenuBar, .roundCornersOnAllDisplays, .launchAtLoginNeedsApproval,
           .checkForUpdatesAutomatically,
         ] {
           XCTAssertNotEqual(localizer(key), key.rawValue, "\(language): \(key.rawValue)")

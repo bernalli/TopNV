@@ -4,6 +4,12 @@ import XCTest
 @testable import TopNVCore
 
 final class OverlayBehaviorTests: XCTestCase {
+  func testKeyedOverlayBelongsOnlyToItsSpaceAndNeverFullScreen() {
+    XCTAssertEqual(OverlayBehavior.keyed, [.transient, .ignoresCycle])
+    XCTAssertFalse(OverlayBehavior.keyed.contains(.canJoinAllSpaces))
+    XCTAssertFalse(OverlayBehavior.keyed.contains(.fullScreenAuxiliary))
+  }
+
   func testCornersHideInMissionControl() {
     XCTAssertTrue(OverlayBehavior.corner.contains(.transient))
     XCTAssertFalse(OverlayBehavior.corner.contains(.stationary))
