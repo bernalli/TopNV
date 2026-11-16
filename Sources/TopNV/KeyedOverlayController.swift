@@ -14,6 +14,16 @@ final class KeyedOverlayController {
     let scale: CGFloat
   }
 
+  /// Luminance key `clamp(0.5 + gain * (cutoff - Y))` on BT.709 luma. The black point,
+  /// `cutoff + 0.5 / gain`, is 0.27: the menu bar background stays black, also while the
+  /// desktop is revealed. The gain lifts thin strokes and half-tone parts of the glyphs.
+  private enum Key {
+    static let gain: Float = 12
+    static let cutoff: Float = 0.228
+    /// Black points over the bottom of the menu bar, where its background is below the key.
+    static let maskHeight: CGFloat = 7
+  }
+
   private static let logger = Logger(subsystem: "TopNV", category: "KeyedOverlay")
   private var entries: [Int: Entry] = [:]
   private var states: [UInt32: KeyedOverlayState] = [:]
@@ -21,6 +31,8 @@ final class KeyedOverlayController {
   private var enabled = false
   private var failed = false
   private var reconciling = false
+  /// The last evidence logged for each display; a line is written only when it changes.
+  private var traces: [UInt32: String] = [:]
   private var monitor: MenuBarConditionsMonitor?
   private var timer: Timer?
 
@@ -38,6 +50,7 @@ final class KeyedOverlayController {
       let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
         MainActor.assumeIsolated { self?.reconcile() }
       }
+      timer.tolerance = 0.02
       self.timer = timer
       RunLoop.main.add(timer, forMode: .common)
     }
@@ -55,15 +68,24 @@ final class KeyedOverlayController {
       else { return nil }
       return (id, screen)
     }, uniquingKeysWith: { first, _ in first })
+    var closedHere: Set<UInt32> = []
     for (id, entry) in entries {
-      if !enabled || frames[entry.displayID] != entry.window.frame
-        || byID[entry.displayID]?.backingScaleFactor != entry.scale {
+      // A screen missing from the list for a moment is not a new geometry: the band stays too.
+      let scaleChanged = byID[entry.displayID].map { $0.backingScaleFactor != entry.scale } ?? false
+      if !enabled || frames[entry.displayID] != entry.window.frame || scaleChanged {
+        closedHere.insert(entry.displayID)
         close(id)
       }
     }
     guard !failed else { return }
+    // A window closed here is not a failed creation: its display starts again with a full
+    // budget. Without this the fourth switch-on of the option creates nothing until relaunch.
+    for id in closedHere { states[id] = nil }
     for id in states.keys where frames[id] == nil { states[id] = nil }
-    guard enabled, !frames.isEmpty else { return }
+    guard enabled, !frames.isEmpty else {
+      states.removeAll()
+      return
+    }
     let metadata = windowMetadata(screens: screens)
     for (displayID, frame) in frames.sorted(by: { $0.key < $1.key }) {
       guard let screen = byID[displayID] else { continue }
@@ -73,28 +95,36 @@ final class KeyedOverlayController {
       let active = entries.compactMap { id, entry in
         entry.displayID == displayID && entry.window.isOnActiveSpace ? id : nil
       }
+      let appearance = monitor?.appearance(on: screen) ?? .unknown
       let decision = state.update(.init(
-        activeWindowIDs: active, appearance: monitor?.appearance(on: screen) ?? .unknown,
+        activeWindowIDs: active, appearance: appearance,
         context: evidence.context, menuVisible: evidence.menuVisible, enabled: enabled,
         now: ProcessInfo.processInfo.systemUptime))
       states[displayID] = state
+      let trace = "appearance=\(appearance) context=\(evidence.context) "
+        + "menu=\(evidence.menuVisible) list=\(metadata != nil) active=\(active.count) "
+        + "windows=\(entries.count) create=\(decision.create != nil)"
+      if traces[displayID] != trace {
+        traces[displayID] = trace
+        Self.logger.info("Keyed menu bar, display \(displayID, privacy: .public): \(trace, privacy: .public)")
+      }
       for id in decision.close { close(id) }
       guard !failed else { return }
       for (id, shown) in decision.gates {
         entries[id]?.window.alphaValue = shown ? 1 : 0
       }
       if let reservation = decision.create {
-        create(displayID: displayID, frame: frame, scale: screen.backingScaleFactor,
-               reservation: reservation)
+        create(displayID: displayID, frame: frame, screen: screen, reservation: reservation)
       }
       guard !failed else { return }
     }
   }
 
-  private func create(displayID: UInt32, frame: CGRect, scale: CGFloat,
+  private func create(displayID: UInt32, frame: CGRect, screen: NSScreen,
                       reservation: KeyedOverlayState.Reservation) {
-    let gain: Float = 5
-    let row: [Float] = [-gain * 0.2126, -gain * 0.7152, -gain * 0.0722, 0, 0.5 + gain * 0.17]
+    let scale = screen.backingScaleFactor
+    let gain = Key.gain
+    let row: [Float] = [-gain * 0.2126, -gain * 0.7152, -gain * 0.0722, 0, 0.5 + gain * Key.cutoff]
     let matrix = row + row + row + [0, 0, 0, 0, 1]
     var reason: NSString?
     guard let layer = matrix.withUnsafeBufferPointer({
@@ -109,9 +139,13 @@ final class KeyedOverlayController {
     window.contentView = view
     guard let root = view.layer else { window.close(); disable(nil); return }
     root.contentsScale = scale
+    // The band can be a point taller than the menu bar: the mask is measured from the bar.
+    let menuBarHeight = screen.frame.maxY - screen.visibleFrame.maxY
+    let below = menuBarHeight > 0 ? min(max(frame.height - menuBarHeight, 0), 1) : 0
+    let maskHeight = Key.maskHeight + below
     let mask = CALayer()
-    mask.frame = CGRect(x: 0, y: root.isGeometryFlipped ? frame.height - 7 : 0,
-                        width: frame.width, height: 7)
+    mask.frame = CGRect(x: 0, y: root.isGeometryFlipped ? frame.height - maskHeight : 0,
+                        width: frame.width, height: maskHeight)
     mask.contentsScale = scale
     mask.backgroundColor = NSColor.black.cgColor
     mask.isOpaque = true
@@ -119,6 +153,7 @@ final class KeyedOverlayController {
     root.addSublayer(mask)
     // Own the resource before a private operation can fail.
     let id = window.windowNumber
+    guard id > 0 else { window.close(); disable("overlay window has no number"); return }
     entries[id] = Entry(window: window, layer: layer, displayID: displayID, scale: scale)
     guard KOAttachBackdrop(root, layer, &reason) else { disable(reason); return }
     guard states[displayID]?.commit(reservation, windowID: id) == true else { close(id); return }
@@ -167,27 +202,10 @@ final class KeyedOverlayController {
   /// Copying metadata neither captures pixels nor requests Screen Recording. Window titles
   /// are deliberately never read. The first screen defines the CG/AppKit Y-axis conversion.
   private func windowMetadata(screens: [NSScreen]) -> [MenuBarEvidence.Window]? {
-    guard let main = screens.first,
+    guard let primary = screens.first,
           let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID)
             as? [[String: Any]] else { return nil }
-    var result: [MenuBarEvidence.Window] = []
-    for info in list {
-      guard let owner = info[kCGWindowOwnerName as String] as? String,
-            let pid = info[kCGWindowOwnerPID as String] as? Int32,
-            let level = info[kCGWindowLayer as String] as? Int,
-            let bounds = info[kCGWindowBounds as String] as? NSDictionary,
-            let rect = CGRect(dictionaryRepresentation: bounds) else {
-        return nil // Incomplete evidence is never permission to create.
-      }
-      let kind: MenuBarEvidence.Owner
-      if pid == ProcessInfo.processInfo.processIdentifier { kind = .ownApp }
-      else if owner == "Window Server" { kind = .windowServer }
-      else if owner == "Dock" || (owner == "Finder" && level < 0) { kind = .desktop }
-      else { kind = .application }
-      result.append(.init(owner: kind, layer: level,
-                          bounds: CGRect(x: rect.minX, y: main.frame.maxY - rect.maxY,
-                                         width: rect.width, height: rect.height)))
-    }
-    return result
+    return MenuBarEvidence.windows(from: list, ownPID: ProcessInfo.processInfo.processIdentifier,
+                                   primaryScreenHeight: primary.frame.maxY)
   }
 }

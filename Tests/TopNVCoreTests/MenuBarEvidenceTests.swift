@@ -16,47 +16,218 @@ final class MenuBarEvidenceTests: XCTestCase {
                              bandFrame: strip, windows: windows)
   }
 
+  private func app(_ bounds: CGRect, layer: Int = 0) -> MenuBarEvidence.Window {
+    .init(owner: .application, layer: layer, bounds: bounds)
+  }
+
   func testNoNamesOrWindowTitlesAreNeededForDesktopEvidence() {
     let result = classify([menu])
     XCTAssertEqual(result.context, .desktop)
     XCTAssertTrue(result.menuVisible)
   }
 
-  func testFullScreenRemainsBlockedWithMenuRevealedAndNotchReserved() {
-    for top in [CGFloat(948), 982] {
-      for width in [CGFloat(1512), 750] {
-        let app = MenuBarEvidence.Window(owner: .application, layer: 0,
-                                        bounds: CGRect(x: 0, y: 0, width: width, height: top))
-        XCTAssertEqual(classify([menu, app]).context, .fullScreen)
+  func testTheMenuBarSurfaceNeedsNoExactLayerOrHeight() {
+    for layer in [0, 24, 25] {
+      for height in [CGFloat(24), 33, 34, 37, 68] {
+        let bar = MenuBarEvidence.Window(
+          owner: .windowServer, layer: layer,
+          bounds: CGRect(x: 0, y: 982 - height, width: 1512, height: height))
+        XCTAssertTrue(classify([bar]).menuVisible, "layer \(layer) height \(height)")
+      }
+    }
+    let rejected: [MenuBarEvidence.Window] = [
+      .init(owner: .windowServer, layer: -1, bounds: strip),
+      .init(owner: .windowServer, layer: 24, bounds: frame),
+      .init(owner: .windowServer, layer: 24, bounds: strip.offsetBy(dx: 0, dy: -3)),
+      .init(owner: .windowServer, layer: 24, bounds: strip.offsetBy(dx: 0, dy: 3)),
+      .init(owner: .windowServer, layer: 24, bounds: CGRect(x: 3, y: 948, width: 1509, height: 34)),
+      .init(owner: .windowServer, layer: 24, bounds: CGRect(x: 0, y: 948, width: 1509, height: 34)),
+      .init(owner: .windowServer, layer: 24, bounds: CGRect(x: 1400, y: 950, width: 30, height: 30)),
+      .init(owner: .application, layer: 24, bounds: strip),
+      .init(owner: .desktop, layer: 24, bounds: strip),
+      .init(owner: .ownApp, layer: 24, bounds: strip),
+    ]
+    for window in rejected {
+      XCTAssertFalse(classify([window]).menuVisible, "\(window.owner) \(window.layer) \(window.bounds)")
+    }
+  }
+
+  /// With the Dock hidden or at a side a zoomed or tiled window reaches the bottom edge.
+  func testZoomedAndTiledDesktopWindowsAreNotFullScreen() {
+    let sideDock = CGRect(x: 60, y: 0, width: 1452, height: 949)
+    let hiddenDock = CGRect(x: 0, y: 0, width: 1512, height: 949)
+    for visible in [sideDock, hiddenDock] {
+      let halves = [
+        CGRect(x: visible.minX, y: 0, width: visible.width / 2, height: visible.height),
+        CGRect(x: visible.midX, y: 0, width: visible.width / 2, height: visible.height),
+      ]
+      for bounds in [visible] + halves {
+        for top in [CGFloat(946), 948, 949, 950] {
+          var window = bounds
+          window.size.height = top
+          XCTAssertEqual(classify([menu, app(window)], visible: visible).context, .desktop,
+                         "\(window)")
+        }
+      }
+      XCTAssertEqual(classify([menu, app(halves[0]), app(halves[1])], visible: visible).context,
+                     .desktop)
+    }
+  }
+
+  func testAWindowFromTheBottomEdgeToTheTopEdgeBlocksAlsoWithTheMenuRevealed() {
+    for width in [CGFloat(1512), 750, 605] {
+      for x in [CGFloat(0), 1512 - width] {
+        for top in [CGFloat(980), 982, 1000] {
+          for layer in [0, 3, 24, 25, 26] {
+            let window = app(CGRect(x: x, y: 0, width: width, height: top), layer: layer)
+            XCTAssertEqual(classify([menu, window]).context, .fullScreen,
+                           "x \(x) width \(width) top \(top) layer \(layer)")
+          }
+        }
       }
     }
     XCTAssertEqual(classify([menu], visible: frame).context, .fullScreen)
+    XCTAssertEqual(
+      classify([menu], visible: CGRect(x: 0, y: 0, width: 1512, height: 980)).context, .fullScreen)
   }
 
-  func testFullHeightApplicationAtAnyNonnegativeLayerBlocksRevealedFullScreenMenu() {
-    for layer in [0, 24, 25, 26, 1000] {
-      let app = MenuBarEvidence.Window(owner: .application, layer: layer,
-                                       bounds: CGRect(x: 0, y: 0, width: 750, height: 948))
-      XCTAssertEqual(classify([menu, app]).context, .fullScreen, "layer \(layer)")
+  func testWindowsThatCannotLieUnderTheEffectAreNotEvidence() {
+    let full = frame
+    for layer in [-2_147_483_622, -1, 27, 101, 1000, 2_147_483_630] {
+      XCTAssertEqual(classify([menu, app(full, layer: layer)]).context, .desktop, "layer \(layer)")
     }
-  }
-
-  func testDockAndOwnWindowsDoNotTurnDesktopIntoFullScreen() {
-    for owner in [MenuBarEvidence.Owner.ownApp, .desktop] {
-      XCTAssertEqual(classify([menu, .init(owner: owner, layer: 0, bounds: frame)]).context,
+    for owner in [MenuBarEvidence.Owner.ownApp, .desktop, .windowServer] {
+      XCTAssertEqual(classify([menu, .init(owner: owner, layer: 0, bounds: full)]).context,
                      .desktop)
+    }
+    // Narrow, not down to the bottom edge, or on another display.
+    for bounds in [
+      CGRect(x: 0, y: 0, width: 600, height: 982), CGRect(x: 0, y: 3, width: 1512, height: 979),
+      CGRect(x: 1512, y: 0, width: 1920, height: 1080), CGRect(x: -1920, y: 0, width: 1920, height: 982),
+    ] {
+      XCTAssertEqual(classify([menu, app(bounds)]).context, .desktop, "\(bounds)")
     }
   }
 
   func testUnavailableOrMalformedEvidenceFailsClosed() {
     XCTAssertEqual(classify(nil).context, .unknown)
+    XCTAssertFalse(classify(nil).menuVisible)
     XCTAssertFalse(classify([]).menuVisible)
-    XCTAssertFalse(classify([.init(owner: .application, layer: 24, bounds: strip)]).menuVisible)
-    XCTAssertEqual(classify([menu], visible: .zero).context, .unknown)
+    let malformed: [CGRect] = [
+      .zero, .null, .infinite, CGRect(x: 0, y: 0, width: -1512, height: 982),
+      CGRect(x: CGFloat.nan, y: 0, width: 1512, height: 982),
+      CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 982),
+      CGRect(x: 0, y: 0, width: 1512, height: CGFloat.nan),
+    ]
+    for rect in malformed {
+      for result in [
+        MenuBarEvidence.evaluate(frame: rect, visibleFrame: visible, bandFrame: strip, windows: [menu]),
+        MenuBarEvidence.evaluate(frame: frame, visibleFrame: rect, bandFrame: strip, windows: [menu]),
+        MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible, bandFrame: rect, windows: [menu]),
+      ] {
+        XCTAssertEqual(result.context, .unknown, "\(rect)")
+        XCTAssertFalse(result.menuVisible, "\(rect)")
+      }
+      // A malformed window is neither a menu bar nor a covering window.
+      let result = classify([.init(owner: .windowServer, layer: 24, bounds: rect), app(rect)])
+      XCTAssertFalse(result.menuVisible, "\(rect)")
+      XCTAssertEqual(result.context, .desktop, "\(rect)")
+    }
+    // A visible frame or a band outside the screen.
+    XCTAssertEqual(classify([menu], visible: frame.offsetBy(dx: 10, dy: 0)).context, .unknown)
+    XCTAssertEqual(
+      MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible,
+                               bandFrame: strip.offsetBy(dx: 0, dy: 40), windows: [menu]).context,
+      .unknown)
   }
 
   func testNormalWindowBelowMenuAndAboveDockIsNotFullScreen() {
-    XCTAssertEqual(classify([menu, .init(owner: .application, layer: 0, bounds: visible)]).context,
-                   .desktop)
+    XCTAssertEqual(classify([menu, app(visible)]).context, .desktop)
+  }
+
+  /// More windows, duplicates and any order can only suppress the effect, never allow it.
+  func testExtraDuplicateAndReorderedWindowsNeverAllowMore() {
+    var seed: UInt64 = 42
+    func next(_ bound: Int) -> Int {
+      seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+      return Int((seed >> 33) % UInt64(bound))
+    }
+    func random() -> MenuBarEvidence.Window {
+      let owner = [MenuBarEvidence.Owner.windowServer, .desktop, .ownApp, .application][next(4)]
+      let layer = [-2_147_483_622, -1, 0, 3, 24, 25, 26, 27, 1000][next(9)]
+      let x = CGFloat([-100, 0, 60, 700, 1512][next(5)])
+      let y = CGFloat([-50, 0, 2, 60, 948, 949][next(6)])
+      let width = CGFloat([0, 30, 600, 756, 1452, 1512, 3000][next(7)])
+      let height = CGFloat([0, 33, 34, 888, 949, 982, 2000][next(7)])
+      return .init(owner: owner, layer: layer, bounds: CGRect(x: x, y: y, width: width, height: height))
+    }
+    for _ in 0..<2000 {
+      var windows = (0..<next(6)).map { _ in random() }
+      let base = classify(windows)
+      windows.append(random())
+      if let first = windows.first { windows.append(first) }
+      windows.reverse()
+      let more = classify(windows)
+      if base.context == .fullScreen { XCTAssertEqual(more.context, .fullScreen) }
+      if base.menuVisible { XCTAssertTrue(more.menuVisible) }
+      XCTAssertNotEqual(more.context, .unknown)
+    }
+  }
+
+  // MARK: - Window list dictionaries
+
+  private func entry(owner: Any? = "Safari", pid: Any? = Int32(500), layer: Any? = 0,
+                     bounds: Any? = ["X": 0, "Y": 33, "Width": 1512, "Height": 949]) -> [String: Any] {
+    var result: [String: Any] = ["kCGWindowAlpha": 1, "kCGWindowNumber": 77, "extra": "ignored"]
+    result[kCGWindowOwnerName as String] = owner
+    result[kCGWindowOwnerPID as String] = pid
+    result[kCGWindowLayer as String] = layer
+    result[kCGWindowBounds as String] = bounds
+    return result
+  }
+
+  private func parse(_ list: [[String: Any]]) -> [MenuBarEvidence.Window]? {
+    MenuBarEvidence.windows(from: list, ownPID: 42, primaryScreenHeight: 982)
+  }
+
+  func testWindowListOwnersLayersAndTheFlippedAxis() throws {
+    let list = [
+      entry(owner: "Window Server", layer: 24, bounds: ["X": 0, "Y": 0, "Width": 1512, "Height": 33]),
+      entry(owner: "Dock", layer: 20), entry(owner: "Finder", layer: -2_147_483_603),
+      entry(owner: "Finder", layer: 0), entry(owner: "Anything", pid: Int32(42)),
+      entry(owner: "Window Server", pid: Int32(42)), entry(owner: nil), entry(), entry(),
+    ]
+    let windows = try XCTUnwrap(parse(list))
+    XCTAssertEqual(windows.map(\.owner),
+                   [.windowServer, .desktop, .desktop, .application, .ownApp, .ownApp,
+                    .application, .application, .application])
+    XCTAssertEqual(windows.map(\.layer), [24, 20, -2_147_483_603, 0, 0, 0, 0, 0, 0])
+    XCTAssertEqual(windows[0].bounds, CGRect(x: 0, y: 949, width: 1512, height: 33))
+    XCTAssertEqual(windows[7].bounds, CGRect(x: 0, y: 0, width: 1512, height: 949))
+    XCTAssertEqual(parse([])?.count, 0)
+    XCTAssertTrue(MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible,
+                                           bandFrame: CGRect(x: 0, y: 949, width: 1512, height: 33),
+                                           windows: windows).menuVisible)
+  }
+
+  func testAnIncompleteOrMistypedWindowMakesTheListUnavailable() {
+    let malformed: [[String: Any]] = [
+      entry(pid: nil), entry(layer: nil), entry(bounds: nil),
+      entry(owner: 7), entry(owner: ["Safari"]), entry(pid: "500"), entry(layer: "0"),
+      entry(layer: [0]), entry(bounds: "0,0,10,10"), entry(bounds: [0, 0, 10, 10]),
+      entry(bounds: ["X": 0, "Y": 0, "Width": 10]), entry(bounds: ["X": 0, "Y": 0]),
+      entry(bounds: [String: Any]()), entry(bounds: ["X": "a", "Y": 0, "Width": 1, "Height": 1]),
+      entry(bounds: ["X": 0, "Y": 0, "Width": Double.infinity, "Height": 1]),
+      entry(bounds: ["X": Double.nan, "Y": 0, "Width": 1, "Height": 1]),
+      [:],
+    ]
+    for (index, bad) in malformed.enumerated() {
+      XCTAssertNil(parse([bad]), "case \(index)")
+      XCTAssertNil(parse([entry(), bad, entry()]), "case \(index) between good windows")
+      XCTAssertNil(parse([entry(), entry(), bad]), "case \(index) last")
+    }
+    for height in [CGFloat(0), -982, .nan, .infinity] {
+      XCTAssertNil(MenuBarEvidence.windows(from: [entry()], ownPID: 42, primaryScreenHeight: height))
+    }
   }
 }

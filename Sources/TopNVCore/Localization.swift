@@ -5,7 +5,7 @@ import Foundation
 public enum TextKey: String, CaseIterable {
   // TopNV only.
   case hideNotch = "Hide Notch"
-  case blackMenuBar = "Black menu bar on light wallpapers"
+  case blackMenuBar = "Black Menu Bar on Light Wallpapers"
   case roundCorners = "Round Corners"
   case roundCornersOnAllDisplays = "Round Corners on All Displays"
   case launchAtLoginNeedsApproval = "Launch at Login (Requires Approval)"

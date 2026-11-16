@@ -249,7 +249,7 @@ final class MenuLayoutTests: XCTestCase {
       ("about", "About TopNV", nil), ("check", "Check for Updates…", nil),
       ("report", "Report an Issue…", nil), ("quit", "Quit TopNV", nil),
       ("cornersOnAllDisplays", "Round Corners on All Displays", "display.2"),
-      ("blackMenuBar", "Black menu bar on light wallpapers", "menubar.rectangle"),
+      ("blackMenuBar", "Black Menu Bar on Light Wallpapers", "menubar.rectangle"),
       ("login", "Launch at Login", "power"),
       ("automatic", "Check for Updates Automatically", "arrow.triangle.2.circlepath"),
       ("hide", "Hide Menu Bar Icon", "menubar.rectangle"),

@@ -1,5 +1,7 @@
 /// Decisions for a single display. Space membership is supplied by NSWindow, never guessed
 /// from a Space number. Inactive windows retain their last gate while the desktop slides.
+/// `forget` does not return a creation to the visit budget: an adapter that closes windows
+/// for its own reasons (option off, new geometry) starts again from a new value.
 public struct KeyedOverlayState {
   public enum Appearance: Sendable { case light, dark, unknown }
   public enum Context: Sendable { case desktop, fullScreen, unknown }
@@ -72,13 +74,19 @@ public struct KeyedOverlayState {
     lastActive = keeper
     result.close = Array(active.dropFirst())
     for id in result.close { visibility[id] = nil }
+    let settled = input.now >= settleUntil
     let show = input.enabled && input.appearance == .light
-      && input.context == .desktop && input.menuVisible && input.now >= settleUntil
+      && input.context == .desktop && input.menuVisible
     if let keeper {
-      visibility[keeper] = show
-      result.gates[keeper] = show
+      // While the evidence settles after a Space change the window keeps the gate it had
+      // when its Space was last active. Hiding it here turns the bar grey after every switch.
+      if settled {
+        visibility[keeper] = show
+        result.gates[keeper] = show
+      }
       pending = nil
-    } else if show && pending == nil && creationsThisVisit < 3 && input.now >= nextCreation {
+    } else if settled && show && pending == nil && creationsThisVisit < 3
+      && input.now >= nextCreation {
       creationsThisVisit += 1
       serial &+= 1
       let reservation = Reservation(generation: generation, serial: serial)
