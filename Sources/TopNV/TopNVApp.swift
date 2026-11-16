@@ -29,8 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   let menuVisibility = MenuVisibility(
     defaults: .standard, key: AppSettings.showMenuBarIconKey)
   private var overlay: OverlayController?
-  /// Explains once per launch how to fix a menu bar that macOS drew grey over the band.
-  private var greyBarNotice: GreyBarNoticeCoordinator?
   private let updateConfiguration = UpdateConfiguration(infoDictionary: Bundle.main.infoDictionary)
   private lazy var sparkleUpdater: SparkleUpdater? = {
     guard Bundle.main.bundleURL.pathExtension == "app", updateConfiguration.isValid else {
@@ -41,12 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   lazy var updates = UpdateMenuModel(updater: sparkleUpdater)
   private lazy var updateCoordinator = UpdateCoordinator(
     configuration: updateConfiguration, updater: sparkleUpdater, defaults: .standard,
-    ask: { [weak self] reply in
-      AutomaticUpdateQuestion.ask { answer in
-        reply(answer)
-        self?.greyBarNotice?.questionDidClose()
-      }
-    }, onReady: { [weak self] in self?.updates.updaterDidStart() },
+    ask: AutomaticUpdateQuestion.ask, onReady: { [weak self] in self?.updates.updaterDidStart() },
     onFailed: { [weak self] in self?.updates.updaterDidFail() })
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
@@ -64,14 +57,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     overlay = controller
     sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }
     updateCoordinator.start()
-    let monitor = MenuBarConditionsMonitor(
-      settings: settings, statusItem: statusMenu.statusItem, visibility: menuVisibility)
-    monitor.start()
-    let notice = GreyBarNoticeCoordinator(
-      source: monitor,
-      isQuestionOnScreen: { [weak self] in self?.updateCoordinator.state == .awaitingAnswer },
-      show: GreyBarNotice.show)
-    notice.start()
-    greyBarNotice = notice
   }
 }

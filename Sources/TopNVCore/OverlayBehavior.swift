@@ -2,9 +2,9 @@ import AppKit
 
 /// How the overlay windows take part in Spaces and Mission Control.
 public enum OverlayBehavior {
-  /// Stays in place in Mission Control, like the desktop it covers.
+  /// Hides in Mission Control so the band does not show beneath the Spaces strip.
   public static let bar: NSWindow.CollectionBehavior = [
-    .canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary,
+    .canJoinAllSpaces, .transient, .ignoresCycle, .fullScreenAuxiliary,
   ]
   /// Hides in Mission Control: the top corners sit below the menu bar, over the Spaces bar.
   public static let corner: NSWindow.CollectionBehavior = [

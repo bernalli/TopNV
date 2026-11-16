@@ -4,6 +4,27 @@ import XCTest
 @testable import TopNVCore
 
 final class MenuVisibilityTests: XCTestCase {
+  /// AppSettings registers a default for this key, and the registration domain is shared by the
+  /// whole test process (swift test runs every target in one process). A registered default is not
+  /// a written value. The name runs this test before the others in the class.
+  @MainActor
+  func testARegisteredDefaultIsNotAWrittenValue() throws {
+    let suite = "MenuVisibilityTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.register(defaults: ["showMenuBarIcon": true])
+    var pending: [@MainActor () -> Void] = []
+    let model = MenuVisibility(
+      defaults: defaults, key: "showMenuBarIcon",
+      schedule: {
+        pending.append($0)
+      })
+    model.requestMenuVisible(false)
+    XCTAssertNil(defaults.persistentDomain(forName: suite)?["showMenuBarIcon"])
+    try XCTUnwrap(pending.first)()
+    XCTAssertEqual(defaults.object(forKey: "showMenuBarIcon") as? Bool, false)
+  }
+
   @MainActor
   func testHideAndReopenPersistAcrossInstances() throws {
     let suite = "MenuVisibilityTests.\(UUID().uuidString)"
@@ -37,7 +58,7 @@ final class MenuVisibilityTests: XCTestCase {
     model.requestMenuVisible(false)
     XCTAssertTrue(model.isVisible)
     XCTAssertEqual(publications, 0)
-    XCTAssertNil(defaults.object(forKey: "showMenuBarIcon"))
+    XCTAssertNil(defaults.persistentDomain(forName: suite)?["showMenuBarIcon"])
     try XCTUnwrap(pending.first)()
     XCTAssertFalse(model.isVisible)
     XCTAssertEqual(publications, 1)

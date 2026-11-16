@@ -9,9 +9,9 @@ final class OverlayBehaviorTests: XCTestCase {
     XCTAssertFalse(OverlayBehavior.corner.contains(.stationary))
   }
 
-  func testBarStaysInPlaceInMissionControl() {
-    XCTAssertTrue(OverlayBehavior.bar.contains(.stationary))
-    XCTAssertFalse(OverlayBehavior.bar.contains(.transient))
+  func testBarHidesInMissionControl() {
+    XCTAssertTrue(OverlayBehavior.bar.contains(.transient))
+    XCTAssertFalse(OverlayBehavior.bar.contains(.stationary))
   }
 
   func testEveryOverlayKeepsItsSpacesBehavior() {

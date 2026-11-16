@@ -315,67 +315,6 @@ final class LocalizationTests: XCTestCase {
     }
   }
 
-  /// The notice about the grey menu bar, as a closed list: title, message, and the two buttons.
-  /// The Wallpaper pane carries the name System Settings gives it in each language.
-  func testGreyBarNoticeTranslations() throws {
-    let message =
-      "macOS drew the menu bar before %@ started. Click your current wallpaper once in "
-      + "Wallpaper settings and the bar turns black."
-    let keys = ["Finish Setting Up the Black Bar", message, "Open Wallpaper Settings", "Not Now"]
-    let expected: [String: [String]] = [
-      "en": keys,
-      "it": [
-        "Completa la configurazione della barra nera",
-        "macOS ha disegnato la barra dei menu prima dell’avvio di %@. Fai clic una volta sullo "
-          + "sfondo attuale nelle impostazioni Sfondo e la barra diventerà nera.",
-        "Apri impostazioni Sfondo", "Non ora",
-      ],
-      "de": [
-        "Einrichtung der schwarzen Leiste abschließen",
-        "macOS hat die Menüleiste gezeichnet, bevor %@ gestartet wurde. Klicke in den "
-          + "Einstellungen „Hintergrundbild“ einmal auf dein aktuelles Hintergrundbild, dann wird "
-          + "die Leiste schwarz.",
-        "Einstellungen „Hintergrundbild“ öffnen", "Nicht jetzt",
-      ],
-      "es": [
-        "Termina de configurar la barra negra",
-        "macOS dibujó la barra de menús antes de que se abriera %@. Haz clic una vez en tu fondo "
-          + "de pantalla actual en los ajustes de Fondo de pantalla y la barra se volverá negra.",
-        "Abrir ajustes de Fondo de pantalla", "Ahora no",
-      ],
-      "fr": [
-        "Terminer la configuration de la barre noire",
-        "macOS a dessiné la barre des menus avant l’ouverture de %@. Cliquez une fois sur votre "
-          + "fond d’écran actuel dans les réglages Fond d’écran et la barre deviendra noire.",
-        "Ouvrir les réglages Fond d’écran", "Plus tard",
-      ],
-      "ja": [
-        "黒いバーの設定を完了",
-        "%@の起動前にmacOSがメニューバーを描画しました。“壁紙”設定で現在の壁紙を1回クリックすると、バーが黒くなります。",
-        "“壁紙”設定を開く", "後で",
-      ],
-      "pt-BR": [
-        "Concluir a Configuração da Barra Preta",
-        "O macOS desenhou a barra de menus antes de o %@ ser aberto. Clique uma vez na sua imagem "
-          + "de fundo atual nos ajustes de Imagem de Fundo e a barra ficará preta.",
-        "Abrir Ajustes de Imagem de Fundo", "Agora Não",
-      ],
-      "zh-Hans": [
-        "完成黑色菜单栏的设置",
-        "macOS 在 %@ 启动前绘制了菜单栏。在“墙纸”设置中点按一次当前墙纸，菜单栏就会变黑。",
-        "打开“墙纸”设置", "以后",
-      ],
-    ]
-    XCTAssertEqual(Set(expected.keys), Set(Self.languages))
-    for (language, values) in expected {
-      let entries = Dictionary(
-        uniqueKeysWithValues: parseTable(try table(language)).entries.map { ($0.key, $0.value) })
-      for (key, value) in zip(keys, values) {
-        XCTAssertEqual(entries[key], value, "\(language): \(key)")
-      }
-    }
-  }
-
   /// The key set of this release, as a closed list per scope.
   func testTheKeySetIsTheOneOfTheMenu() {
     func keys(_ scope: TextKey.Scope) -> Set<String> {
@@ -387,10 +326,6 @@ final class LocalizationTests: XCTestCase {
         "Hide Notch", "Round Corners", "Round Corners on All Displays",
         "Launch at Login (Requires Approval)",
         "Allow %@ in System Settings > General > Login Items.",
-        "Finish Setting Up the Black Bar",
-        "macOS drew the menu bar before %@ started. Click your current wallpaper once in "
-          + "Wallpaper settings and the bar turns black.",
-        "Open Wallpaper Settings", "Not Now",
       ])
     XCTAssertEqual(
       keys(.shared),
