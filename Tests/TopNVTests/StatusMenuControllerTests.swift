@@ -91,6 +91,8 @@ final class StatusMenuControllerTests: XCTestCase {
   func testSwitchCommandsChangeTheSettings() {
     let (controller, _, settings) = makeController()
     XCTAssertTrue(settings.hideNotch)
+    controller.perform(.blackMenuBar)
+    XCTAssertFalse(settings.blackMenuBar)
     controller.perform(.hideNotch)
     XCTAssertFalse(settings.hideNotch)
     controller.perform(.roundCorners)

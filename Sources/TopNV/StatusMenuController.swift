@@ -92,7 +92,7 @@ import TopNVCore
       hideNotch: settings.hideNotch, roundCorners: settings.roundCorners,
       cornersOnAllDisplays: settings.cornersOnAllDisplays, launchAtLogin: loginItem.isEnabled,
       loginNeedsApproval: loginItem.needsApproval, loginError: loginItem.errorMessage,
-      updates: updates.items)
+      updates: updates.items, blackMenuBar: settings.blackMenuBar)
   }
 
   /// The login item does not publish approval changes made in System Settings; opening the menu
@@ -105,6 +105,7 @@ import TopNVCore
   func perform(_ command: MenuCommand) {
     switch command {
     case .hideNotch: settings.hideNotch.toggle()
+    case .blackMenuBar: settings.blackMenuBar.toggle()
     case .roundCorners: settings.roundCorners.toggle()
     case .cornersOnAllDisplays: settings.cornersOnAllDisplays.toggle()
     case .launchAtLogin: loginItem.setEnabled(!loginItem.isEnabled)

@@ -1,6 +1,7 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ can check for new versions once a day. You can change this at any time in Options.";
 "About %@" = "About %@";
 "Allow %@ in System Settings > General > Login Items." = "Allow %@ in System Settings > General > Login Items.";
+"Black Menu Bar on Light Wallpapers" = "Black Menu Bar on Light Wallpapers";
 "Check Automatically" = "Check Automatically";
 "Check for Updates Automatically" = "Check for Updates Automatically";
 "Check for Updates Automatically?" = "Check for Updates Automatically?";

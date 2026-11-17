@@ -17,6 +17,15 @@ final class AppSettingsTests: XCTestCase {
   }
 
   /// The radius is fixed at 15 points; a value saved by an earlier version is removed at launch.
+  @MainActor func testBlackMenuBarDefaultsOnAndPersistsOff() {
+    let settings = AppSettings(defaults: defaults)
+    XCTAssertTrue(settings.blackMenuBar)
+    settings.blackMenuBar = false
+    XCTAssertFalse(AppSettings(defaults: defaults).blackMenuBar)
+    settings.blackMenuBar = true
+    XCTAssertTrue(AppSettings(defaults: defaults).blackMenuBar)
+  }
+
   @MainActor func testAStoredCornerRadiusIsRemovedAtLaunch() {
     defaults.set(30.0, forKey: "cornerRadius")
     XCTAssertNotNil(defaults.object(forKey: "cornerRadius"))

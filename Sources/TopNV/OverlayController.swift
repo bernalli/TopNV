@@ -15,6 +15,7 @@ final class OverlayController: NSObject {
 
   private let settings: AppSettings
   private var bandState = BandState()
+  private let keyedOverlay = KeyedOverlayController()
   private var barWindows: [UInt32: OverlayWindow] = [:]
   private var windows: [String: OverlayWindow] = [:]
   private var pendingScreenRebuild: Task<Void, Never>?
@@ -107,6 +108,9 @@ final class OverlayController: NSObject {
         barWindows[id] = nil
       }
     }
+
+    keyedOverlay.update(frames: bandState.frames, enabled: settings.blackMenuBar,
+                        spaceChanged: event == .spaceChanged)
 
     var desiredKeys: Set<String> = []
 

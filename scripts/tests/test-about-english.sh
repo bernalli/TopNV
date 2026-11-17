@@ -8,8 +8,9 @@ import sys
 
 # Reviewed English About source closure at 76a24e9, plus the version and sponsor
 # button changes and the menu texts of 1.2.1, with the grey menu bar notice keys
-# removed (only the TextKey enum of Localization.swift changes; the Localizer and
-# the English About path stay the same). Do not regenerate automatically:
+# removed and the Black Menu Bar on Light Wallpapers key added (only the TextKey
+# enum of Localization.swift changes; the Localizer and the English About path
+# stay the same). Do not regenerate automatically:
 # changing any digest requires reviewing the entire About text path again.
 EXPECTED = {
     "Sources/TopNV/AboutTitleFont.swift":
@@ -29,7 +30,7 @@ EXPECTED = {
     "Sources/TopNVCore/AppVersion.swift":
         "ace8d64174babf5a40915aa7132bde50dd3f329f92cf38459e204875e2618d1b",
     "Sources/TopNVCore/Localization.swift":
-        "9f2324f7aea4fa075c802f6b8980fc7febdd348d56d44de312d803a650ef1ab3",
+        "ea3e232c9b95111d711fbe720dae549526616579981586e01b74fafaa31c4be8",
 }
 
 

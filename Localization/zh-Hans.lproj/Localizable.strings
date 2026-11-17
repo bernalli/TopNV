@@ -1,6 +1,7 @@
 "%@ can check for new versions once a day. You can change this at any time in Options." = "%@ 每天可以检查一次新版本。你可以随时在“选项”中更改此设置。";
 "About %@" = "关于 %@";
 "Allow %@ in System Settings > General > Login Items." = "请在“系统设置”>“通用”>“登录项”中允许 %@。";
+"Black Menu Bar on Light Wallpapers" = "浅色墙纸上使用黑色菜单栏";
 "Check Automatically" = "自动检查";
 "Check for Updates Automatically" = "自动检查更新";
 "Check for Updates Automatically?" = "要自动检查更新吗？";
