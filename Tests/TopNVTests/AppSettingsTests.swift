@@ -16,16 +16,21 @@ final class AppSettingsTests: XCTestCase {
     defaults = nil
   }
 
-  /// The radius is fixed at 15 points; a value saved by an earlier version is removed at launch.
-  @MainActor func testBlackMenuBarDefaultsOnAndPersistsOff() {
+  /// The black menu bar of 1.2.3 had its own switch; its stored value is removed at launch.
+  @MainActor func testAStoredBlackMenuBarValueIsRemovedAtLaunch() {
+    defaults.set(false, forKey: "blackMenuBar")
+    defaults.set(false, forKey: "hideNotch")
+    defaults.set(false, forKey: "roundCorners")
+    XCTAssertNotNil(defaults.object(forKey: "blackMenuBar"))
+
     let settings = AppSettings(defaults: defaults)
-    XCTAssertTrue(settings.blackMenuBar)
-    settings.blackMenuBar = false
-    XCTAssertFalse(AppSettings(defaults: defaults).blackMenuBar)
-    settings.blackMenuBar = true
-    XCTAssertTrue(AppSettings(defaults: defaults).blackMenuBar)
+
+    XCTAssertNil(defaults.object(forKey: "blackMenuBar"))
+    XCTAssertFalse(settings.hideNotch)
+    XCTAssertFalse(settings.roundCorners)
   }
 
+  /// The radius is fixed at 15 points; a value saved by an earlier version is removed at launch.
   @MainActor func testAStoredCornerRadiusIsRemovedAtLaunch() {
     defaults.set(30.0, forKey: "cornerRadius")
     XCTAssertNotNil(defaults.object(forKey: "cornerRadius"))
