@@ -109,7 +109,7 @@ final class OverlayController: NSObject {
       }
     }
 
-    keyedOverlay.update(frames: bandState.frames, enabled: settings.blackMenuBar,
+    keyedOverlay.update(frames: bandState.frames, enabled: settings.hideNotch,
                         spaceChanged: event == .spaceChanged)
 
     var desiredKeys: Set<String> = []
