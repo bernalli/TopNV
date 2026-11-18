@@ -7,13 +7,19 @@ final class LuminanceKeyTests: XCTestCase {
     XCTAssertEqual(LuminanceKey.choose(desktopRevealed: false), .normal)
   }
 
-  /// The normal backdrop is light under the glyphs, the revealed one is dark.
+  /// Calibrated on screen: the revealed backdrop is darker, so its key turns black earlier.
   func testBlackAndWhitePointsOfTheTwoKeys() {
-    XCTAssertGreaterThanOrEqual(LuminanceKey.normal.blackPoint, 0.70)
-    XCTAssertGreaterThanOrEqual(LuminanceKey.normal.whitePoint, 0.10)
+    XCTAssertEqual(LuminanceKey.normal.gain, 3)
+    XCTAssertEqual(LuminanceKey.normal.cutoff, 0.21)
+    XCTAssertEqual(LuminanceKey.revealed.gain, 6)
+    XCTAssertEqual(LuminanceKey.revealed.cutoff, 0.2)
+    XCTAssertGreaterThanOrEqual(LuminanceKey.normal.blackPoint, 0.30)
+    XCTAssertLessThanOrEqual(LuminanceKey.normal.blackPoint, 0.45)
+    XCTAssertGreaterThan(LuminanceKey.normal.blackPoint, LuminanceKey.revealed.blackPoint)
+    XCTAssertGreaterThanOrEqual(LuminanceKey.normal.whitePoint, 0.03)
     XCTAssertLessThanOrEqual(LuminanceKey.revealed.blackPoint, 0.31)
-    XCTAssertEqual(LuminanceKey.normal.blackPoint, 0.7325, accuracy: 1e-4)
-    XCTAssertEqual(LuminanceKey.normal.whitePoint, 0.1075, accuracy: 1e-4)
+    XCTAssertEqual(LuminanceKey.normal.blackPoint, 0.3767, accuracy: 1e-4)
+    XCTAssertEqual(LuminanceKey.normal.whitePoint, 0.0433, accuracy: 1e-4)
     XCTAssertEqual(LuminanceKey.revealed.blackPoint, 0.2833, accuracy: 1e-4)
   }
 

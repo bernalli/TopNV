@@ -9,7 +9,7 @@ public struct KeyCalibration: Equatable, Sendable {
 
   public static let productionBundleIdentifier = "io.github.bernalli.topnv"
 
-  /// The first candidate, the key of 1.2.4, is the one a test copy starts with.
+  /// The fifth candidate is the production normal key: a test copy starts with it.
   public static let options: [KeyCalibration] = [
     KeyCalibration(gain: 12, cutoff: 0.228, title: "12 / 0.228 (1.2.4)", command: .keyCalibration1),
     KeyCalibration(gain: 6, cutoff: 0.2, title: "6 / 0.2", command: .keyCalibration2),
@@ -31,7 +31,9 @@ public struct KeyCalibration: Equatable, Sendable {
   public static func initial(bundleIdentifier: String?) -> KeyCalibration? {
     guard let bundleIdentifier, !bundleIdentifier.isEmpty,
           bundleIdentifier.lowercased() != productionBundleIdentifier else { return nil }
-    return options.first
+    return options.first {
+      $0.gain == LuminanceKey.normal.gain && $0.cutoff == LuminanceKey.normal.cutoff
+    }
   }
 
   public static func option(for command: MenuCommand) -> KeyCalibration? {

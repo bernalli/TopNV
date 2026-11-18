@@ -43,9 +43,10 @@ final class KeyCalibrationTests: XCTestCase {
     }
   }
 
-  func testOnlyATestCopyStartsWithTheFirstCandidate() {
-    XCTAssertEqual(KeyCalibration.initial(bundleIdentifier: testCopy), KeyCalibration.options[0])
-    XCTAssertEqual(KeyCalibration.initial(bundleIdentifier: "com.example.other"), KeyCalibration.options[0])
+  /// A test copy starts as production: with the fifth candidate, equal to the normal key.
+  func testOnlyATestCopyStartsWithTheProductionCandidate() {
+    XCTAssertEqual(KeyCalibration.initial(bundleIdentifier: testCopy), KeyCalibration.options[4])
+    XCTAssertEqual(KeyCalibration.initial(bundleIdentifier: "com.example.other"), KeyCalibration.options[4])
     for identifier in [production, "IO.GITHUB.BERNALLI.TOPNV", "", nil] {
       XCTAssertNil(KeyCalibration.initial(bundleIdentifier: identifier), "\(String(describing: identifier))")
     }
@@ -60,8 +61,9 @@ final class KeyCalibrationTests: XCTestCase {
         0.5 + option.gain * option.cutoff
       ]
       XCTAssertEqual(matrix, row + row + row + [0, 0, 0, 0, 1], option.title)
-      XCTAssertNotEqual(matrix, LuminanceKey.normal.matrix, option.title)
+      XCTAssertEqual(matrix == LuminanceKey.normal.matrix, option == KeyCalibration.options[4], option.title)
     }
+    XCTAssertEqual(KeyCalibration.normalMatrix(KeyCalibration.options[4]), LuminanceKey.normal.matrix)
     XCTAssertEqual(LuminanceKey.revealed.gain, 6)
     XCTAssertEqual(LuminanceKey.revealed.cutoff, 0.2)
   }

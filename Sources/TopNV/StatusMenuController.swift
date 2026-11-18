@@ -127,7 +127,7 @@ import TopNVCore
     }
   }
 
-  /// The choice is not saved: every launch starts again from the first candidate.
+  /// The choice is not saved: every launch starts again from the production key.
   private func chooseKeyCalibration(_ command: MenuCommand) {
     guard keyCalibration != nil, let choice = KeyCalibration.option(for: command) else { return }
     keyCalibration = choice

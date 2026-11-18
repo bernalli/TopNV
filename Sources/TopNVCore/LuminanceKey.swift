@@ -1,9 +1,11 @@
 /// Luminance keys `clamp(0.5 + gain * (cutoff - Y))` on BT.709 luma for the keyed menu bar.
 /// On a light wallpaper macOS draws two different backdrops under the menu bar, and no single
 /// linear key fits both:
-/// - normal: a light backdrop (Y about 0.87-0.90) under nearly black glyphs. A soft key, black
-///   from Y 0.7325 and white up to Y 0.1075, keeps the antialiasing and the grey parts of the
-///   icons (toggles, battery, volume). A steep key turns them black or makes them disappear.
+/// - normal: the menu bar backdrop under nearly black glyphs. Black from Y 0.3767 and white up
+///   to Y 0.0433: the bar is black and the icons stay sharp. Calibrated by eye on the real menu
+///   bar (18-11) with the calibration menu of a test copy. Screenshots do not contain the keyed
+///   layer and do not show the backdrop of the render server, which is darker than they suggest:
+///   a key measured on them (black from Y 0.7325) left the bar grey.
 /// - revealed: Show Desktop or a click on the wallpaper darkens the backdrop to Y about 0.32.
 ///   A steeper key, black from Y 0.2833, keeps that background black.
 public enum LuminanceKey: Sendable {
@@ -11,14 +13,14 @@ public enum LuminanceKey: Sendable {
 
   public var gain: Float {
     switch self {
-    case .normal: return 1.6
+    case .normal: return 3
     case .revealed: return 6
     }
   }
 
   public var cutoff: Float {
     switch self {
-    case .normal: return 0.42
+    case .normal: return 0.21
     case .revealed: return 0.2
     }
   }

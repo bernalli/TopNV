@@ -19,8 +19,8 @@ final class KeyedOverlayController {
 
   /// No single linear key fits both backdrops macOS draws under the menu bar (`LuminanceKey`).
   private enum Key {
-    /// Light backdrop of the menu bar: black from Y 0.7325, white up to Y 0.1075, so the
-    /// antialiasing and the grey parts of the icons stay. A test copy uses its `KeyCalibration`.
+    /// Backdrop of the menu bar: black from Y 0.3767, white up to Y 0.0433, calibrated by eye.
+    /// A test copy uses its `KeyCalibration`.
     static let normal = LuminanceKey.normal
     /// Darker backdrop while the desktop is revealed (Y about 0.32): black from Y 0.2833.
     static let revealed = LuminanceKey.revealed
