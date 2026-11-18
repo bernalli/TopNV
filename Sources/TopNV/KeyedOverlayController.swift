@@ -7,19 +7,23 @@ import os
 /// Owns only the optional keyed effect. Failure never changes the original band or corners.
 @MainActor
 final class KeyedOverlayController {
+  /// Both backdrops stay attached; only the one of the current key is visible.
   private struct Entry {
     let window: OverlayWindow
-    let layer: CALayer
+    let normal: CALayer
+    let revealed: CALayer
     let displayID: UInt32
     let scale: CGFloat
+    var key: LuminanceKey
   }
 
-  /// Luminance key `clamp(0.5 + gain * (cutoff - Y))` on BT.709 luma. The black point,
-  /// `cutoff + 0.5 / gain`, is 0.27: the menu bar background stays black, also while the
-  /// desktop is revealed. The gain lifts thin strokes and half-tone parts of the glyphs.
+  /// No single linear key fits both backdrops macOS draws under the menu bar (`LuminanceKey`).
   private enum Key {
-    static let gain: Float = 12
-    static let cutoff: Float = 0.228
+    /// Light backdrop of the menu bar: black from Y 0.7325, white up to Y 0.1075, so the
+    /// antialiasing and the grey parts of the icons stay.
+    static let normal = LuminanceKey.normal
+    /// Darker backdrop while the desktop is revealed (Y about 0.32): black from Y 0.2833.
+    static let revealed = LuminanceKey.revealed
     /// Black points over the bottom of the menu bar, where its background is below the key.
     static let maskHeight: CGFloat = 7
   }
@@ -102,7 +106,8 @@ final class KeyedOverlayController {
         now: ProcessInfo.processInfo.systemUptime))
       states[displayID] = state
       let trace = "appearance=\(appearance) context=\(evidence.context) "
-        + "menu=\(evidence.menuVisible) list=\(metadata != nil) active=\(active.count) "
+        + "menu=\(evidence.menuVisible) revealed=\(evidence.desktopRevealed) "
+        + "list=\(metadata != nil) active=\(active.count) "
         + "windows=\(entries.count) create=\(decision.create != nil)"
       if traces[displayID] != trace {
         traces[displayID] = trace
@@ -113,23 +118,26 @@ final class KeyedOverlayController {
       for (id, shown) in decision.gates {
         entries[id]?.window.alphaValue = shown ? 1 : 0
       }
+      let key = LuminanceKey.choose(desktopRevealed: evidence.desktopRevealed)
+      show(key, on: displayID)
       if let reservation = decision.create {
-        create(displayID: displayID, frame: frame, screen: screen, reservation: reservation)
+        create(displayID: displayID, frame: frame, screen: screen, key: key, reservation: reservation)
       }
       guard !failed else { return }
     }
   }
 
-  private func create(displayID: UInt32, frame: CGRect, screen: NSScreen,
+  private func create(displayID: UInt32, frame: CGRect, screen: NSScreen, key: LuminanceKey,
                       reservation: KeyedOverlayState.Reservation) {
+    guard !failed else { return }
     let scale = screen.backingScaleFactor
-    let gain = Key.gain
-    let row: [Float] = [-gain * 0.2126, -gain * 0.7152, -gain * 0.0722, 0, 0.5 + gain * Key.cutoff]
-    let matrix = row + row + row + [0, 0, 0, 0, 1]
+    let bounds = CGRect(origin: .zero, size: frame.size)
     var reason: NSString?
-    guard let layer = matrix.withUnsafeBufferPointer({
-      KOCreateBackdrop($0.baseAddress!, $0.count, CGRect(origin: .zero, size: frame.size), scale, &reason)
-    }) else { disable(reason); return }
+    guard let normal = Self.backdrop(Key.normal, bounds: bounds, scale: scale, reason: &reason),
+          let revealed = Self.backdrop(Key.revealed, bounds: bounds, scale: scale, reason: &reason)
+    else { disable(reason); return }
+    normal.isHidden = key != Key.normal
+    revealed.isHidden = key != Key.revealed
 
     let window = OverlayWindow(frame: frame, level: .init(rawValue: 26), isOpaque: false,
                                behavior: OverlayBehavior.keyed)
@@ -154,8 +162,10 @@ final class KeyedOverlayController {
     // Own the resource before a private operation can fail.
     let id = window.windowNumber
     guard id > 0 else { window.close(); disable("overlay window has no number"); return }
-    entries[id] = Entry(window: window, layer: layer, displayID: displayID, scale: scale)
-    guard KOAttachBackdrop(root, layer, &reason) else { disable(reason); return }
+    entries[id] = Entry(window: window, normal: normal, revealed: revealed, displayID: displayID,
+                        scale: scale, key: key)
+    guard KOAttachBackdrop(root, normal, &reason), KOAttachBackdrop(root, revealed, &reason)
+    else { disable(reason); return }
     guard states[displayID]?.commit(reservation, windowID: id) == true else { close(id); return }
     window.orderFrontRegardless()
     window.displayIfNeeded()
@@ -167,17 +177,43 @@ final class KeyedOverlayController {
           guard let self, !self.failed, let window,
                 let entry = self.entries[id], entry.window === window else { return }
           var reason: NSString?
-          if !KORecommitBackdrop(entry.layer, &reason) { self.disable(reason) }
+          if !KORecommitBackdrop(entry.normal, &reason) || !KORecommitBackdrop(entry.revealed, &reason) {
+            self.disable(reason)
+          }
         }
       }
     }
+  }
+
+  private static func backdrop(_ key: LuminanceKey, bounds: CGRect, scale: CGFloat,
+                               reason: inout NSString?) -> CALayer? {
+    key.matrix.withUnsafeBufferPointer {
+      KOCreateBackdrop($0.baseAddress!, $0.count, bounds, scale, &reason)
+    }
+  }
+
+  /// Switches the visible backdrop of the display's windows without recreating them. Implicit
+  /// animations are off: a fading switch shows both keys at once.
+  private func show(_ key: LuminanceKey, on displayID: UInt32) {
+    let changed = entries.filter { $0.value.displayID == displayID && $0.value.key != key }
+    guard !changed.isEmpty else { return }
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    for (id, entry) in changed {
+      entry.normal.isHidden = key != Key.normal
+      entry.revealed.isHidden = key != Key.revealed
+      entries[id]?.key = key
+    }
+    CATransaction.commit()
+    var reason: NSString?
+    if !KOFlushBackdrop(&reason) { disable(reason) }
   }
 
   private func close(_ id: Int) {
     guard let entry = entries.removeValue(forKey: id) else { return }
     entry.window.alphaValue = 0
     var reason: NSString?
-    let detached = KODetachBackdrop(entry.layer, &reason)
+    let detached = KODetachBackdrop(entry.normal, &reason) && KODetachBackdrop(entry.revealed, &reason)
     entry.window.close()
     states[entry.displayID]?.forget(id)
     if !detached { disable(reason) }

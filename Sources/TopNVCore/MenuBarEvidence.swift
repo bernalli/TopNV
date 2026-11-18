@@ -16,16 +16,22 @@ public enum MenuBarEvidence {
     public let owner: Owner
     public let layer: Int
     public let bounds: CGRect
-    public init(owner: Owner, layer: Int, bounds: CGRect) {
+    /// Owned by `WindowManager`. Such a window is also a `.desktop` window, never evidence of a
+    /// full-screen app; at a layer of zero or more it can reveal the desktop.
+    public let isWindowManager: Bool
+    public init(owner: Owner, layer: Int, bounds: CGRect, isWindowManager: Bool = false) {
       self.owner = owner
       self.layer = layer
       self.bounds = bounds
+      self.isWindowManager = isWindowManager
     }
   }
 
   public struct Result {
     public let context: KeyedOverlayState.Context
     public let menuVisible: Bool
+    /// Show Desktop or a click on the wallpaper: the backdrop under the menu bar is darker.
+    public let desktopRevealed: Bool
   }
 
   /// Converts the dictionaries of `CGWindowListCopyWindowInfo`. Window titles are never read.
@@ -74,7 +80,8 @@ public enum MenuBarEvidence {
       // Quartz measures from the top of the primary screen, AppKit from its bottom.
       result.append(Window(owner: owner, layer: layer,
                            bounds: CGRect(x: rect.minX, y: primaryScreenHeight - rect.maxY,
-                                          width: rect.width, height: rect.height)))
+                                          width: rect.width, height: rect.height),
+                           isWindowManager: pid != ownPID && name == "WindowManager"))
     }
     return result
   }
@@ -83,7 +90,7 @@ public enum MenuBarEvidence {
                               windows: [Window]?) -> Result {
     guard let windows, valid(frame), valid(visibleFrame), valid(bandFrame),
           frame.contains(visibleFrame), frame.contains(bandFrame) else {
-      return Result(context: .unknown, menuVisible: false)
+      return Result(context: .unknown, menuVisible: false, desktopRevealed: false)
     }
     let tolerance: CGFloat = 2
     // The menu bar surface: a Window Server window along the top edge, as wide as the band.
@@ -106,8 +113,17 @@ public enum MenuBarEvidence {
         && $0.bounds.maxY >= bandFrame.maxY - tolerance
     }
     let noReservedTop = visibleFrame.maxY >= frame.maxY - tolerance
+    // Show Desktop and a click on the wallpaper add a WindowManager window from the bottom edge
+    // to the top edge. The WindowManager windows at negative layers are always there: they are
+    // the desktop itself. Small WindowManager windows at positive layers do not darken the bar.
+    let desktopRevealed = windows.contains {
+      $0.isWindowManager && $0.layer >= 0 && valid($0.bounds)
+        && $0.bounds.intersection(frame).width >= frame.width * 0.9
+        && $0.bounds.minY <= frame.minY + tolerance
+        && $0.bounds.maxY >= frame.maxY - tolerance
+    }
     return Result(context: coveringApp || noReservedTop ? .fullScreen : .desktop,
-                  menuVisible: menuVisible)
+                  menuVisible: menuVisible, desktopRevealed: desktopRevealed)
   }
 
   private static func valid(_ rect: CGRect) -> Bool {

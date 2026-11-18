@@ -273,3 +273,68 @@ final class MenuBarEvidenceTests: XCTestCase {
     }
   }
 }
+
+// MARK: - Revealed desktop
+
+extension MenuBarEvidenceTests {
+  private func windowManager(layer: Int, bounds: [String: Any]) -> [String: Any] {
+    entry(owner: "WindowManager", pid: Int32(600), layer: layer, bounds: bounds)
+  }
+
+  /// The menu bar and the two WindowManager windows at negative layers of every real list.
+  private func revealed(_ extra: [[String: Any]], frame: CGRect? = nil) -> Bool {
+    let list = [
+      entry(owner: "Window Server", layer: 24, bounds: menuEntryBounds),
+      windowManager(layer: -2_147_483_624, bounds: fullScreenBounds),
+      windowManager(layer: -2_147_483_622, bounds: fullScreenBounds)
+    ] + extra
+    return MenuBarEvidence.evaluate(frame: frame ?? self.frame, visibleFrame: visible,
+                                    bandFrame: strip, windows: parse(list)).desktopRevealed
+  }
+
+  func testAFullScreenWindowManagerWindowRevealsTheDesktop() {
+    XCTAssertTrue(revealed([windowManager(layer: 18, bounds: fullScreenBounds)]))
+    for layer in [0, 16, 18, 24] {
+      for bounds: [String: Any] in [
+        ["X": 0, "Y": 0, "Width": 1361, "Height": 982], ["X": 151, "Y": 0, "Width": 1361, "Height": 982],
+        ["X": 0, "Y": 2, "Width": 1512, "Height": 978], ["X": -10, "Y": -10, "Width": 1600, "Height": 1100]
+      ] {
+        XCTAssertTrue(revealed([windowManager(layer: layer, bounds: bounds)]), "layer \(layer) \(bounds)")
+      }
+    }
+    // The revealed desktop is still the desktop.
+    let list = [
+      entry(owner: "Window Server", layer: 24, bounds: menuEntryBounds),
+      windowManager(layer: 18, bounds: fullScreenBounds)
+    ]
+    let result = MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible, bandFrame: strip,
+                                          windows: parse(list))
+    XCTAssertEqual(result.context, .desktop)
+    XCTAssertTrue(result.menuVisible)
+  }
+
+  func testOtherWindowsDoNotRevealTheDesktop() {
+    XCTAssertFalse(revealed([]))
+    for extra in [
+      windowManager(layer: 16, bounds: ["X": 1400, "Y": 900, "Width": 77, "Height": 70]),
+      windowManager(layer: -1, bounds: fullScreenBounds),
+      windowManager(layer: 18, bounds: ["X": 0, "Y": 0, "Width": 1360, "Height": 982]),
+      windowManager(layer: 18, bounds: ["X": 0, "Y": 3, "Width": 1512, "Height": 979]),
+      windowManager(layer: 18, bounds: ["X": 0, "Y": 0, "Width": 1512, "Height": 979]),
+      windowManager(layer: 18, bounds: ["X": 1512, "Y": 0, "Width": 1920, "Height": 1080]),
+      windowManager(layer: 18, bounds: ["X": 0, "Y": 0, "Width": 0, "Height": 982]),
+      entry(owner: "Screenshot", pid: Int32(601), layer: 24, bounds: fullScreenBounds),
+      entry(owner: "Dock", pid: Int32(602), layer: 18, bounds: fullScreenBounds),
+      entry(owner: "Safari", pid: Int32(603), layer: 18, bounds: fullScreenBounds),
+      entry(owner: nil, pid: Int32(604), layer: 18, bounds: fullScreenBounds),
+      entry(owner: "WindowManager", pid: Int32(42), layer: 18, bounds: fullScreenBounds)
+    ] {
+      XCTAssertFalse(revealed([extra]), "\(extra)")
+    }
+    let full = windowManager(layer: 18, bounds: fullScreenBounds)
+    XCTAssertFalse(revealed([full], frame: .null))
+    XCTAssertFalse(revealed([full, entry(pid: nil)]))
+    XCTAssertFalse(MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible, bandFrame: strip,
+                                            windows: nil).desktopRevealed)
+  }
+}
