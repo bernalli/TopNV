@@ -1,3 +1,4 @@
+import CoreFoundation
 import CoreGraphics
 import Foundation
 
@@ -19,11 +20,15 @@ public enum MenuBarEvidence {
     /// Owned by `WindowManager`. Such a window is also a `.desktop` window, never evidence of a
     /// full-screen app; at a layer of zero or more it can reveal the desktop.
     public let isWindowManager: Bool
-    public init(owner: Owner, layer: Int, bounds: CGRect, isWindowManager: Bool = false) {
+    public let alpha: Double
+
+    public init(owner: Owner, layer: Int, bounds: CGRect, isWindowManager: Bool = false,
+                alpha: Double = 1) {
       self.owner = owner
       self.layer = layer
       self.bounds = bounds
       self.isWindowManager = isWindowManager
+      self.alpha = alpha
     }
   }
 
@@ -35,7 +40,7 @@ public enum MenuBarEvidence {
   }
 
   /// Converts the dictionaries of `CGWindowListCopyWindowInfo`. Window titles are never read.
-  /// A window without a usable owner PID, layer or bounds makes the whole list unavailable:
+  /// A window without a usable owner PID, layer, bounds or alpha makes the whole list unavailable:
   /// incomplete evidence is never permission to create. A window without an owner name is a
   /// plain application window, which can only suppress the effect.
   public static func windows(from list: [[String: Any]], ownPID: Int32,
@@ -46,17 +51,20 @@ public enum MenuBarEvidence {
     for info in list {
       // The four numbers are read one by one: `CGRect(dictionaryRepresentation:)` raises an
       // Objective-C exception, which Swift cannot catch, when a value is not a number.
-      guard let pid = (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
-            let layer = (info[kCGWindowLayer as String] as? NSNumber)?.intValue,
+      guard let pidValue = finiteNumber(info[kCGWindowOwnerPID as String]),
+            let pid = Int32(exactly: pidValue), pid > 0,
+            let layerValue = finiteNumber(info[kCGWindowLayer as String]),
+            let layer = Int32(exactly: layerValue),
+            let alpha = finiteNumber(info[kCGWindowAlpha as String]), (0...1).contains(alpha),
             let dictionary = info[kCGWindowBounds as String] as? [String: Any],
-            let x = (dictionary["X"] as? NSNumber)?.doubleValue,
-            let y = (dictionary["Y"] as? NSNumber)?.doubleValue,
-            let width = (dictionary["Width"] as? NSNumber)?.doubleValue,
-            let height = (dictionary["Height"] as? NSNumber)?.doubleValue,
-            [x, y, width, height].allSatisfy(\.isFinite) else {
-        return nil
-      }
-      let rect = CGRect(x: x, y: y, width: width, height: height)
+            let x = finiteNumber(dictionary["X"]),
+            let y = finiteNumber(dictionary["Y"]),
+            let width = finiteNumber(dictionary["Width"]), width >= 0,
+            let height = finiteNumber(dictionary["Height"]), height >= 0 else { return nil }
+      let top = y + height
+      let minY = Double(primaryScreenHeight) - top
+      let maxY = Double(primaryScreenHeight) - y
+      guard [x + width, top, minY, maxY].allSatisfy(\.isFinite) else { return nil }
       let name: String?
       switch info[kCGWindowOwnerName as String] {
       case nil: name = nil
@@ -78,10 +86,9 @@ public enum MenuBarEvidence {
         owner = .application
       }
       // Quartz measures from the top of the primary screen, AppKit from its bottom.
-      result.append(Window(owner: owner, layer: layer,
-                           bounds: CGRect(x: rect.minX, y: primaryScreenHeight - rect.maxY,
-                                          width: rect.width, height: rect.height),
-                           isWindowManager: pid != ownPID && name == "WindowManager"))
+      result.append(Window(owner: owner, layer: Int(layer),
+                           bounds: CGRect(x: x, y: minY, width: width, height: height),
+                           isWindowManager: pid != ownPID && name == "WindowManager", alpha: alpha))
     }
     return result
   }
@@ -117,7 +124,7 @@ public enum MenuBarEvidence {
     // to the top edge. The WindowManager windows at negative layers are always there: they are
     // the desktop itself. Small WindowManager windows at positive layers do not darken the bar.
     let desktopRevealed = windows.contains {
-      $0.isWindowManager && $0.layer >= 0 && valid($0.bounds)
+      $0.isWindowManager && $0.layer >= 0 && $0.alpha > 0 && $0.alpha <= 1 && valid($0.bounds)
         && $0.bounds.intersection(frame).width >= frame.width * 0.9
         && $0.bounds.minY <= frame.minY + tolerance
         && $0.bounds.maxY >= frame.maxY - tolerance
@@ -126,8 +133,14 @@ public enum MenuBarEvidence {
                   menuVisible: menuVisible, desktopRevealed: desktopRevealed)
   }
 
+  private static func finiteNumber(_ value: Any?) -> Double? {
+    guard let number = value as? NSNumber, CFGetTypeID(number) == CFNumberGetTypeID() else { return nil }
+    let converted = number.doubleValue
+    return converted.isFinite ? converted : nil
+  }
+
   private static func valid(_ rect: CGRect) -> Bool {
-    !rect.isNull && !rect.isInfinite && rect.width > 0 && rect.height > 0
+    !rect.isNull && !rect.isInfinite && rect.size.width > 0 && rect.size.height > 0
       && [rect.minX, rect.minY, rect.maxX, rect.maxY].allSatisfy(\.isFinite)
   }
 }

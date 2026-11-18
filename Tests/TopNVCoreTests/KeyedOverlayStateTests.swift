@@ -241,10 +241,14 @@ final class KeyedOverlayStateTests: XCTestCase {
         let context = [State.Context.desktop, .desktop, .desktop, .fullScreen, .unknown][next(5)]
         let menu = next(6) != 0
         let enabled = next(12) != 0
+        let revealed = next(2) == 0
         let allPositive = appearance == .light && context == .desktop && menu && enabled
         let result = state.update(.init(
           activeWindowIDs: active, appearance: appearance, context: context, menuVisible: menu,
-          enabled: enabled, now: now))
+          enabled: enabled, now: now, desktopRevealed: revealed))
+        let target = now >= settleUntil && allPositive ? Set(active).min() : nil
+        XCTAssertEqual(result.keyChange?.windowID, target)
+        XCTAssertEqual(result.keyChange?.key, target.map { _ in revealed ? .revealed : .normal })
 
         let distinct = Set(active).sorted()
         if let candidate, now >= settleUntil, !distinct.contains(candidate) {

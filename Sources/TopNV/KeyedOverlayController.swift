@@ -103,7 +103,7 @@ final class KeyedOverlayController {
       let decision = state.update(.init(
         activeWindowIDs: active, appearance: appearance,
         context: evidence.context, menuVisible: evidence.menuVisible, enabled: enabled,
-        now: ProcessInfo.processInfo.systemUptime))
+        now: ProcessInfo.processInfo.systemUptime, desktopRevealed: evidence.desktopRevealed))
       states[displayID] = state
       let trace = "appearance=\(appearance) context=\(evidence.context) "
         + "menu=\(evidence.menuVisible) revealed=\(evidence.desktopRevealed) "
@@ -115,12 +115,15 @@ final class KeyedOverlayController {
       }
       for id in decision.close { close(id) }
       guard !failed else { return }
+      if let change = decision.keyChange {
+        show(change.key, on: change.windowID)
+      }
+      guard !failed else { return }
       for (id, shown) in decision.gates {
         entries[id]?.window.alphaValue = shown ? 1 : 0
       }
-      let key = LuminanceKey.choose(desktopRevealed: evidence.desktopRevealed)
-      show(key, on: displayID)
       if let reservation = decision.create {
+        let key = LuminanceKey.choose(desktopRevealed: evidence.desktopRevealed)
         create(displayID: displayID, frame: frame, screen: screen, key: key, reservation: reservation)
       }
       guard !failed else { return }
@@ -192,31 +195,29 @@ final class KeyedOverlayController {
     }
   }
 
-  /// Switches the visible backdrop of the display's windows without recreating them. Implicit
-  /// animations are off: a fading switch shows both keys at once.
-  private func show(_ key: LuminanceKey, on displayID: UInt32) {
-    let changed = entries.filter { $0.value.displayID == displayID && $0.value.key != key }
-    guard !changed.isEmpty else { return }
+  /// Switches only the window whose active Space has settled.
+  private func show(_ key: LuminanceKey, on id: Int) {
+    guard let entry = entries[id], entry.key != key else { return }
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    for (id, entry) in changed {
-      entry.normal.isHidden = key != Key.normal
-      entry.revealed.isHidden = key != Key.revealed
-      entries[id]?.key = key
-    }
+    entry.normal.isHidden = key != Key.normal
+    entry.revealed.isHidden = key != Key.revealed
     CATransaction.commit()
     var reason: NSString?
-    if !KOFlushBackdrop(&reason) { disable(reason) }
+    guard KOFlushBackdrop(&reason) else { disable(reason); return }
+    entries[id]?.key = key
   }
 
   private func close(_ id: Int) {
     guard let entry = entries.removeValue(forKey: id) else { return }
     entry.window.alphaValue = 0
-    var reason: NSString?
-    let detached = KODetachBackdrop(entry.normal, &reason) && KODetachBackdrop(entry.revealed, &reason)
+    var normalReason: NSString?
+    var revealedReason: NSString?
+    let normalDetached = KODetachBackdrop(entry.normal, &normalReason)
+    let revealedDetached = KODetachBackdrop(entry.revealed, &revealedReason)
     entry.window.close()
     states[entry.displayID]?.forget(id)
-    if !detached { disable(reason) }
+    if !normalDetached || !revealedDetached { disable(normalReason ?? revealedReason) }
   }
 
   private func disable(_ reason: NSString?) {

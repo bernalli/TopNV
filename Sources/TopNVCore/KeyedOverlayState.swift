@@ -13,15 +13,17 @@ public struct KeyedOverlayState {
     public let menuVisible: Bool
     public let enabled: Bool
     public let now: Double
+    public let desktopRevealed: Bool
 
     public init(activeWindowIDs: [Int], appearance: Appearance, context: Context,
-                menuVisible: Bool, enabled: Bool, now: Double) {
+                menuVisible: Bool, enabled: Bool, now: Double, desktopRevealed: Bool = false) {
       self.activeWindowIDs = activeWindowIDs
       self.appearance = appearance
       self.context = context
       self.menuVisible = menuVisible
       self.enabled = enabled
       self.now = now
+      self.desktopRevealed = desktopRevealed
     }
   }
 
@@ -34,6 +36,7 @@ public struct KeyedOverlayState {
     public var close: [Int] = []
     public var gates: [Int: Bool] = [:]
     public var create: Reservation?
+    public fileprivate(set) var keyChange: (windowID: Int, key: LuminanceKey)?
   }
 
   public private(set) var visibility: [Int: Bool] = [:]
@@ -83,6 +86,9 @@ public struct KeyedOverlayState {
       if settled {
         visibility[keeper] = show
         result.gates[keeper] = show
+        if show {
+          result.keyChange = (keeper, LuminanceKey.choose(desktopRevealed: input.desktopRevealed))
+        }
       }
       pending = nil
     } else if settled && show && pending == nil && creationsThisVisit < 3

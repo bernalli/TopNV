@@ -313,6 +313,79 @@ extension MenuBarEvidenceTests {
     XCTAssertTrue(result.menuVisible)
   }
 
+  func testMalformedNumbersInvalidateTheWholeListInEveryPosition() {
+    let good = windowManager(layer: 18, bounds: fullScreenBounds)
+    let pid = kCGWindowOwnerPID as String
+    let layer = kCGWindowLayer as String
+    let alpha = kCGWindowAlpha as String
+    let bounds = kCGWindowBounds as String
+    let invalid: [Any?] = [nil, true, "1", [1], NSNull(), Double.nan, Double.infinity]
+    var malformed: [[String: Any]] = []
+    for key in [pid, layer, alpha] {
+      for value in invalid {
+        var row = good
+        row[key] = value
+        malformed.append(row)
+      }
+    }
+    for key in ["X", "Y", "Width", "Height"] {
+      for value in invalid {
+        var row = fullScreenBounds
+        row[key] = value
+        malformed.append(windowManager(layer: 18, bounds: row))
+      }
+    }
+    let outsideInt32: [Any] = [Int64(Int32.min) - 1, Int64(Int32.max) + 1, 18.5]
+    let outOfRange: [(String, [Any])] = [
+      (pid, outsideInt32 + [0, -1, Int64(4_294_967_338)]),
+      (layer, outsideInt32), (alpha, [-0.01, 1.01])
+    ]
+    for (key, values) in outOfRange {
+      for value in values {
+        var row = good
+        row[key] = value
+        malformed.append(row)
+      }
+    }
+    let huge = Double.greatestFiniteMagnitude
+    for rect in [
+      ["X": 1512, "Y": 0, "Width": -1512, "Height": 982],
+      ["X": 0, "Y": 982, "Width": 1512, "Height": -982],
+      ["X": huge, "Y": 0, "Width": huge, "Height": 982],
+      ["X": 0, "Y": huge, "Width": 1512, "Height": huge]
+    ] as [[String: Any]] {
+      var row = good
+      row[bounds] = rect
+      malformed.append(row)
+    }
+    for row in malformed {
+      for index in 0...2 {
+        var list = [good, good]
+        list.insert(row, at: index)
+        XCTAssertNil(parse(list))
+        XCTAssertFalse(revealed(list))
+      }
+    }
+  }
+
+  func testRevealIsInvariantUnderDuplicatesAndOrdering() {
+    let candidates = [
+      windowManager(layer: -1, bounds: fullScreenBounds),
+      windowManager(layer: 16, bounds: ["X": 0, "Y": 0, "Width": 77, "Height": 70])
+    ]
+    for alpha in [0.0, 0.01, 0.5, 1.0] {
+      var full = windowManager(layer: 18, bounds: fullScreenBounds)
+      full[kCGWindowAlpha as String] = alpha
+      full["unknown"] = ["ignored": true]
+      for index in 0...candidates.count {
+        var rows = candidates
+        rows.insert(full, at: index)
+        XCTAssertEqual(revealed(rows), alpha > 0)
+        XCTAssertEqual(revealed(Array(rows.reversed()) + rows), alpha > 0)
+      }
+    }
+  }
+
   func testOtherWindowsDoNotRevealTheDesktop() {
     XCTAssertFalse(revealed([]))
     for extra in [
