@@ -15,16 +15,23 @@ final class OverlayController: NSObject {
 
   private let settings: AppSettings
   private var bandState = BandState()
-  private let keyedOverlay = KeyedOverlayController()
+  private let keyedOverlay: KeyedOverlayController
   private var barWindows: [UInt32: OverlayWindow] = [:]
   private var windows: [String: OverlayWindow] = [:]
   private var pendingScreenRebuild: Task<Void, Never>?
   private var pendingSettingsRebuild: Task<Void, Never>?
   private var settingsSubscription: AnyCancellable?
 
-  init(settings: AppSettings) {
+  /// `keyCalibration` is nil in production; a test copy passes the candidate it starts with.
+  init(settings: AppSettings, keyCalibration: KeyCalibration? = nil) {
     self.settings = settings
+    keyedOverlay = KeyedOverlayController(calibration: keyCalibration)
     super.init()
+  }
+
+  /// Test copies only; see `KeyedOverlayController.calibrate(_:)`.
+  func calibrateKey(_ calibration: KeyCalibration) {
+    keyedOverlay.calibrate(calibration)
   }
 
   func start() {

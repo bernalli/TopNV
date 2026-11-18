@@ -19,6 +19,11 @@ import TopNVCore
   private var subscriptions: Set<AnyCancellable> = []
   private var visibilityObservation: NSKeyValueObservation?
   private var refreshScheduled = false
+  /// Test copies only: the checked candidate. Nil in production, so the menu has no calibration
+  /// and the calibration commands do nothing.
+  private var keyCalibration: KeyCalibration?
+  /// Called with the candidate chosen in the Key calibration submenu.
+  var onKeyCalibration: ((KeyCalibration) -> Void)?
 
   private static let icon: NSImage? = {
     let image =
@@ -31,8 +36,9 @@ import TopNVCore
 
   init(
     settings: AppSettings, loginItem: LoginItem, updates: UpdateMenuModel,
-    visibility: MenuVisibility
+    visibility: MenuVisibility, keyCalibration: KeyCalibration? = nil
   ) {
+    self.keyCalibration = keyCalibration
     self.settings = settings
     self.loginItem = loginItem
     self.updates = updates
@@ -92,7 +98,7 @@ import TopNVCore
       hideNotch: settings.hideNotch, roundCorners: settings.roundCorners,
       cornersOnAllDisplays: settings.cornersOnAllDisplays, launchAtLogin: loginItem.isEnabled,
       loginNeedsApproval: loginItem.needsApproval, loginError: loginItem.errorMessage,
-      updates: updates.items)
+      updates: updates.items, keyCalibration: keyCalibration)
   }
 
   /// The login item does not publish approval changes made in System Settings; opening the menu
@@ -115,6 +121,17 @@ import TopNVCore
     case .reportIssue:
       if let url = AppLink.reportIssue.url { NSWorkspace.shared.open(url) }
     case .quit: NSApp.terminate(nil)
+    case .keyCalibration1, .keyCalibration2, .keyCalibration3, .keyCalibration4, .keyCalibration5,
+      .keyCalibration6:
+      chooseKeyCalibration(command)
     }
+  }
+
+  /// The choice is not saved: every launch starts again from the first candidate.
+  private func chooseKeyCalibration(_ command: MenuCommand) {
+    guard keyCalibration != nil, let choice = KeyCalibration.option(for: command) else { return }
+    keyCalibration = choice
+    onKeyCalibration?(choice)
+    scheduleRefresh()
   }
 }

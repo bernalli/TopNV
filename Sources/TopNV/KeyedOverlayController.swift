@@ -20,7 +20,7 @@ final class KeyedOverlayController {
   /// No single linear key fits both backdrops macOS draws under the menu bar (`LuminanceKey`).
   private enum Key {
     /// Light backdrop of the menu bar: black from Y 0.7325, white up to Y 0.1075, so the
-    /// antialiasing and the grey parts of the icons stay.
+    /// antialiasing and the grey parts of the icons stay. A test copy uses its `KeyCalibration`.
     static let normal = LuminanceKey.normal
     /// Darker backdrop while the desktop is revealed (Y about 0.32): black from Y 0.2833.
     static let revealed = LuminanceKey.revealed
@@ -39,6 +39,31 @@ final class KeyedOverlayController {
   private var traces: [UInt32: String] = [:]
   private var monitor: MenuBarConditionsMonitor?
   private var timer: Timer?
+  /// Test copies only: the chosen normal key. Nil in production, for the whole session.
+  private var calibration: KeyCalibration?
+
+  init(calibration: KeyCalibration? = nil) {
+    self.calibration = calibration
+  }
+
+  private var normalMatrix: [Float] { KeyCalibration.normalMatrix(calibration) }
+
+  /// Test copies only: replaces the normal key. The windows are closed and created again, as
+  /// after a change of geometry, so no live backdrop is changed. Without a calibration at
+  /// launch, as in production, it does nothing.
+  func calibrate(_ calibration: KeyCalibration) {
+    guard self.calibration != nil, self.calibration != calibration else { return }
+    self.calibration = calibration
+    let line = "Key calibration: gain=\(calibration.gain) cutoff=\(calibration.cutoff)"
+    Self.logger.info("\(line, privacy: .public)")
+    guard !failed else { return }
+    let displays = Set(entries.values.map(\.displayID))
+    for id in Array(entries.keys) { close(id) }
+    guard !failed else { return }
+    // As for a change of geometry: the displays start again with a full creation budget.
+    for id in displays { states[id] = nil }
+    reconcile()
+  }
 
   func update(frames: [UInt32: CGRect], enabled: Bool, spaceChanged: Bool) {
     self.frames = frames
@@ -136,8 +161,8 @@ final class KeyedOverlayController {
     let scale = screen.backingScaleFactor
     let bounds = CGRect(origin: .zero, size: frame.size)
     var reason: NSString?
-    guard let normal = Self.backdrop(Key.normal, bounds: bounds, scale: scale, reason: &reason),
-          let revealed = Self.backdrop(Key.revealed, bounds: bounds, scale: scale, reason: &reason)
+    guard let normal = Self.backdrop(normalMatrix, bounds: bounds, scale: scale, reason: &reason),
+          let revealed = Self.backdrop(Key.revealed.matrix, bounds: bounds, scale: scale, reason: &reason)
     else { disable(reason); return }
     normal.isHidden = key != Key.normal
     revealed.isHidden = key != Key.revealed
@@ -188,9 +213,9 @@ final class KeyedOverlayController {
     }
   }
 
-  private static func backdrop(_ key: LuminanceKey, bounds: CGRect, scale: CGFloat,
+  private static func backdrop(_ matrix: [Float], bounds: CGRect, scale: CGFloat,
                                reason: inout NSString?) -> CALayer? {
-    key.matrix.withUnsafeBufferPointer {
+    matrix.withUnsafeBufferPointer {
       KOCreateBackdrop($0.baseAddress!, $0.count, bounds, scale, &reason)
     }
   }

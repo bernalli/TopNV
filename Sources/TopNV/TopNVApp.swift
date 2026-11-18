@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   let menuVisibility = MenuVisibility(
     defaults: .standard, key: AppSettings.showMenuBarIconKey)
   private var overlay: OverlayController?
+  /// Nil under the production bundle identifier: only test copies get the Key calibration menu.
+  private let keyCalibration = KeyCalibration.initial(bundleIdentifier: Bundle.main.bundleIdentifier)
   private let updateConfiguration = UpdateConfiguration(infoDictionary: Bundle.main.infoDictionary)
   private lazy var sparkleUpdater: SparkleUpdater? = {
     guard Bundle.main.bundleURL.pathExtension == "app", updateConfiguration.isValid else {
@@ -50,9 +52,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     let statusMenu = StatusMenuController(
-      settings: settings, loginItem: loginItem, updates: updates, visibility: menuVisibility)
+      settings: settings, loginItem: loginItem, updates: updates, visibility: menuVisibility,
+      keyCalibration: keyCalibration)
     Application.statusMenu = statusMenu
-    let controller = OverlayController(settings: settings)
+    let controller = OverlayController(settings: settings, keyCalibration: keyCalibration)
+    statusMenu.onKeyCalibration = { [weak controller] in controller?.calibrateKey($0) }
     controller.start()
     overlay = controller
     sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }

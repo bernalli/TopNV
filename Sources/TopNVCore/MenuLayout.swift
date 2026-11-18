@@ -12,6 +12,9 @@ public enum MenuCommand: String, CaseIterable, Sendable {
   case about
   case reportIssue
   case quit
+  /// Test copies only: the candidates of `KeyCalibration.options`, in order.
+  case keyCalibration1, keyCalibration2, keyCalibration3, keyCalibration4, keyCalibration5,
+    keyCalibration6
 }
 
 /// One native menu item. `id` is stable while the state changes, so an open menu keeps the same
@@ -51,10 +54,14 @@ public struct MenuState: Equatable, Sendable {
   /// The last registration error; blank text counts as no error.
   public var loginError: String?
   public var updates: UpdateItems
+  /// The chosen candidate in a test copy; always nil in production, where the menu has no
+  /// calibration.
+  public var keyCalibration: KeyCalibration?
 
   public init(
     hideNotch: Bool, roundCorners: Bool, cornersOnAllDisplays: Bool, launchAtLogin: Bool,
-    loginNeedsApproval: Bool, loginError: String?, updates: UpdateItems
+    loginNeedsApproval: Bool, loginError: String?, updates: UpdateItems,
+    keyCalibration: KeyCalibration? = nil
   ) {
     self.hideNotch = hideNotch
     self.roundCorners = roundCorners
@@ -63,6 +70,7 @@ public struct MenuState: Equatable, Sendable {
     self.loginNeedsApproval = loginNeedsApproval
     self.loginError = loginError
     self.updates = updates
+    self.keyCalibration = keyCalibration
   }
 }
 
@@ -83,7 +91,16 @@ public enum MenuLayout {
       separator("separator.options"),
       MenuRow(
         id: "options", title: localizer(.options), symbol: "gearshape",
-        kind: .submenu(options(for: state, localizer: localizer), enabled: true)),
+        kind: .submenu(options(for: state, localizer: localizer), enabled: true))
+    ]
+    // Test copies only: production never has a calibration, so its menu has no such row.
+    if let calibration = state.keyCalibration {
+      rows.append(
+        MenuRow(
+          id: "keyCalibration", title: "Key calibration", symbol: "slider.horizontal.3",
+          kind: .submenu(keyCalibration(selected: calibration), enabled: true)))
+    }
+    rows += [
       separator("separator.app"),
       MenuRow(
         id: "about", title: localizer(.about, appName), symbol: nil,
@@ -143,6 +160,18 @@ public enum MenuLayout {
         kind: .action(.hideMenuBarIcon, enabled: true, key: "")))
     options += info(localizer(.hideMenuBarIconCaption, Localizer.appName), id: "hide.caption")
     return options
+  }
+
+  /// English only, as the copies that show it are never published.
+  static func keyCalibration(selected: KeyCalibration) -> [MenuRow] {
+    let caption = MenuRow(
+      id: "keyCalibration.caption", title: "Gain / cutoff of the normal key", symbol: nil, kind: .info)
+    return [caption]
+      + KeyCalibration.options.map { option in
+        MenuRow(
+          id: option.command.rawValue, title: option.title, symbol: nil,
+          kind: .toggle(option.command, isOn: option == selected, enabled: true))
+      }
   }
 
   /// The grey row under Launch at Login, only when something needs the user: the registration
