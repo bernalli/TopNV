@@ -195,6 +195,42 @@ final class KeyedOverlayStateTests: XCTestCase {
     XCTAssertNotNil(state.update(input(time: 51)).create)
   }
 
+  func testWindowReplacementPreservesSpaceSettling() throws {
+    var state = State()
+    _ = state.update(input(active: [7], time: 10))
+    state.spaceDidChange(now: 12)
+    state.resetForWindowReplacement()
+
+    XCTAssertTrue(state.visibility.isEmpty)
+    for time in [12.0, 12.01, 12.25, 12.499] {
+      XCTAssertNil(state.update(input(time: time)).create)
+    }
+    XCTAssertNil(state.update(input(appearance: .dark, time: 12.5)).create)
+    let reservation = try XCTUnwrap(state.update(input(time: 12.5)).create)
+    XCTAssertTrue(state.commit(reservation, windowID: 7))
+    XCTAssertEqual(state.visibility, [7: false])
+  }
+
+  func testWindowReplacementInvalidatesReservationsAndRefillsAnEmptyDisplayBudget() throws {
+    var state = State()
+    var obsolete: [State.Reservation] = []
+    for time in [10.0, 11, 12] {
+      _ = state.update(input(appearance: .dark, time: time))
+      obsolete.append(try XCTUnwrap(state.update(input(time: time)).create))
+    }
+    XCTAssertTrue(state.visibility.isEmpty)
+    XCTAssertEqual(state.creationsThisVisit, 3)
+    XCTAssertNil(state.update(input(time: 20)).create)
+
+    state.resetForWindowReplacement()
+    let fresh = try XCTUnwrap(state.update(input(time: 20)).create)
+    for reservation in obsolete {
+      XCTAssertFalse(state.commit(reservation, windowID: 7))
+    }
+    XCTAssertTrue(state.commit(fresh, windowID: 7))
+    XCTAssertFalse(state.commit(fresh, windowID: 8))
+  }
+
   func testNonFiniteOrBackwardTimeNeverCreatesMoreThanTheBudget() {
     var state = State()
     var created = 0

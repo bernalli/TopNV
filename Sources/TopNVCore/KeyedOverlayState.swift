@@ -51,6 +51,18 @@ public struct KeyedOverlayState {
 
   public init() {}
 
+  /// Replacing every window invalidates its gate and reservation. Space evidence still settles
+  /// on the original deadline.
+  public mutating func resetForWindowReplacement() {
+    visibility.removeAll()
+    creationsThisVisit = 0
+    generation &+= 1
+    pending = nil
+    lastActive = nil
+    departureCandidate = nil
+    nextCreation = 0
+  }
+
   /// Notifications alone are not proof of a new visit. In particular, repeated notifications
   /// cannot reset the cap when a newly ordered window never acquires Space membership.
   public mutating func spaceDidChange(now: Double) {

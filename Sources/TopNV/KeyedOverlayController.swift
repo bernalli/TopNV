@@ -41,6 +41,7 @@ final class KeyedOverlayController {
   private var timer: Timer?
   /// Test copies only: the chosen normal key. Nil in production, for the whole session.
   private var calibration: KeyCalibration?
+  private var calibrationNeedsRebuild = false
 
   init(calibration: KeyCalibration? = nil) {
     self.calibration = calibration
@@ -57,11 +58,7 @@ final class KeyedOverlayController {
     let line = "Key calibration: gain=\(calibration.gain) cutoff=\(calibration.cutoff)"
     Self.logger.info("\(line, privacy: .public)")
     guard !failed else { return }
-    let displays = Set(entries.values.map(\.displayID))
-    for id in Array(entries.keys) { close(id) }
-    guard !failed else { return }
-    // As for a change of geometry: the displays start again with a full creation budget.
-    for id in displays { states[id] = nil }
+    calibrationNeedsRebuild = true
     reconcile()
   }
 
@@ -91,6 +88,8 @@ final class KeyedOverlayController {
     guard !failed, !reconciling else { return }
     reconciling = true
     defer { reconciling = false }
+    if calibrationNeedsRebuild, !rebuildForCalibration() { return }
+
     let screens = NSScreen.screens
     let byID = Dictionary(screens.compactMap { screen -> (UInt32, NSScreen)? in
       guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
@@ -153,6 +152,15 @@ final class KeyedOverlayController {
       }
       guard !failed else { return }
     }
+  }
+
+  /// Closes every keyed window for a new calibration. False when closing disabled the effect.
+  private func rebuildForCalibration() -> Bool {
+    calibrationNeedsRebuild = false
+    for id in Array(entries.keys) { close(id) }
+    guard !failed else { return false }
+    for id in states.keys { states[id]?.resetForWindowReplacement() }
+    return true
   }
 
   private func create(displayID: UInt32, frame: CGRect, screen: NSScreen, key: LuminanceKey,
