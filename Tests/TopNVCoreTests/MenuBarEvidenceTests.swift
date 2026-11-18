@@ -210,6 +210,48 @@ final class MenuBarEvidenceTests: XCTestCase {
                                            windows: windows).menuVisible)
   }
 
+  private let menuEntryBounds: [String: Any] = ["X": 0, "Y": 0, "Width": 1512, "Height": 34]
+  private let fullScreenBounds: [String: Any] = ["X": 0, "Y": 0, "Width": 1512, "Height": 982]
+
+  /// Show Desktop and a click on the wallpaper add a full-screen WindowManager window at
+  /// layer 18; the screenshot and recording tool adds a full-screen Screenshot window at layer 24.
+  func testShowDesktopAndScreenshotWindowsAreNotFullScreenEvidence() throws {
+    for (owner, layer) in [("WindowManager", 18), ("Screenshot", 24)] {
+      let list = [
+        entry(owner: "Window Server", layer: 24, bounds: menuEntryBounds),
+        entry(owner: owner, pid: Int32(600), layer: layer, bounds: fullScreenBounds)
+      ]
+      let result = MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible, bandFrame: strip,
+                                            windows: try XCTUnwrap(parse(list)))
+      XCTAssertEqual(result.context, .desktop, owner)
+      XCTAssertTrue(result.menuVisible, owner)
+    }
+  }
+
+  func testWindowManagerAndScreenshotWindowsAreClassifiedAsDesktop() throws {
+    for owner in ["WindowManager", "Screenshot"] {
+      for layer in [-1, 0, 18, 24, 26] {
+        let windows = try XCTUnwrap(parse([
+          entry(owner: owner, pid: Int32(600), layer: layer, bounds: fullScreenBounds)
+        ]))
+        XCTAssertEqual(windows.map(\.owner), [.desktop], "\(owner) layer \(layer)")
+      }
+    }
+  }
+
+  func testARealFullScreenAppIsStillFullScreenEvidence() throws {
+    for owner in ["Safari", "Windowmanager", "WindowManagerHelper", "Screenshots", "Finder"] {
+      let list = [
+        entry(owner: "Window Server", layer: 24, bounds: menuEntryBounds),
+        entry(owner: owner, pid: Int32(700), layer: 0, bounds: fullScreenBounds)
+      ]
+      let result = MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible, bandFrame: strip,
+                                            windows: try XCTUnwrap(parse(list)))
+      XCTAssertEqual(result.context, .fullScreen, owner)
+      XCTAssertTrue(result.menuVisible, owner)
+    }
+  }
+
   func testAnIncompleteOrMistypedWindowMakesTheListUnavailable() {
     let malformed: [[String: Any]] = [
       entry(pid: nil), entry(layer: nil), entry(bounds: nil),

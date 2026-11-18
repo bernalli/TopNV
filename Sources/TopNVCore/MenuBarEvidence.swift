@@ -62,7 +62,11 @@ public enum MenuBarEvidence {
         owner = .ownApp
       } else if name == "Window Server" {
         owner = .windowServer
-      } else if name == "Dock" || (name == "Finder" && layer < 0) {
+      } else if name == "Dock" || name == "WindowManager" || name == "Screenshot"
+                  || (name == "Finder" && layer < 0) {
+        // Show Desktop and a click on the wallpaper add a full-screen WindowManager window at
+        // layer 18, and the screenshot and recording tool a full-screen Screenshot window at
+        // layer 24. Neither is a full-screen app: taken as evidence they turn the band off.
         owner = .desktop
       } else {
         owner = .application
