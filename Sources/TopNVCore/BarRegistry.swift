@@ -189,7 +189,8 @@ public struct BarRegistry {
     }.max() ?? 0
   }
 
-  public mutating func record(_ snapshot: BarRegistrySnapshot, ownWindows: [MenuBarEvidence.Window]?) -> [String] {
+  public mutating func record(_ snapshot: BarRegistrySnapshot, ownWindows: [MenuBarEvidence.Window]?,
+                              listedAgainst: BarRegistrySnapshot? = nil) -> [String] {
     let windows = testCopy ? ownWindows.map(Self.index) : nil
     let ids = Set(previous.keys).union(snapshot.entries.keys)
     let parts = Dictionary(grouping: ids.sorted(), by: \.display)
@@ -203,7 +204,20 @@ public struct BarRegistry {
       let scene = info?.scene ?? .absent
       for id in parts[display] ?? [] {
         if let entry = snapshot.entries[id] {
-          let observation = testCopy ? Self.observe(id, entry, info, windows, previous[id]) : nil
+          let observation: Observation?
+          if !testCopy {
+            observation = nil
+          } else if let collected = listedAgainst {
+            if let atCollection = collected.entries[id], let number = atCollection.window, number == entry.window,
+               let geometry = collected.displays[display],
+               BarPixels.pixels(geometry.frame, display: geometry.frame, scale: geometry.scale) != nil {
+              observation = Self.observe(id, atCollection, geometry, windows, atCollection)
+            } else {
+              observation = Observation(listed: .unavailable, mismatch: false)
+            }
+          } else {
+            observation = Self.observe(id, entry, info, windows, previous[id])
+          }
           let listingChanged = observation.map { $0.listed != .unavailable && $0 != lastObservation[id] } ?? false
           guard listingChanged || !entry.hasSameFields(as: previous[id]) else { continue }
           let prefix = "display=\(display) scene=\(scene.rawValue) part=\(id.part.token)"

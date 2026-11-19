@@ -1,266 +1,273 @@
 import AppKit
 import Combine
 import TopNVCore
+import os
 
-/// Keeps one bar window per notched screen and four corner windows per selected screen in sync
-/// with the screen layout and the user settings. It never reads or writes the wallpaper.
 @MainActor
 final class OverlayController: NSObject {
+  private static let trace = Logger(subsystem: "TopNV", category: "KeyedOverlay")
+  private static let registryLog = Logger(subsystem: "TopNV", category: "BarSurface")
   private let settings: AppSettings
-  private let animationPreview = BarAnimationPlayer()
-  private var entrances: [UInt32: BarAnimationPlayer] = [:]
-  private var entranceState = BandEntrance()
-  private var entranceEvent = BandEntrance.Event.sample
-  private var appliedHideNotch = false
-  private var bandState = BandState()
-  private let keyedOverlay = KeyedOverlayController()
-  private let probe = BarRegistryProbe(testCopy: TestCopy.matches(Bundle.main.bundleIdentifier))
-  private var latestEvidence: [UInt32: MenuBarEvidence.Result] = [:]
-  private var barWindows: [UInt32: BarWindow] = [:]
-  private var windows: [String: CornerWindow] = [:]
-  /// Displays whose desktop is revealed: their base band and corners are transparent.
-  private var revealedDisplays: Set<UInt32> = []
-  /// Displays with rounded corners at the last rebuild.
-  private var lastCornerDisplays: Set<UInt32> = []
-  private var pendingScreenRebuild: Task<Void, Never>?
+  private let displays: () -> [BarDisplay]
+  private let sampler: BarSampling
+  private let bands: BarPartExecuting
+  private let edges: BarPartExecuting
+  private let corners: BarPartExecuting
+  private let makeClock: (UInt32) -> EntranceTiming
+  private let orderFront: (Int) -> Void
+  private let scheduleRebuild: (Double, DispatchWorkItem) -> Void
+  private let registryLine: (String) -> Void
+  private let testCopy: Bool
+
+  private var scene = BarScene()
+  private var geometry: [UInt32: BarDisplay] = [:]
+  private var clocks: [UInt32: EntranceTiming] = [:]
+  private var registry: BarRegistry
+  private var applied = BarRegistrySnapshot(entries: [:], displays: [:])
   private var settingsSubscription: AnyCancellable?
+  private var pendingScreenRebuild: DispatchWorkItem?
+  private var screenGeneration: UInt64 = 0
+  private var delivering = false
+  private var pending: [() -> Void] = []
 
-  init(settings: AppSettings) {
+  private lazy var keys: BarKeyExecuting = KeyExecutor(
+    keyCommitted: { [weak self] in self?.keyCommitted($0, window: $1, display: $2) ?? false },
+    keyClosed: { [weak self] in self?.keyClosed(window: $0, display: $1) },
+    keyDidFail: { [weak self] in self?.keyDidFail() },
+    stopAppearanceMonitor: { [weak self] in self?.sampler.monitorAppearance(false) })
+
+  convenience init(settings: AppSettings) {
+    self.init(settings: settings, displays: { NSScreen.screens.compactMap(BarDisplay.init(screen:)) },
+              sampler: BarSampler(), bands: BandExecutor(), edges: EdgeExecutor(), corners: CornerExecutor(),
+              keys: nil, makeClock: { EntranceClock(display: $0) },
+              orderFront: { NSApp.window(withWindowNumber: $0)?.orderFrontRegardless() },
+              scheduleRebuild: { DispatchQueue.main.asyncAfter(deadline: .now() + $0, execute: $1) },
+              testCopy: TestCopy.matches(Bundle.main.bundleIdentifier),
+              registryLine: { line in OverlayController.registryLog.info("\(line, privacy: .public)") })
+  }
+
+  init(settings: AppSettings, displays: @escaping () -> [BarDisplay], sampler: BarSampling,
+       bands: BarPartExecuting, edges: BarPartExecuting, corners: BarPartExecuting, keys: BarKeyExecuting?,
+       makeClock: @escaping (UInt32) -> EntranceTiming, orderFront: @escaping (Int) -> Void,
+       scheduleRebuild: @escaping (Double, DispatchWorkItem) -> Void, testCopy: Bool,
+       registryLine: @escaping (String) -> Void) {
     self.settings = settings
+    self.displays = displays
+    self.sampler = sampler
+    self.bands = bands
+    self.edges = edges
+    self.corners = corners
+    self.makeClock = makeClock
+    self.orderFront = orderFront
+    self.scheduleRebuild = scheduleRebuild
+    self.testCopy = testCopy
+    self.registryLine = registryLine
+    registry = BarRegistry(testCopy: testCopy)
     super.init()
+    if let keys { self.keys = keys }
+    sampler.onSample = { [weak self] in self?.sample() }
   }
 
-  func replayEntrance() {
-    cancelEntrances()
-    animationPreview.play(.calm) { [weak self] in self?.previewTargets() ?? [] }
-  }
-
-  private func corners(on id: UInt32) -> [ScreenCorner: CornerWindow] {
-    guard wantsCorners(on: id) else { return [:] }
-    var result: [ScreenCorner: CornerWindow] = [:]
-    for corner in ScreenCorner.allCases { result[corner] = windows["\(id).\(corner.rawValue)"] }
-    return result
-  }
-
-  private func previewTargets() -> [PreviewBandTarget] {
-    guard settings.hideNotch else { return [] }
-    return NSScreen.screens.compactMap { screen in
-      guard let id = screen.displayID, let bar = barWindows[id], bar.alphaValue > 0 else { return nil }
-      return keyedOverlay.previewTarget(screen: screen, id: id, bar: bar, corners: corners(on: id))
-    }
+  private var barSettings: BarSettings {
+    .init(hideNotch: settings.hideNotch, roundCorners: settings.roundCorners,
+          cornersOnAllDisplays: settings.cornersOnAllDisplays)
   }
 
   func start() {
-    keyedOverlay.onMenuEdgeSample = { [weak self] id, frame in
-      self?.barWindows[id]?.menuEdge.update(frame: frame)
-    }
-    keyedOverlay.onRegistrySample = { [weak self] evidence, windows in
-      guard let self else { return }
-      latestEvidence = evidence
-      recordRegistry(on: NSScreen.screens, ownWindows: windows)
-    }
-    keyedOverlay.onPreviewInvalidated = { [weak self] id in
-      guard let self, let bar = barWindows[id] else { return }
-      animationPreview.cancel(ifShowing: bar)
-    }
-    keyedOverlay.onDesktopSample = { [weak self] visibility, samples, layers in
-      self?.apply(visibility: visibility, samples: samples, layers: layers)
-    }
-    keyedOverlay.onKeyWillShow = { [weak self] id, window, backdrop in
-      self?.entrances[id]?.includeKey(window, backdrop: backdrop)
-    }
-    NotificationCenter.default.addObserver(
-      self, selector: #selector(systemDidChange(_:)),
+    NotificationCenter.default.addObserver(self, selector: #selector(systemDidChange(_:)),
       name: NSApplication.didChangeScreenParametersNotification, object: nil)
-
-    let workspaceCenter = NSWorkspace.shared.notificationCenter
-    for name in [
-      NSWorkspace.activeSpaceDidChangeNotification,
-      NSWorkspace.didWakeNotification,
-      NSWorkspace.screensDidWakeNotification,
-    ] {
-      workspaceCenter.addObserver(
-        self, selector: #selector(systemDidChange(_:)), name: name, object: nil)
+    let center = NSWorkspace.shared.notificationCenter
+    for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didWakeNotification,
+                 NSWorkspace.screensDidWakeNotification] {
+      center.addObserver(self, selector: #selector(systemDidChange(_:)), name: name, object: nil)
     }
+    settingsSubscription = settings.objectWillChange.receive(on: DispatchQueue.main).sink { [weak self] _ in
+      MainActor.assumeIsolated { self?.settingsChanged() }
+    }
+    deliver { self.rebuild(.screenConfigurationChanged, entrance: .settings) }
+  }
 
-    // Delivery on the next main turn reads the stored settings.
-    settingsSubscription = settings.objectWillChange
-      .receive(on: DispatchQueue.main)
-      .sink { [weak self] _ in
-        MainActor.assumeIsolated {
-          self?.rebuild(.settingsChanged, entrance: .settings)
-        }
-      }
-
-    rebuild(.screenConfigurationChanged, entrance: .settings)
+  func settingsChanged() {
+    deliver { self.rebuild(.settingsChanged, entrance: .settings) }
   }
 
   @objc private func systemDidChange(_ notification: Notification) {
-    animationPreview.cancel()
-    cancelEntrances()
-    entranceEvent = .system
-    if notification.name == NSWorkspace.activeSpaceDidChangeNotification {
-      rebuild(.spaceChanged, entrance: .system)
-    } else {
-      // Samples during a configuration burst may contain either layout.
-      pendingScreenRebuild?.cancel()
-      pendingScreenRebuild = Task { @MainActor [weak self] in
-        do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
-        self?.pendingScreenRebuild = nil
-        self?.rebuild(.screenConfigurationChanged, entrance: .system)
+    systemChanged(notification.name == NSWorkspace.activeSpaceDidChangeNotification ? .space : .screen,
+                  uptime: ProcessInfo.processInfo.systemUptime)
+  }
+
+  func systemChanged(_ kind: BarSystemNotification, uptime: Double) {
+    deliver {
+      self.scene.systemNotification(kind, uptime: uptime)
+      if kind == .space {
+        self.rebuild(.spaceChanged, entrance: .system)
+      } else {
+        self.cancelClocks()
+        self.apply(self.takePlan())
+        self.pendingScreenRebuild?.cancel()
+        self.screenGeneration &+= 1
+        let generation = self.screenGeneration
+        let work = DispatchWorkItem { [weak self] in
+          self?.deliver {
+            guard let self, self.screenGeneration == generation else { return }
+            self.pendingScreenRebuild = nil
+            self.rebuild(.screenConfigurationChanged, entrance: .system)
+          }
+        }
+        self.pendingScreenRebuild = work
+        self.scheduleRebuild(0.25, work)
       }
     }
   }
 
-  private func cancelEntrances() {
-    for player in entrances.values { player.cancel() }
-    entrances.removeAll()
+  /// Structural events and link callbacks keep delivery order through registry emission.
+  /// A synchronous request for another sample is dropped, as in the original sampling loop.
+  private func deliver(_ action: @escaping () -> Void) {
+    guard !delivering else { pending.append(action); return }
+    delivering = true
+    action()
+    while !pending.isEmpty { pending.removeFirst()() }
+    delivering = false
   }
 
   private func rebuild(_ event: BandState.Event, entrance: BandEntrance.Event) {
-    animationPreview.cancel()
-    cancelEntrances()
-    appliedHideNotch = settings.hideNotch
-    entranceEvent = pendingScreenRebuild == nil ? entrance : .system
-    defer { entranceEvent = pendingScreenRebuild == nil ? .sample : .system }
-    let screens = NSScreen.screens
-    var orderAfterSampling = prepareBars(on: screens, event: event)
-    let cornerDisplays = currentCornerDisplays(on: screens, event: event)
+    scene.handle(event, displays: displays(), settings: barSettings, entrance: entrance,
+                 screenRebuildPending: pendingScreenRebuild != nil)
+    cancelClocks()
+    reconcile(rebuild: true)
+    scene.endEvent(screenRebuildPending: pendingScreenRebuild != nil)
+  }
 
-    var desiredKeys: Set<String> = []
+  func sample() {
+    guard !delivering else { return }
+    deliver { self.reconcile(rebuild: false) }
+  }
 
-    for screen in screens {
-      guard let displayID = screen.displayID, cornerDisplays.contains(displayID) else { continue }
-      let rects = ScreenGeometry.cornerRects(
-        frame: screen.frame, radius: ScreenGeometry.cornerRadius,
-        topInset: bandState.frames[displayID]?.height ?? 0)
-      for (corner, rect) in rects {
-        let key = "\(displayID).\(corner.rawValue)"
-        desiredKeys.insert(key)
-        let window = prepare(key: key, frame: rect) { CornerWindow(corner: corner, frame: rect) }
-        window.desktopVisible = !revealedDisplays.contains(displayID)
-        orderAfterSampling.append(window)
+  private func reconcile(rebuild: Bool) {
+    sampler.monitorAppearance(scene.keyedActive)
+    let collected = applied
+    let input = sampler.sampleNow()
+    geometry = Dictionary(input.displays.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    let closed = keys.closeChanged(frames: scene.bandFrames, enabled: scene.appliedHideNotch,
+                                   scales: geometry.mapValues(\.scale))
+    // handle(event:) already reset states whose frame was removed at rebuild.
+    for id in closed { scene.keyWindowsReset(display: id) }
+    var active: [UInt32: [Int]] = [:]
+    if scene.keyedActive {
+      for id in scene.bandFrames.keys.sorted() where geometry[id] != nil {
+        active[id] = keys.activeWindowIDs(display: id)
       }
     }
+    let effects = scene.handle(BarSample(displays: input.displays, windows: input.windows,
+      systemFullScreen: input.systemFullScreen, appearance: input.appearance, activeKeyWindows: active,
+      now: input.now, reduceMotion: input.reduceMotion, signalTime: input.signalTime))
+    let plan = takePlan()
+    for line in effects.traces { Self.trace.info("\(line, privacy: .public)") }
+    for clock in clocks.values { clock.finishIfOverdue() }
+    for effect in effects.entranceEffects {
+      switch effect {
+      case let .restore(display): cancelClock(display)
+      case let .start(display, signal): startClock(display, returnSignal: signal)
+      case let .surfaceEnded(display, time): clocks[display]?.surfaceEnded(at: time)
+      }
+    }
+    apply(plan, rebuild: rebuild, windows: input.windows, listedAgainst: collected)
+    sampler.scheduleSamples(needed: scene.needsSamples, duringReveal: effects.wantsFastSamples)
+  }
 
-    updateKeyedOverlay(spaceChanged: event == .spaceChanged)
-    for window in orderAfterSampling { window.orderFrontRegardless() }
+  func keyCommitted(_ creation: BarKeyCreation, window: Int, display: UInt32) -> Bool {
+    scene.keyCommitted(creation, window: window, display: display)
+  }
 
-    defer { recordRegistry(on: screens, ownWindows: nil) }
-    // A Space switch is not a topology change for the corners either: a screen that is missing
-    // from the list at that moment keeps its corners until a screen or settings event.
-    guard event != .spaceChanged else { return }
-    for key in windows.keys where !desiredKeys.contains(key) {
-      windows[key]?.orderOut(nil)
-      windows[key]?.close()
-      windows[key] = nil
+  func keyClosed(window: Int, display: UInt32) {
+    scene.keyClosed(window: window, display: display)
+  }
+
+  func keyDidFail() {
+    let wasDelivering = delivering
+    scene.keyDidFail()
+    // A delayed re-commit can fail between samples. Publish its closed windows immediately.
+    if !wasDelivering { deliver { self.apply(self.takePlan()) } }
+  }
+
+  func replayEntrance() {
+    guard testCopy else { return }
+    deliver {
+      self.scene.startPreview(displays: Array(self.geometry.values))
+      let plan = self.takePlan()
+      self.cancelClocks()
+      for id in self.scene.entrances.keys.sorted() { self.startClock(id, returnSignal: nil) }
+      self.apply(plan)
     }
   }
 
-  private func recordRegistry(on screens: [NSScreen], ownWindows: [MenuBarEvidence.Window]?) {
-    let snapshot = BarRegistryProbe.snapshot(screens: screens, bars: barWindows, corners: windows,
-                                             keys: keyedOverlay.registryKeys(), evidence: latestEvidence)
-    probe.record(snapshot, ownWindows: ownWindows)
+  private func startClock(_ id: UInt32, returnSignal: Double?) {
+    cancelClock(id)
+    guard let entrance = scene.entrances[id] else { return }
+    let clock = makeClock(id)
+    clocks[id] = clock
+    clock.start(entrance, returnSignal: returnSignal, onFrame: { [weak self, weak clock] elapsed in
+      guard let self, let clock else { return }
+      deliver {
+        guard self.clocks[id] === clock, self.scene.entrances[id] != nil else { return }
+        self.scene.advanceEntrance(display: id, elapsedMS: elapsed)
+        self.apply(self.takePlan())
+      }
+    }, onFinish: { [weak self, weak clock] in
+      guard let self, let clock else { return }
+      deliver {
+        guard self.clocks[id] === clock, self.scene.entrances[id] != nil else { return }
+        self.scene.finishEntrance(display: id)
+        self.apply(self.takePlan())
+      }
+    })
   }
 
-  private func prepareBars(on screens: [NSScreen], event: BandState.Event) -> [OverlayWindow] {
-    let measurements = screens.compactMap { screen -> BandState.Screen? in
-      guard let id = screen.displayID else { return nil }
-      return BandState.Screen(
-        id: id, frame: screen.frame, visibleFrame: screen.visibleFrame,
-        safeAreaTop: screen.safeAreaInsets.top)
+  private func cancelClock(_ id: UInt32) { clocks.removeValue(forKey: id)?.cancel() }
+
+  private func cancelClocks() {
+    for id in Array(clocks.keys) { cancelClock(id) }
+  }
+
+  private func takePlan() -> BarPlan {
+    let plan = BarSurface.plan(geometry: geometry, scene: scene, entrance: scene.entrances, settings: barSettings)
+    scene.consumeKeyDecisions()
+    return plan
+  }
+
+  private func apply(_ plan: BarPlan, rebuild: Bool = false, windows: [MenuBarEvidence.Window]? = nil,
+                     listedAgainst: BarRegistrySnapshot? = nil) {
+    var entries: BarEntries = [:]
+    func add(_ parts: BarEntries) { entries.merge(parts) { _, current in current } }
+    applyBarPresentation {
+      add(bands.apply(plan))
+      add(edges.apply(plan))
+      add(corners.apply(plan))
     }
-    var orderAfterSampling: [OverlayWindow] = []
-    for action in bandState.update(event, screens: measurements, hideNotch: settings.hideNotch) {
-      switch action {
-      case .show(let id, let frame):
-        let window = barWindows[id] ?? BarWindow(frame: frame)
-        barWindows[id] = window
-        if window.frame != frame {
-          window.setFrame(frame, display: false)
+    // The private backdrop attach, detach and flush must run outside the presentation transaction.
+    add(keys.apply(plan))
+    if rebuild {
+      applyBarPresentation {
+        for id in entries.keys.sorted() {
+          guard plan.displays[id.display]?.geometry != nil, let number = entries[id]?.window else { continue }
+          switch id.part {
+          case .band, .corner: orderFront(number)
+          default: break
+          }
         }
-        window.alphaValue = revealedDisplays.contains(id) ? 0 : 1
-        orderAfterSampling.append(window)
-      case .close(let id):
-        barWindows[id]?.orderOut(nil)
-        barWindows[id]?.close()
-        barWindows[id] = nil
       }
     }
-    return orderAfterSampling
-  }
-
-  private func updateKeyedOverlay(spaceChanged: Bool) {
-    keyedOverlay.update(frames: bandState.frames, enabled: settings.hideNotch,
-                        spaceChanged: spaceChanged, cornerDisplays: lastCornerDisplays)
-  }
-
-  /// A screen missing from the list during a Space switch keeps its corners in `rebuild`. It
-  /// keeps their samples too, or they would no longer step aside until the next rebuild.
-  private func currentCornerDisplays(on screens: [NSScreen], event: BandState.Event) -> Set<UInt32> {
-    let present = Set(screens.compactMap(\.displayID))
-    var result = present.filter { wantsCorners(on: $0) }
-    if event == .spaceChanged { result.formUnion(lastCornerDisplays.subtracting(present)) }
-    lastCornerDisplays = result
-    return result
-  }
-
-  private func wantsCorners(on displayID: CGDirectDisplayID) -> Bool {
-    settings.roundCorners && (settings.cornersOnAllDisplays || CGDisplayIsBuiltin(displayID) != 0)
-  }
-
-  private func apply(visibility: [UInt32: Bool], samples: [UInt32: BandEntrance.Sample],
-                     layers: [UInt32: Int]) {
-    let signalTime = CACurrentMediaTime()
-    let hidden = Set(visibility.compactMap { $0.value ? nil : $0.key })
-    let changed = hidden != revealedDisplays
-    if changed { animationPreview.cancel() }
-    animationPreview.finishIfOverdue()
-    for player in entrances.values { player.finishIfOverdue() }
-    let actions = entranceState.update(entranceEvent, enabled: appliedHideNotch, samples: samples,
-                                       reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-    for (id, action) in actions {
-      switch action {
-      case .restore: entrances.removeValue(forKey: id)?.cancel()
-      case .start:
-        guard let bar = barWindows[id], let screen = NSScreen.screens.first(where: { $0.displayID == id })
-        else { continue }
-        animationPreview.cancel(ifShowing: bar)
-        let player = entrances[id] ?? BarAnimationPlayer()
-        entrances[id] = player
-        player.enter(PreviewBandTarget(notchWidth: screen.previewNotchWidth, bar: bar, keyed: nil,
-                                       backdrops: [], corners: corners(on: id)), on: screen,
-                     returnSignal: entranceEvent == .sample ? signalTime : nil, displayID: id)
-        keyedOverlay.includeVisibleKeys(on: id, in: player)
-      }
+    var displays: [UInt32: BarRegistryDisplay] = [:]
+    for (id, display) in plan.displays {
+      guard let geometry = display.geometry else { continue }
+      let bottom = BarRegistry.blackBottom(band: entries[.init(display: id, part: .band)],
+                                         edge: entries[.init(display: id, part: .edge)])
+      displays[id] = .init(frame: geometry.frame, scale: geometry.scale, scene: display.kind,
+                           bandEnabled: display.bandEnabled, blackBottom: bottom)
     }
-    for (id, player) in entrances where samples[id] == .desktop && layers[id] == nil {
-      player.surfaceEnded(at: signalTime)
-    }
-    guard changed else { return }
-    revealedDisplays = hidden
-    for (id, window) in barWindows {
-      window.alphaValue = revealedDisplays.contains(id) ? 0 : 1
-    }
-    for (key, window) in windows {
-      let hidden = revealedDisplays.contains { key.hasPrefix("\($0).") }
-      window.desktopVisible = !hidden
-    }
-  }
-
-  private func prepare(key: String, frame: CGRect, make: () -> CornerWindow) -> CornerWindow {
-    let window = windows[key] ?? make()
-    windows[key] = window
-    if window.frame != frame {
-      window.setFrame(frame, display: false)
-    }
-    window.contentView?.needsDisplay = true
-    return window
-  }
-}
-
-extension NSScreen {
-  var displayID: CGDirectDisplayID? {
-    deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
+    let snapshot = BarRegistrySnapshot(entries: entries, displays: displays)
+    let lines = registry.record(snapshot, ownWindows: windows, listedAgainst: listedAgainst ?? applied)
+    applied = snapshot
+    for line in lines { registryLine(line) }
   }
 }

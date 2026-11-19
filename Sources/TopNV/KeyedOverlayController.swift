@@ -287,13 +287,13 @@ extension KeyedOverlayController {
   }
 
   private func scheduleSamples(duringReveal: Bool) {
-    let interval = duringReveal ? 1.0 / 30 : 0.1
+    let interval = BarSampler.interval(duringReveal: duringReveal)
     guard needsSamples, timer?.timeInterval != interval else { return }
     timer?.invalidate()
     let timer = Timer(fire: Date(timeIntervalSinceNow: interval), interval: interval, repeats: true) { [weak self] _ in
       MainActor.assumeIsolated { self?.reconcile() }
     }
-    timer.tolerance = duringReveal ? 0.002 : 0.02
+    timer.tolerance = BarSampler.tolerance(duringReveal: duringReveal)
     self.timer = timer
     RunLoop.main.add(timer, forMode: .common)
   }

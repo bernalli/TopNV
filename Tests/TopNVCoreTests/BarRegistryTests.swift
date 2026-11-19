@@ -193,3 +193,25 @@ final class BarRegistryTests: XCTestCase {
     }
   }
 }
+
+extension BarRegistryTests {
+  func testListingUsesTheWindowAndGeometryAtCollection() {
+    let collected = snapshot([band: entry()])
+    var registry = BarRegistry(testCopy: true)
+    _ = registry.record(collected, ownWindows: [])
+    let frame = snapshot([band: entry(0.25)])
+    _ = registry.record(frame, ownWindows: nil, listedAgainst: collected)
+    let resized = BarRegistrySnapshot(entries: [band: entry(0.5)], displays: [2: display(scale: 1)])
+    let lines = registry.record(resized, ownWindows: [window()], listedAgainst: collected)
+    XCTAssertTrue(lines.contains { $0.hasSuffix("listed=0,0,200,4/1") })
+
+    let replacement = snapshot([band: entry(number: 9)])
+    let replaced = registry.record(replacement, ownWindows: [window()], listedAgainst: collected)
+    XCTAssertTrue(replaced.contains { $0.contains("window=9 ") && $0.hasSuffix("listed=unavailable") })
+    let absent = BarRegistrySnapshot(entries: collected.entries, displays: [:])
+    let missing = registry.record(collected, ownWindows: [window()], listedAgainst: absent)
+    XCTAssertTrue(missing.contains { $0.hasSuffix("listed=unavailable") })
+    let duplicate = registry.record(collected, ownWindows: [window(), window(offset: 3)], listedAgainst: collected)
+    XCTAssertTrue(duplicate.contains { $0.hasSuffix("listed=ambiguous") })
+  }
+}
