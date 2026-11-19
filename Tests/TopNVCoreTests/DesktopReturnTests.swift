@@ -13,13 +13,13 @@ final class DesktopReturnTests: XCTestCase {
 
   @discardableResult
   private func step(_ bounds: CGRect, surface: Int?, number: CGWindowID = 20978,
-                    invalid: Bool = false, sliding: Bool = false) -> BandEntrance.Action? {
+                    invalid: Bool = false, sliding: Bool = false, alpha: Double = 1) -> BandEntrance.Action? {
     var windows: [MenuBarEvidence.Window] = [
       .init(owner: .windowServer, layer: 24, bounds: band),
       .init(owner: .application, layer: 0, bounds: bounds, number: number)
     ]
     if let surface {
-      windows.append(.init(owner: .desktop, layer: surface, bounds: frame, isWindowManager: true, number: 21046))
+      windows.append(.init(owner: .desktop, layer: surface, bounds: frame, isWindowManager: true, alpha: alpha, number: 21046))
     }
     if sliding {
       windows.append(.init(owner: .desktop, layer: -1, bounds: frame.offsetBy(dx: 200, dy: 0), isWindowManager: true))
@@ -47,6 +47,29 @@ final class DesktopReturnTests: XCTestCase {
     XCTAssertEqual(step(thumbnail.offsetBy(dx: 12, dy: 0), surface: 19), .restore)
     XCTAssertEqual(step(home, surface: 19), .start)
     XCTAssertNil(step(home, surface: nil))
+  }
+
+  func testGrowingThumbnailStartsBeforeReachingHomeAndCanReverse() {
+    let small = home.insetBy(dx: 160, dy: 140)
+    let growing = home.insetBy(dx: 145, dy: 125)
+    _ = step(home, surface: nil)
+    XCTAssertEqual(step(small, surface: 19), .restore)
+    XCTAssertEqual(step(small.offsetBy(dx: 4, dy: 0), surface: 19), .restore)
+    XCTAssertEqual(step(growing, surface: 19), .start)
+    XCTAssertNil(step(growing, surface: 19))
+    XCTAssertEqual(step(small, surface: 19), .restore)
+    XCTAssertEqual(step(growing, surface: 19), .start)
+    XCTAssertNil(step(home, surface: nil))
+  }
+
+  func testFadingOverviewCanSignalReturnWithUntransformedDocuments() {
+    _ = step(home, surface: nil)
+    XCTAssertEqual(step(home, surface: 19, alpha: 0.6), .restore)
+    XCTAssertEqual(step(home, surface: 19), .restore)
+    XCTAssertEqual(step(home, surface: 19, alpha: 0.8), .start)
+    XCTAssertNil(step(home, surface: 19, alpha: 0.5))
+    XCTAssertEqual(step(home, surface: 19), .restore)
+    XCTAssertEqual(step(home, surface: nil), .start)
   }
 
   func testSingleMissingSurfaceWhileTheDocumentIsStillParkedDoesNotReplay() {
