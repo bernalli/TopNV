@@ -14,7 +14,7 @@ final class OverlayController: NSObject {
   private var appliedHideNotch = false
   private var bandState = BandState()
   private let keyedOverlay = KeyedOverlayController()
-  private var barWindows: [UInt32: OverlayWindow] = [:]
+  private var barWindows: [UInt32: BarWindow] = [:]
   private var windows: [String: CornerWindow] = [:]
   /// Displays whose desktop is revealed: their base band and corners are transparent.
   private var revealedDisplays: Set<UInt32> = []
@@ -49,6 +49,9 @@ final class OverlayController: NSObject {
   }
 
   func start() {
+    keyedOverlay.onMenuEdgeSample = { [weak self] id, frame, windows in
+      self?.barWindows[id]?.menuEdge.update(frame: frame, windows: windows)
+    }
     keyedOverlay.actualBarFrame = { [weak self] id in self?.barWindows[id]?.frame }
     keyedOverlay.onPreviewInvalidated = { [weak self] id in
       guard let self, let bar = barWindows[id] else { return }

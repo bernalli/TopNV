@@ -113,6 +113,7 @@ final class PreviewBandSurface {
     let hidden = elapsed < 0
     let path = hidden ? CGMutablePath() : Self.path(variant, frame, width: size.width)
     band.path = oriented(path, in: band.superlayer)
+    (target.bar as? BarWindow)?.menuEdge.draw(path, in: target.bar.frame)
     currentPath = path
     keys.forEach(drawKey)
     coverMask.path = oriented(path, in: cover?.contentView?.layer)
@@ -178,6 +179,7 @@ final class PreviewBandSurface {
       clip.window.contentView?.layer?.mask = clip.originalMask
       for (layer, frame) in clip.backdrops { layer.frame = frame }
     }
+    (target.bar as? BarWindow)?.menuEdge.finishAnimation()
     target.bar.contentView = originalView
     target.bar.backgroundColor = originalColor
     target.bar.isOpaque = originalOpaque

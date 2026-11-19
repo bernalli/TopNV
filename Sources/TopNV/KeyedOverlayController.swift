@@ -23,6 +23,7 @@ final class KeyedOverlayController {
   private var reconciling = false
   /// The last evidence logged for each display; a line is written only when it changes.
   private var traces: [UInt32: String] = [:]
+  var onMenuEdgeSample: ((UInt32, CGRect?, [MenuBarEvidence.Window]?) -> Void)?
   var actualBarFrame: ((UInt32) -> CGRect?)?
   private let isTestCopy = TestCopy.matches(Bundle.main.bundleIdentifier)
   private var geometryPhases: [UInt32: String] = [:]
@@ -260,6 +261,7 @@ extension KeyedOverlayController {
     let displayFrames = byID.values.map(\.frame)
     for id in sampledDisplays {
       guard let screen = byID[id] else {
+        onMenuEdgeSample?(id, nil, nil)
         desktopReturns[id] = nil
         visibility[id] = desktopOverlayVisibility[id] ?? true
         continue
@@ -273,6 +275,7 @@ extension KeyedOverlayController {
       results[id] = evidence
       visibility[id] = CornerVisibility.visible(evidence)
       if frames[id] != nil {
+        onMenuEdgeSample?(id, evidence.menuEdgeFrame, metadata)
         samples[id] = BandEntrance.Sample(evidence)
       }
     }

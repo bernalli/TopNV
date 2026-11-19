@@ -37,6 +37,14 @@ public enum MenuBarEvidence {
   }
 
   public struct Result {
+    fileprivate var visibleMenuBounds: CGRect?
+    /// The desktop capture at 2x has four affected rows immediately below the menu.
+    public var menuEdgeFrame: CGRect? {
+      guard permitsBandEntrance, !desktopRevealed, let menu = visibleMenuBounds else { return nil }
+      let height: CGFloat = 4 / 2
+      return CGRect(x: menu.minX, y: menu.minY - height, width: menu.width, height: height)
+    }
+
     public let context: KeyedOverlayState.Context
     /// The active app is in native full screen and has a matching window on this display.
     public let nativeFullScreen: Bool
@@ -177,7 +185,20 @@ public enum MenuBarEvidence {
     let autoHiddenMenu = noReservedTop && autoHiddenDesktop(frame, windows, displayFrames, systemFullScreen, tolerance)
     let reservedMenu = !noReservedTop && (menuVisible || (revealSurface != nil && !systemFullScreen))
     let permitsBandEntrance = !fullScreenApp && !backdrop && !spaceSliding && (reservedMenu || autoHiddenMenu)
-    return Result(context: fullScreenApp || noReservedTop ? .fullScreen : .desktop,
+    // A transition can list several menu surfaces. The cover starts below their lowest edge.
+    // Prefer stationary surfaces at the system menu level when that level is present.
+    let menuLayer = Int(CGWindowLevelForKey(.mainMenuWindow))
+    let statusLayer = Int(CGWindowLevelForKey(.statusWindow))
+    let candidates = windows.lazy.filter {
+      $0.owner == .windowServer && ($0.layer == menuLayer || $0.layer == statusLayer)
+        && $0.alpha > 0 && valid($0.bounds)
+        && $0.bounds.maxY == frame.maxY && $0.bounds.minX == frame.minX && $0.bounds.width == frame.width
+        && $0.bounds.height <= bandFrame.height * 2
+    }
+    let lowerEdge: (Window, Window) -> Bool = { $0.bounds.minY < $1.bounds.minY }
+    let bounds = (candidates.filter { $0.layer == menuLayer }.min(by: lowerEdge)
+      ?? candidates.min(by: lowerEdge))?.bounds
+    return Result(visibleMenuBounds: bounds, context: fullScreenApp || noReservedTop ? .fullScreen : .desktop,
                   nativeFullScreen: nativeFullScreen,
                   menuVisible: menuVisible, revealSurface: revealSurface,
                   spaceSliding: spaceSliding, fullScreenBackdrop: backdrop, permitsBandEntrance: permitsBandEntrance)

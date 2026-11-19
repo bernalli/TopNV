@@ -38,6 +38,13 @@ class OverlayWindow: NSWindow {
 
 /// The opaque black strip behind the menu bar of a notched screen.
 final class BarWindow: OverlayWindow {
+  let menuEdge = MenuEdgeCover()
+
+  override func close() {
+    menuEdge.close()
+    super.close()
+  }
+
   init(frame: CGRect) {
     super.init(frame: frame, level: OverlayLevel.bar, isOpaque: true, behavior: OverlayBehavior.bar)
   }
