@@ -15,15 +15,9 @@ extension BarAnimation {
 
 extension MenuLayout {
   static func animationPreview(for state: MenuState) -> MenuRow {
-    var rows = BarAnimation.allCases.compactMap { animation -> MenuRow? in
-      guard let command = MenuCommand(rawValue: animation.rawValue),
-            let author = animation.rawValue.split(separator: "-").first else { return nil }
-      return MenuRow(id: command.rawValue, title: "\(animation.name) — \(author)", symbol: nil,
-                     kind: .toggle(command, isOn: state.lastAnimation == animation, enabled: true))
-    }
-    rows.append(MenuRow(id: "replayAnimation", title: "Replay", symbol: nil,
-                        kind: .action(.replayAnimation, enabled: state.lastAnimation != nil, key: "")))
+    let calm = MenuRow(id: "previewCalm", title: "\(BarAnimation.calm.name) — fable", symbol: nil,
+                       kind: .action(.previewCalm, enabled: true, key: ""))
     return MenuRow(id: "animationPreview", title: "Animation preview", symbol: nil,
-                   kind: .submenu(rows, enabled: state.hideNotch))
+                   kind: .submenu([calm], enabled: state.hideNotch))
   }
 }

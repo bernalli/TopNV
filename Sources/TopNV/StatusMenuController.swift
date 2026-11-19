@@ -19,8 +19,7 @@ import TopNVCore
   private var subscriptions: Set<AnyCancellable> = []
   private var visibilityObservation: NSKeyValueObservation?
   private var refreshScheduled = false
-  var onAnimationPreview: ((BarAnimation) -> Void)?
-  private var lastAnimation: BarAnimation?
+  var onEntrancePreview: (() -> Void)?
   private let relativeKey = RelativeMenuBarKey.shared
   private let isTestCopy: Bool
 
@@ -97,13 +96,11 @@ import TopNVCore
   }
 
   private var state: MenuState {
-    var state = MenuState(
+    MenuState(
       hideNotch: settings.hideNotch, roundCorners: settings.roundCorners,
       cornersOnAllDisplays: settings.cornersOnAllDisplays, launchAtLogin: loginItem.isEnabled,
       loginNeedsApproval: loginItem.needsApproval, loginError: loginItem.errorMessage,
       updates: updates.items, isTestCopy: isTestCopy)
-    state.lastAnimation = lastAnimation
-    return state
   }
 
   /// The login item does not publish approval changes made in System Settings; opening the menu
@@ -126,24 +123,13 @@ import TopNVCore
     case .reportIssue:
       if let url = AppLink.reportIssue.url { NSWorkspace.shared.open(url) }
     case .quit: NSApp.terminate(nil)
-    case .previewCurtain, .previewInk, .previewArrows, .previewBreath, .previewCalm, .previewStretch,
-         .previewBlind, .previewWave, .replayAnimation, .relativeKey:
-      performTestCommand(command)
-    }
-  }
-
-  private func performTestCommand(_ command: MenuCommand) {
-    if command == .relativeKey {
+    case .previewCalm:
+      guard isTestCopy, settings.hideNotch else { return }
+      onEntrancePreview?()
+    case .relativeKey:
       guard isTestCopy else { return }
       relativeKey.toggle()
       refresh()
-      return
     }
-    guard isTestCopy, settings.hideNotch,
-          let choice = command == .replayAnimation ? lastAnimation : BarAnimation(rawValue: command.rawValue)
-    else { return }
-    lastAnimation = choice
-    onAnimationPreview?(choice)
-    scheduleRefresh()
   }
 }

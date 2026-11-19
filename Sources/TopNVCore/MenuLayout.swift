@@ -2,15 +2,7 @@ import Foundation
 
 /// What a selectable menu item does. The app target maps each command to an action.
 public enum MenuCommand: String, CaseIterable, Sendable {
-  case previewCurtain = "astra-sipario"
-  case previewInk = "astra-filo"
-  case previewArrows = "astra-frecce"
-  case previewBreath = "astra-respiro"
   case previewCalm = "fable-scorrimento-calmo"
-  case previewStretch = "fable-notch-allungata"
-  case previewBlind = "fable-filo-tenda"
-  case previewWave = "fable-onda-lenta"
-  case replayAnimation
   case hideNotch
   case roundCorners
   case cornersOnAllDisplays
@@ -61,7 +53,6 @@ public struct MenuState: Equatable, Sendable {
   /// The last registration error; blank text counts as no error.
   public var loginError: String?
   public var updates: UpdateItems
-  public var lastAnimation: BarAnimation?
   public var isTestCopy: Bool
 
   public init(

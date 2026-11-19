@@ -30,9 +30,9 @@ final class OverlayController: NSObject {
     super.init()
   }
 
-  func preview(_ variant: BarAnimation) {
+  func replayEntrance() {
     cancelEntrances()
-    animationPreview.play(variant) { [weak self] in self?.previewTargets() ?? [] }
+    animationPreview.play(.calm) { [weak self] in self?.previewTargets() ?? [] }
   }
 
   private func corners(on id: UInt32) -> [ScreenCorner: CornerWindow] {

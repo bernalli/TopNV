@@ -55,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       isTestCopy: isTestCopy)
     Application.statusMenu = statusMenu
     let controller = OverlayController(settings: settings)
-    statusMenu.onAnimationPreview = { [weak controller] in controller?.preview($0) }
+    statusMenu.onEntrancePreview = { [weak controller] in controller?.replayEntrance() }
     controller.start()
     overlay = controller
     sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }

@@ -38,29 +38,26 @@ final class StatusMenuControllerTests: XCTestCase {
 
   /// The production menu has no animation preview, and a preview command that reaches it does nothing.
   func testOnlyATestCopyHasAndPerformsTheAnimationPreview() {
-    let commands = BarAnimation.allCases.compactMap { MenuCommand(rawValue: $0.rawValue) } + [.replayAnimation]
-    XCTAssertEqual(commands.count, 9)
-    var previews: [BarAnimation] = []
+    var previews = 0
 
     let (production, _, productionSettings) = makeController()
-    production.onAnimationPreview = { previews.append($0) }
+    production.onEntrancePreview = { previews += 1 }
     XCTAssertTrue(productionSettings.hideNotch)
     XCTAssertFalse(production.menu.items.contains { $0.title == "Animation preview" })
-    for command in commands { production.perform(command) }
-    XCTAssertEqual(previews, [])
+    production.perform(.previewCalm)
+    XCTAssertEqual(previews, 0)
     NSStatusBar.system.removeStatusItem(production.statusItem)
 
     let (testCopy, _, settings) = makeController(isTestCopy: true)
-    testCopy.onAnimationPreview = { previews.append($0) }
+    testCopy.onEntrancePreview = { previews += 1 }
     XCTAssertTrue(testCopy.menu.items.contains { $0.title == "Animation preview" })
-    testCopy.perform(.replayAnimation)
-    XCTAssertEqual(previews, [])
     testCopy.perform(.previewCalm)
-    testCopy.perform(.replayAnimation)
-    XCTAssertEqual(previews, [.calm, .calm])
+    XCTAssertEqual(previews, 1)
+    testCopy.perform(.previewCalm)
+    XCTAssertEqual(previews, 2)
     settings.hideNotch = false
-    for command in commands { testCopy.perform(command) }
-    XCTAssertEqual(previews, [.calm, .calm])
+    testCopy.perform(.previewCalm)
+    XCTAssertEqual(previews, 2)
   }
 
   func testTheStatusItemCanBeRemovedByTheUserAndShowsTheMenu() {
