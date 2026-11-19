@@ -5,7 +5,7 @@ final class BarAnimationTests: XCTestCase {
   func testCatalogHasOneUnambiguousEntryPerHTMLVariant() throws {
     let durations = [
       "astra-sipario": 720, "astra-filo": 880, "astra-frecce": 620, "astra-respiro": 1120,
-      "fable-scorrimento-calmo": 760, "fable-notch-allungata": 720,
+      "fable-scorrimento-calmo": 570, "fable-notch-allungata": 720,
       "fable-filo-tenda": 840, "fable-onda-lenta": 1150
     ]
     XCTAssertEqual(BarAnimation.allCases.count, durations.count)
@@ -19,9 +19,9 @@ final class BarAnimationTests: XCTestCase {
 
   func testDisabledCornersReleaseTheThreeShorterAstraTracksAtTheirLastVisibleFrame() {
     XCTAssertEqual(BarAnimation.allCases.map { $0.durationMS(rounded: false) },
-                   [560, 710, 490, 1120, 760, 720, 840, 1150])
+                   [560, 710, 490, 1120, 570, 720, 840, 1150])
     XCTAssertEqual(BarAnimation.allCases.map { $0.durationMS(rounded: true) },
-                   [720, 880, 620, 1120, 760, 720, 840, 1150])
+                   [720, 880, 620, 1120, 570, 720, 840, 1150])
   }
 
   func testCurtainsKeepTheirDistinctNotchWidthsAndEasing() {
@@ -31,9 +31,9 @@ final class BarAnimationTests: XCTestCase {
     XCTAssertEqual(width(.curtain, 0), 0)
     XCTAssertEqual(width(.calm, 0), 64)
     XCTAssertEqual(width(.curtain, 280), 250, accuracy: 0.001)
-    XCTAssertEqual(width(.calm, 273.6), 282, accuracy: 0.001)
+    XCTAssertEqual(width(.calm, 205.2), 282, accuracy: 0.001)
     XCTAssertEqual(BarAnimation.curtain.corner(at: 560, top: false).progress, 0)
-    XCTAssertEqual(BarAnimation.calm.corner(at: 547.2, top: true).progress, 0)
+    XCTAssertEqual(BarAnimation.calm.corner(at: 410.4, top: true).progress, 0)
   }
 
   func testCornerTreatmentsMatchTheReferenceOrder() {
