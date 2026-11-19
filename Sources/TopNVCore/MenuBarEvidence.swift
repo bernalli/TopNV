@@ -129,8 +129,31 @@ public enum MenuBarEvidence {
         && $0.bounds.minY <= frame.minY + tolerance
         && $0.bounds.maxY >= frame.maxY - tolerance
     }
-    return Result(context: coveringApp || noReservedTop ? .fullScreen : .desktop,
+    let context: KeyedOverlayState.Context
+    if coveringApp || noReservedTop {
+      context = .fullScreen
+    } else {
+      context = desktopsAreSliding(windows, on: frame) ? .slidingDesktop : .desktop
+    }
+    return Result(context: context,
                   menuVisible: menuVisible, desktopRevealed: desktopRevealed)
+  }
+
+  /// During a horizontal swipe the two desktop surfaces keep their full size and move
+  /// to opposite sides of the display origin. At rest a surface aligns with the display.
+  private static func desktopsAreSliding(_ windows: [Window], on frame: CGRect) -> Bool {
+    var left = false
+    var right = false
+    var overlapsDisplay = false
+    for window in windows where window.isWindowManager && window.layer < 0 && window.alpha > 0 {
+      let bounds = window.bounds
+      guard bounds.size == frame.size, bounds.minY == frame.minY else { continue }
+      if bounds.minX == frame.minX { return false }
+      left = left || bounds.minX < frame.minX
+      right = right || bounds.minX > frame.minX
+      overlapsDisplay = overlapsDisplay || bounds.intersection(frame).width > 0
+    }
+    return left && right && overlapsDisplay
   }
 
   private static func finiteNumber(_ value: Any?) -> Double? {

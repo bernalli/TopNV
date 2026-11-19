@@ -4,7 +4,7 @@
 /// for its own reasons (option off, new geometry) starts again from a new value.
 public struct KeyedOverlayState {
   public enum Appearance: Sendable { case light, dark, unknown }
-  public enum Context: Sendable { case desktop, fullScreen, unknown }
+  public enum Context: Sendable { case desktop, slidingDesktop, fullScreen, unknown }
 
   public struct Input {
     public let activeWindowIDs: [Int]
@@ -95,7 +95,10 @@ public struct KeyedOverlayState {
     if let keeper {
       // While the evidence settles after a Space change the window keeps the gate it had
       // when its Space was last active. Hiding it here turns the bar grey after every switch.
-      if settled {
+      // While both desktops are sliding the menu can disappear and the appearance probe
+      // still belongs to the departing Space. Neither should change either window's gate.
+      let sliding = input.context == .slidingDesktop && input.enabled && input.appearance != .unknown
+      if settled && !sliding {
         visibility[keeper] = show
         result.gates[keeper] = show
         if show {
