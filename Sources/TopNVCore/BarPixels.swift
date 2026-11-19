@@ -1,7 +1,11 @@
 import CoreGraphics
 
 public struct PixelRect: Equatable, Hashable, Sendable, CustomStringConvertible {
-  public let x, y, width, height: Int
+  // swiftlint:disable:next identifier_name
+  public let x: Int
+  // swiftlint:disable:next identifier_name
+  public let y: Int
+  public let width, height: Int
 
   public init(x originX: Int, y originY: Int, width: Int, height: Int) {
     self.x = originX

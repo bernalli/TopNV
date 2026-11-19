@@ -14,6 +14,8 @@ final class OverlayController: NSObject {
   private var appliedHideNotch = false
   private var bandState = BandState()
   private let keyedOverlay = KeyedOverlayController()
+  private let probe = BarRegistryProbe(testCopy: TestCopy.matches(Bundle.main.bundleIdentifier))
+  private var latestEvidence: [UInt32: MenuBarEvidence.Result] = [:]
   private var barWindows: [UInt32: BarWindow] = [:]
   private var windows: [String: CornerWindow] = [:]
   /// Displays whose desktop is revealed: their base band and corners are transparent.
@@ -49,10 +51,14 @@ final class OverlayController: NSObject {
   }
 
   func start() {
-    keyedOverlay.onMenuEdgeSample = { [weak self] id, frame, windows in
-      self?.barWindows[id]?.menuEdge.update(frame: frame, windows: windows)
+    keyedOverlay.onMenuEdgeSample = { [weak self] id, frame in
+      self?.barWindows[id]?.menuEdge.update(frame: frame)
     }
-    keyedOverlay.actualBarFrame = { [weak self] id in self?.barWindows[id]?.frame }
+    keyedOverlay.onRegistrySample = { [weak self] evidence, windows in
+      guard let self else { return }
+      latestEvidence = evidence
+      recordRegistry(on: NSScreen.screens, ownWindows: windows)
+    }
     keyedOverlay.onPreviewInvalidated = { [weak self] id in
       guard let self, let bar = barWindows[id] else { return }
       animationPreview.cancel(ifShowing: bar)
@@ -140,6 +146,7 @@ final class OverlayController: NSObject {
     updateKeyedOverlay(spaceChanged: event == .spaceChanged)
     for window in orderAfterSampling { window.orderFrontRegardless() }
 
+    defer { recordRegistry(on: screens, ownWindows: nil) }
     // A Space switch is not a topology change for the corners either: a screen that is missing
     // from the list at that moment keeps its corners until a screen or settings event.
     guard event != .spaceChanged else { return }
@@ -148,6 +155,12 @@ final class OverlayController: NSObject {
       windows[key]?.close()
       windows[key] = nil
     }
+  }
+
+  private func recordRegistry(on screens: [NSScreen], ownWindows: [MenuBarEvidence.Window]?) {
+    let snapshot = BarRegistryProbe.snapshot(screens: screens, bars: barWindows, corners: windows,
+                                             keys: keyedOverlay.registryKeys(), evidence: latestEvidence)
+    probe.record(snapshot, ownWindows: ownWindows)
   }
 
   private func prepareBars(on screens: [NSScreen], event: BandState.Event) -> [OverlayWindow] {
@@ -247,7 +260,7 @@ final class OverlayController: NSObject {
 }
 
 extension NSScreen {
-  fileprivate var displayID: CGDirectDisplayID? {
+  var displayID: CGDirectDisplayID? {
     deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
   }
 }

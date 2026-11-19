@@ -10,7 +10,7 @@ final class MenuEdgeCoverTests: XCTestCase {
     let bar = BarWindow(frame: CGRect(x: 100, y: 100, width: 200, height: 34))
     defer { bar.close() }
     let edge = CGRect(x: 100, y: 99, width: 200, height: 2)
-    bar.menuEdge.update(frame: edge, windows: nil)
+    bar.menuEdge.update(frame: edge)
     let cover = try XCTUnwrap(bar.menuEdge.window)
     XCTAssertEqual(cover.frame, edge)
     XCTAssertGreaterThan(cover.level.rawValue, MenuBarEvidence.overlayLevel)
@@ -32,7 +32,7 @@ final class MenuEdgeCoverTests: XCTestCase {
     surface.restore()
     XCTAssertTrue(cover.isOpaque)
     XCTAssertEqual(cover.backgroundColor, .black)
-    bar.menuEdge.update(frame: nil, windows: nil)
+    bar.menuEdge.update(frame: nil)
     XCTAssertFalse(cover.isVisible)
     bar.close()
     XCTAssertNil(bar.menuEdge.window)
@@ -54,7 +54,7 @@ final class MenuEdgeCoverTests: XCTestCase {
     ]
     for growth in growthCases {
       let edge = CGRect(x: 100, y: growth.edgeOrigin, width: 200, height: 2)
-      bar.menuEdge.update(frame: edge, windows: nil)
+      bar.menuEdge.update(frame: edge)
       let root = try XCTUnwrap(bar.menuEdge.window?.contentView?.layer)
       let shape = try XCTUnwrap(root.sublayers?.first as? CAShapeLayer)
       let nearTop = CGPoint(x: 100, y: root.isGeometryFlipped ? 0.25 : 1.75)

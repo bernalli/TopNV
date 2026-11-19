@@ -1,7 +1,6 @@
 import AppKit
 import QuartzCore
 import TopNVCore
-import os
 
 extension NSScreen {
   var previewNotchWidth: CGFloat {
@@ -22,8 +21,6 @@ struct PreviewBandTarget {
 
 @MainActor
 final class PreviewBandSurface {
-  private let traceCorners: Bool
-  private static let logger = Logger(subsystem: "TopNV", category: "CornerFrames")
   let target: PreviewBandTarget
   private let originalView: NSView?
   private let originalColor: NSColor
@@ -46,7 +43,6 @@ final class PreviewBandSurface {
 
   init(target: PreviewBandTarget, variant: BarAnimation) {
     self.target = target
-    traceCorners = variant == .calm && !target.corners.isEmpty && TestCopy.matches(Bundle.main.bundleIdentifier)
     let bar = target.bar
     let bounds = CGRect(origin: .zero, size: bar.frame.size)
     originalView = bar.contentView
@@ -124,18 +120,6 @@ final class PreviewBandSurface {
     leftCover.opacity = fading ? Float(1 - frame.glyphOpacity) : 1
     rightCover.frame = CGRect(x: size.width - side, y: 0, width: side, height: size.height)
     for corner in corners { corner.draw(variant, at: elapsed) }
-    if traceCorners {
-      traceFrame("draw", trackMS: elapsed, width: path.boundingBoxOfPath.width)
-    }
-  }
-
-  private func traceFrame(_ phase: String, trackMS: Double?, width: CGFloat) {
-    let alpha = ScreenCorner.allCases.compactMap { corner in
-      target.corners[corner].map { "\(corner.rawValue)=\($0.alphaValue)" }
-    }.joined(separator: " ")
-    let line = "bar=\(target.bar.windowNumber) phase=\(phase) timeMS=\(CACurrentMediaTime() * 1000) "
-      + "trackMS=\(trackMS.map { String($0) } ?? "-") bandWidth=\(width) \(alpha)"
-    Self.logger.info("\(line, privacy: .public)")
   }
 
   private func oriented(_ path: CGPath, in root: CALayer?) -> CGPath {
@@ -184,6 +168,5 @@ final class PreviewBandSurface {
     target.bar.backgroundColor = originalColor
     target.bar.isOpaque = originalOpaque
     for corner in corners { corner.restore() }
-    if traceCorners { traceFrame("restore", trackMS: nil, width: target.bar.frame.width) }
   }
 }

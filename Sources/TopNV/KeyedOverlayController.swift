@@ -23,10 +23,8 @@ final class KeyedOverlayController {
   private var reconciling = false
   /// The last evidence logged for each display; a line is written only when it changes.
   private var traces: [UInt32: String] = [:]
-  var onMenuEdgeSample: ((UInt32, CGRect?, [MenuBarEvidence.Window]?) -> Void)?
-  var actualBarFrame: ((UInt32) -> CGRect?)?
-  private let isTestCopy = TestCopy.matches(Bundle.main.bundleIdentifier)
-  private var geometryPhases: [UInt32: String] = [:]
+  var onMenuEdgeSample: ((UInt32, CGRect?) -> Void)?
+  var onRegistrySample: (([UInt32: MenuBarEvidence.Result], [MenuBarEvidence.Window]?) -> Void)?
   private var monitor: MenuBarConditionsMonitor?
   private var timer: Timer?
   private var dock: NSRunningApplication?
@@ -55,7 +53,6 @@ final class KeyedOverlayController {
       monitor = MenuBarConditionsMonitor()
       monitor?.onChange = { [weak self] in self?.reconcile() }
     }
-    geometryPhases.removeAll()
     desktopReturns.removeAll()
     reconcile()
     if !keyedActive { stopMonitoring() }
@@ -78,7 +75,7 @@ final class KeyedOverlayController {
     if !failed {
       reconcileKeyed(byID: byID, evidence: evidence, listAvailable: metadata != nil, systemFullScreen: fullScreen)
     }
-    if isTestCopy { logGeometry(byID: byID, windows: metadata) }
+    onRegistrySample?(evidence, metadata)
   }
 
   private func reconcileKeyed(byID: [UInt32: NSScreen], evidence: [UInt32: MenuBarEvidence.Result],
@@ -261,7 +258,7 @@ extension KeyedOverlayController {
     let displayFrames = byID.values.map(\.frame)
     for id in sampledDisplays {
       guard let screen = byID[id] else {
-        onMenuEdgeSample?(id, nil, nil)
+        onMenuEdgeSample?(id, nil)
         desktopReturns[id] = nil
         visibility[id] = desktopOverlayVisibility[id] ?? true
         continue
@@ -275,7 +272,7 @@ extension KeyedOverlayController {
       results[id] = evidence
       visibility[id] = CornerVisibility.visible(evidence)
       if frames[id] != nil {
-        onMenuEdgeSample?(id, evidence.menuEdgeFrame, metadata)
+        onMenuEdgeSample?(id, evidence.menuEdgeFrame)
         samples[id] = BandEntrance.Sample(evidence)
       }
     }
@@ -316,29 +313,11 @@ extension KeyedOverlayController {
   }
 }
 
-// MARK: - Test-copy geometry
+// MARK: - Bar registry
 
 extension KeyedOverlayController {
-  private func logGeometry(byID: [UInt32: NSScreen], windows: [MenuBarEvidence.Window]?) {
-    for id in frames.keys where geometryPhases[id] != "steady" {
-      guard let screen = byID[id], let bar = actualBarFrame?(id) else { continue }
-      let menu = windows.flatMap {
-        MenuBarEvidence.menuSurface(in: $0, bandFrame: bar, preferredLayer: Int(CGWindowLevelForKey(.mainMenuWindow)))
-      }
-      let entry = entries.values.first { $0.displayID == id && $0.window.isOnActiveSpace }
-      let root = entry?.window.contentView?.layer
-      let plate = root?.sublayers?.first { $0.name == "Bottom plate" }
-      let phase = menu == nil || entry == nil ? "incomplete" : (root?.mask == nil ? "steady" : "animating")
-      guard geometryPhases[id] != phase else { continue }
-      geometryPhases[id] = phase
-      let geometry = OverlayGeometry(screen: screen.frame, scale: screen.backingScaleFactor)
-      let line = "display=\(id) phase=\(phase) scale=\(geometry.scale) topLeftPixels "
-        + "menuLayer=\(menu?.layer ?? -1) menu=\(geometry.pixels(menu?.bounds)) bar=\(geometry.pixels(bar)) "
-        + "key=\(geometry.pixels(entry?.window.frame)) "
-        + "plate=\(geometry.pixels(layer: plate, window: entry?.window.frame)) "
-        + "backdrop=\(geometry.pixels(layer: entry?.backdrop, window: entry?.window.frame))"
-      Self.logger.info("\(line, privacy: .public)")
-    }
+  func registryKeys() -> [BarRegistryProbe.KeyWindow] {
+    entries.values.map { .init(display: $0.displayID, window: $0.window) }
   }
 }
 
