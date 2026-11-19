@@ -386,4 +386,20 @@ extension BarSceneTests {
     XCTAssertEqual(scene.entranceEvent, .sample)
     XCTAssertEqual(scene.keyDecisions[1]?.gates, [7: true])
   }
+
+  func testDuplicateDisplayIDsKeepTheFirstEntry() throws {
+    let first = display()
+    let impostor = BarDisplay(id: 1, frame: display(2).frame, visibleFrame: display(2).visibleFrame,
+                              safeAreaTop: 38, scale: 3, notchWidth: 0, isBuiltin: false)
+    var scene = BarScene()
+    _ = scene.handle(.screenConfigurationChanged, displays: [first, impostor], settings: settings,
+                     entrance: .system, screenRebuildPending: false)
+    scene.endEvent(screenRebuildPending: false)
+    let band = try XCTUnwrap(BarGeometry.band(first))
+    XCTAssertEqual(scene.bandFrames, [1: band])
+    XCTAssertEqual(scene.cornerDisplays, [1])
+    _ = scene.handle(sample([menu()], [first, impostor]))
+    XCTAssertEqual(scene.kinds, [1: .desktop])
+    XCTAssertEqual(scene.evidence(display: 1)?.menuBounds, menu().bounds)
+  }
 }

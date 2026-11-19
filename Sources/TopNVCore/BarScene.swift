@@ -12,11 +12,6 @@ public struct BarSettings: Equatable, Sendable {
   }
 }
 
-// Both legacy values have only immutable value fields. Their declarations live in the
-// original evidence and key state files, so these conformances cannot be checked here.
-extension MenuBarEvidence.Window: @unchecked Sendable {}
-extension KeyedOverlayState.Reservation: @unchecked Sendable {}
-
 public struct BarSample: Sendable {
   public let displays: [BarDisplay]
   public let windows: [MenuBarEvidence.Window]?

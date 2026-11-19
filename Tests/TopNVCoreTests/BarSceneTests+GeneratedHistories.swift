@@ -16,19 +16,18 @@ extension BarSceneTests {
     }
   }
 
-  private func checkKeyDecisions(_ input: BarSample, before: [UInt32: KeyedOverlayState], scene: BarScene,
+  private func checkKeyDecisions(_ input: BarSample, resolved: [UInt32: MenuBarEvidence.Result],
+                                 before: [UInt32: KeyedOverlayState], scene: BarScene,
                                  effects: BarSampleEffects, label: String) {
-    // Independent composition of the raw fixture and the characterized per-display key.
+    // Independent composition of the raw fixture, DesktopReturn and the characterized per-display key.
     for screen in input.displays where scene.keyedActive {
-      guard let band = scene.bandFrames[screen.id] else { continue }
-      let raw = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame,
-        bandFrame: band, windows: input.windows, systemFullScreen: input.systemFullScreen,
-        displayFrames: input.displays.map(\.frame))
+      guard let evidence = resolved[screen.id] else { continue }
       var reference = before[screen.id] ?? KeyedOverlayState()
       let expected = reference.update(.init(
-        activeWindowIDs: input.activeKeyWindows[screen.id] ?? [], appearance: .light, context: raw.context,
-        menuVisible: raw.menuVisible, enabled: true, now: input.now,
-        desktopRevealed: raw.desktopRevealed, spaceSliding: raw.spaceSliding, nativeFullScreen: raw.nativeFullScreen))
+        activeWindowIDs: input.activeKeyWindows[screen.id] ?? [], appearance: .light, context: evidence.context,
+        menuVisible: evidence.menuVisible, enabled: true, now: input.now,
+        desktopRevealed: evidence.desktopRevealed, spaceSliding: evidence.spaceSliding,
+        nativeFullScreen: evidence.nativeFullScreen))
       let actual = effects.keyDecisions[screen.id]
       XCTAssertEqual(actual?.close, expected.close, label)
       XCTAssertEqual(actual?.gates, expected.gates, label)
@@ -41,13 +40,25 @@ extension BarSceneTests {
     return Int((seed >> 33) % UInt64(bound))
   }
 
+  private func document(_ id: UInt32, home: Bool) -> Window {
+    let frame = display(id).frame
+    // Show Desktop parks a document, at its own size, outside the interior of its display.
+    let originY: CGFloat = home ? 120 : frame.minY - 590
+    return Window(owner: .application, layer: 0,
+                  bounds: CGRect(x: frame.minX + 300, y: originY, width: 500, height: 600), number: 40 + id)
+  }
+
   private func windows(_ id: UInt32) -> [Window] {
-    switch next(7) {
+    switch next(10) {
     case 0: return [menu(id), background(18, id)]
     case 1: return [menu(id), background(19, id)]
     case 2: return [menu(id), background(-1, id, offset: 220)]
     case 3: return [Window(owner: .application, layer: 0, bounds: display(id).frame, isFrontmostApp: true)]
     case 4: return [background(-1, id)]
+    case 5: return [menu(id), document(id, home: true)]
+    case 6: return [menu(id), background(18, id), document(id, home: false)]
+    case 7: return [menu(id), document(id, home: false)]
+    case 8: return [menu(id), background(19, id, alpha: 0.8)]
     default: return [menu(id)]
     }
   }
@@ -59,6 +70,23 @@ extension BarSceneTests {
     var subject: BarScene
     var neighbour: BarScene
     var tickets: [(UInt32, BarKeyCreation)] = []
+    /// Mirror of the reducer's per-display DesktopReturn: reset at rebuild and on absence.
+    var returns: [UInt32: DesktopReturn] = [:]
+  }
+
+  private func resolveMirror(_ history: inout History, _ input: BarSample) -> [UInt32: MenuBarEvidence.Result] {
+    var resolved: [UInt32: MenuBarEvidence.Result] = [:]
+    for (id, band) in history.subject.bandFrames.sorted(by: { $0.key < $1.key }) {
+      guard let screen = input.displays.first(where: { $0.id == id }) else {
+        history.returns[id] = nil
+        continue
+      }
+      let raw = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame, bandFrame: band,
+        windows: input.windows, systemFullScreen: input.systemFullScreen, displayFrames: input.displays.map(\.frame))
+      resolved[id] = history.returns[id, default: DesktopReturn()].resolve(raw, on: screen.frame,
+                                                                         windows: input.windows)
+    }
+    return resolved
   }
 
   private func deliverSample(_ history: inout History, now: Double, label: String) {
@@ -72,10 +100,12 @@ extension BarSceneTests {
     let input = sample(unavailable ? nil : local + other, present, now: now, active: active, fullScreen: full,
                        reduced: reduced)
     let before = history.subject.keyStates
+    let resolved = resolveMirror(&history, input)
     let effects = history.subject.handle(input)
     _ = history.neighbour.handle(sample(unavailable ? nil : local + alternate, present, now: now, active: active,
                                         fullScreen: full, reduced: reduced))
-    checkKeyDecisions(input, before: before, scene: history.subject, effects: effects, label: label)
+    checkKeyDecisions(input, resolved: resolved, before: before, scene: history.subject, effects: effects,
+                      label: label)
     for (id, decision) in effects.keyDecisions.sorted(by: { $0.key < $1.key }) {
       if let reservation = decision.create {
         let ticket = BarKeyCreation(instance: history.subject.keyInstances[id] ?? 0, reservation: reservation)
@@ -104,6 +134,7 @@ extension BarSceneTests {
                            entrance: entrance, screenRebuildPending: false)
     history.neighbour.handle(event, displays: history.screens, settings: history.options,
                              entrance: entrance, screenRebuildPending: false)
+    history.returns.removeAll()
     deliverSample(&history, now: now, label: "synchronous rebuild sample")
   }
 

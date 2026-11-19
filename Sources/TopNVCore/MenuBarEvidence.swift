@@ -4,14 +4,14 @@ import Foundation
 
 /// Public, title-free window metadata. All rectangles use AppKit's global coordinates.
 public enum MenuBarEvidence {
-  public enum Owner { case windowServer, desktop, ownApp, application }
+  public enum Owner: Sendable { case windowServer, desktop, ownApp, application }
 
   /// The level of the keyed window. A window above it is drawn over the effect.
   public static let overlayLevel = 26
   /// One level above the desktop level. See `Result.fullScreenBackdrop`.
   public static let fullScreenBackdropLayer = Int(CGWindowLevelForKey(.desktopWindow)) + 1
 
-  public struct Window {
+  public struct Window: Sendable {
     public let owner: Owner
     public let number: CGWindowID?
     public let layer: Int

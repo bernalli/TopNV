@@ -38,3 +38,10 @@ final class BandExecutor: BarPartExecuting {
     windows.removeAll()
   }
 }
+
+extension OverlayWindow {
+  /// `hold` keeps the last applied alpha. Only the bar executors call this.
+  func applyAlpha(_ alpha: BarAlpha) {
+    if case let .value(value) = alpha, alphaValue != value { alphaValue = value }
+  }
+}

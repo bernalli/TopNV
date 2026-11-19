@@ -35,7 +35,7 @@ public struct KeyedOverlayState {
     }
   }
 
-  public struct Reservation: Equatable {
+  public struct Reservation: Equatable, Sendable {
     fileprivate let generation: UInt64
     fileprivate let serial: UInt64
   }

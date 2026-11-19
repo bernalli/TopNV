@@ -25,10 +25,6 @@ func applyBarPresentation(_ changes: () -> Void) {
 }
 
 extension OverlayWindow {
-  func applyAlpha(_ alpha: BarAlpha) {
-    if case let .value(value) = alpha, alphaValue != value { alphaValue = value }
-  }
-
   func registryEntry(on display: BarDisplay?, frame appliedFrame: CGRect? = nil,
                      mask: BarMask = .none) -> BarRegistryEntry {
     let pixels = display.flatMap { BarGeometry.pixels(appliedFrame ?? frame, on: $0) }

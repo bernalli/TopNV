@@ -115,7 +115,9 @@ final class KeyExecutorTests: XCTestCase {
     defer { harness.executor.closeAll() }
     let rect = CGRect(x: 22, y: 2, width: 80, height: 18)
     let masked = ExecutorPlans.key(create: try harness.creation(), mask: .rect(rect))
-    harness.apply(masked)
+    let maskedEntries = harness.apply(masked)
+    XCTAssertEqual(maskedEntries[.init(display: 1, part: .key, keyWindow: 10)]?.mask,
+                   .bounds(PixelRect(x: 44, y: 4, width: 160, height: 36)))
     let root = try XCTUnwrap(harness.windows.first?.contentView?.layer)
     let plate = try XCTUnwrap(root.sublayers?.first { $0.name == "Bottom plate" })
     let original = plate.frame

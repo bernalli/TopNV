@@ -16,6 +16,8 @@ protocol EntranceTiming: AnyObject {
 @MainActor
 final class EntranceClock: NSObject, EntranceTiming {
   private static let logger = Logger(subsystem: "TopNV", category: "DesktopReturn")
+  /// Past the end by this much, the display link has stopped with its display.
+  private static let overdueMS = 300.0
   private let display: UInt32
   private var link: CADisplayLink?
   private var returnID: String?
@@ -77,7 +79,7 @@ final class EntranceClock: NSObject, EntranceTiming {
 
   func finishIfOverdue() {
     let now = CACurrentMediaTime()
-    guard link != nil, (now - startTime) * 1000 >= durationMS, (now - lastTick) * 1000 >= 300 else { return }
+    guard link != nil, (now - startTime) * 1000 >= durationMS, (now - lastTick) * 1000 >= Self.overdueMS else { return }
     finish("overdue", awaitingEnd: true)
   }
 
