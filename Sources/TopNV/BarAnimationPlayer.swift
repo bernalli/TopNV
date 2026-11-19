@@ -69,7 +69,11 @@ final class BarAnimationPlayer: NSObject {
     lastTick = now
     let realMS = (now - start) * 1000
     let elapsed = returnTiming.map { $0.progress(at: realMS) * durationMS } ?? realMS
-    if elapsed >= durationMS { finish("complete"); return }
+    if elapsed >= durationMS {
+      let timedOut = returnTiming?.usesTimeout == true
+      finish(timedOut ? "signalTimeout" : "complete", awaitingSignalEnd: timedOut)
+      return
+    }
     if let currentTargets, now >= nextCheck {
       nextCheck = now + 0.1
       // The keyed controller may have replaced a window or gated it during the pause.
@@ -87,10 +91,11 @@ final class BarAnimationPlayer: NSObject {
   }
 
   func surfaceEnded(at time: CFTimeInterval) {
-    guard returnTiming != nil, !sawEnd else { return }
+    guard returnID != nil, !sawEnd else { return }
     sawEnd = true
     returnTiming?.surfaceEnded(at: (time - start) * 1000)
     record("signalEnd", at: time)
+    if link == nil { returnID = nil }
   }
 
   private func record(_ event: String, at time: CFTimeInterval) {
@@ -101,11 +106,12 @@ final class BarAnimationPlayer: NSObject {
 
   func cancel() { finish("cancelled") }
 
-  private func finish(_ reason: String) {
+  private func finish(_ reason: String, awaitingSignalEnd: Bool = false) {
     if link != nil { record("animationEnd_\(reason)", at: CACurrentMediaTime()) }
     returnTiming = nil
-    returnID = nil
-    sawEnd = false
+    // A late sample still belongs to this return after its presentation has been restored.
+    if !awaitingSignalEnd || sawEnd { returnID = nil }
+    if returnID == nil { sawEnd = false }
     link?.invalidate()
     link = nil
     currentTargets = nil
@@ -122,7 +128,7 @@ final class BarAnimationPlayer: NSObject {
     let now = CACurrentMediaTime()
     guard link != nil, (now - start) * 1000 >= durationMS,
           (now - lastTick) * 1000 >= Self.overdueMS else { return }
-    finish("overdue")
+    finish("overdue", awaitingSignalEnd: true)
   }
 
   func cancel(ifShowing bar: OverlayWindow) {

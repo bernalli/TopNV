@@ -21,4 +21,30 @@ final class ReturnTimingTests: XCTestCase {
     XCTAssertLessThan(timing.progress(at: 321), 1)
     XCTAssertEqual(timing.progress(at: 354), 1)
   }
+
+  func testMissingSignalStillCompletesWithAContinuousTail() {
+    let timing = ReturnTiming()
+    let waiting = timing.progress(at: 325)
+    XCTAssertEqual(timing.progress(at: 325.34), waiting, accuracy: 0.005)
+    XCTAssertGreaterThan(timing.progress(at: 330), waiting)
+    XCTAssertLessThan(timing.progress(at: 330), 1)
+    XCTAssertEqual(timing.progress(at: 343), 1)
+    XCTAssertEqual(timing.progress(at: 800), 1)
+  }
+
+  func testTypicalSignalFinishesWithinOneFrame() {
+    var timing = ReturnTiming()
+    timing.surfaceEnded(at: 292)
+    XCTAssertGreaterThan(timing.progress(at: 292), 0.94)
+    XCTAssertLessThan(timing.progress(at: 292), 1)
+    XCTAssertEqual(timing.progress(at: 309), 1)
+  }
+
+  func testLateSignalDoesNotRestartTheTimeoutTail() {
+    var timing = ReturnTiming()
+    let before = timing.progress(at: 335)
+    timing.surfaceEnded(at: 335)
+    XCTAssertEqual(timing.progress(at: 335), before)
+    XCTAssertEqual(timing.progress(at: 343), 1)
+  }
 }
