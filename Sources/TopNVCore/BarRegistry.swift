@@ -202,17 +202,18 @@ public struct BarRegistry {
       }
       let scene = info?.scene ?? .absent
       for id in parts[display] ?? [] {
-        let prefix = "display=\(display) scene=\(scene.rawValue) part=\(id.part.token)"
         if let entry = snapshot.entries[id] {
           let observation = testCopy ? Self.observe(id, entry, info, windows, previous[id]) : nil
           let listingChanged = observation.map { $0.listed != .unavailable && $0 != lastObservation[id] } ?? false
           guard listingChanged || !entry.hasSameFields(as: previous[id]) else { continue }
+          let prefix = "display=\(display) scene=\(scene.rawValue) part=\(id.part.token)"
           let pixels = entry.pixels?.description ?? "none"
           let number = entry.window.map { String($0) } ?? "none"
           lines.append(prefix + " px=\(pixels) alpha=\(decimal(entry.alpha)) level=\(entry.level)"
             + " window=\(number) mask=\(entry.mask.token)" + (observation?.suffix ?? ""))
           lastObservation[id] = observation
         } else if let closed = previous[id] {
+          let prefix = "display=\(display) scene=\(scene.rawValue) part=\(id.part.token)"
           lines.append(prefix + " px=none alpha=0 level=\(closed.level) window=none mask=none"
             + (testCopy ? " listed=unavailable" : ""))
           lastObservation.removeValue(forKey: id)

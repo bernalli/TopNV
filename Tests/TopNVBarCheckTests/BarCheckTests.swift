@@ -128,11 +128,14 @@ final class BarCheckTests: XCTestCase {
       ("band=on", "band=on band=on"), ("band=on", "band=yes"), ("scale=2", "scale=NaN"),
       ("scale=2", "scale=-1"), ("scale=2", "scale=0"), ("20x80", "0x80"), ("blackBottom=7", "blackBottom=-1"),
       ("blackBottom=7", "blackBottom=x"), ("scale=2", " scale=2"), ("scale=2", "extra=1 scale=2"),
-      ("TopNV:BarSurface", "TopNV:Other"), ("2024-01-01", "2024-02-30")
+      ("TopNV:BarSurface", "TopNV:Other"), ("2024-01-01", "2024-02-30"),
+      ("band=on screenPx=20x80", "screenPx=20x80 band=on"), ("scale=2 blackBottom=7", "blackBottom=7 scale=2"),
+      ("display=2 scene=desktop", "scene=desktop display=2")
     ]
     let malformed = prefixes + changes.map { valid[0].replacingOccurrences(of: $0.0, with: $0.1) }
       + [record(part + " MISMATCH"), record(mismatch + " extra=1"),
-         record(mismatch.replacingOccurrences(of: "alpha=0.333", with: "alpha=NaN"))]
+         record(mismatch.replacingOccurrences(of: "alpha=0.333", with: "alpha=NaN")),
+         record(listing.replacingOccurrences(of: "level=27 window=9", with: "window=9 level=27"))]
     let log = BarCheck.parseLog((malformed + valid).joined(separator: "\n"), timeZone: zone)
     XCTAssertEqual(log.ignoredLines, malformed.count)
     XCTAssertEqual(log.summaries.map(\.blackBottom), [7])

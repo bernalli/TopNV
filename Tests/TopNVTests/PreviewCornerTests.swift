@@ -84,8 +84,6 @@ final class PreviewCornerTests: XCTestCase {
       let width = try XCTUnwrap(band.path).boundingBoxOfPath.width
       // The band starts at 128 points on this screen and reaches both edges at 1000.
       let fraction = (width - 128) / (1000 - 128)
-      let alphas = ScreenCorner.allCases.compactMap { corners[$0]?.alphaValue }
-      print("cornerFrame trackMS=\(elapsed) bandWidth=\(width) alpha=\(alphas)")
       for (corner, window) in corners {
         XCTAssertEqual(window.alphaValue, fraction, accuracy: 0.00001, "\(corner) at \(elapsed) ms")
       }
