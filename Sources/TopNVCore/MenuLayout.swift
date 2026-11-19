@@ -99,7 +99,6 @@ public enum MenuLayout {
         MenuRow(
           id: "keyCalibration", title: "Key calibration", symbol: "slider.horizontal.3",
           kind: .submenu(keyCalibration(selected: calibration), enabled: true)))
-      rows.append(MenuRow(id: "instantSwitch", title: "Instant switch: Ctrl+Option+← →", symbol: nil, kind: .info))
     }
     rows += [
       separator("separator.app"),

@@ -86,19 +86,6 @@ final class KeyCalibrationTests: XCTestCase {
     XCTAssertEqual(rows, MenuLayout.rows(for: state(nil)))
   }
 
-  func testInstantSwitchHintFollowsCalibrationOnlyInTestCopies() throws {
-    for identifier in [production, production.uppercased(), "", nil] {
-      let rows = MenuLayout.rows(for: state(KeyCalibration.initial(bundleIdentifier: identifier)))
-      XCTAssertFalse(rows.contains { $0.id == "instantSwitch" })
-    }
-    let rows = MenuLayout.rows(for: state(KeyCalibration.initial(bundleIdentifier: testCopy)))
-    let index = try XCTUnwrap(rows.firstIndex { $0.id == "keyCalibration" })
-    let hint = try XCTUnwrap(rows.dropFirst(index + 1).first)
-    XCTAssertEqual(hint.id, "instantSwitch")
-    XCTAssertEqual(hint.kind, .info)
-    XCTAssertEqual(hint.title, "Instant switch: Ctrl+Option+← →")
-  }
-
   func testATestCopyChecksTheChosenCandidate() throws {
     for selected in KeyCalibration.options {
       let rows = MenuLayout.rows(for: state(selected))
