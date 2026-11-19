@@ -24,6 +24,7 @@ import TopNVCore
   var onAnimationPreview: ((BarAnimation) -> Void)?
   private var lastAnimation: BarAnimation?
   private var keyCalibration: KeyCalibration?
+  var darkMenuBarProbe: SystemDarkMenuBarProbe?
   /// Called with the candidate chosen in the Key calibration submenu.
   var onKeyCalibration: ((KeyCalibration) -> Void)?
 
@@ -91,7 +92,9 @@ import TopNVCore
 
   func refresh() {
     refreshScheduled = false
-    renderer?.apply(MenuLayout.rows(for: state), to: menu)
+    var rows = MenuLayout.rows(for: state)
+    darkMenuBarProbe?.insertRow(in: &rows)
+    renderer?.apply(rows, to: menu)
     if statusItem.isVisible != visibility.isVisible { statusItem.isVisible = visibility.isVisible }
   }
 
@@ -127,12 +130,16 @@ import TopNVCore
     case .quit: NSApp.terminate(nil)
     case .previewCurtain, .previewInk, .previewArrows, .previewBreath, .previewCalm, .previewStretch,
          .previewBlind, .previewWave, .replayAnimation, .keyCalibration1, .keyCalibration2, .keyCalibration3,
-         .keyCalibration4, .keyCalibration5, .keyCalibration6:
+         .keyCalibration4, .keyCalibration5, .keyCalibration6, .systemDarkMenuBar:
       performTestCommand(command)
     }
   }
 
   private func performTestCommand(_ command: MenuCommand) {
+    if command == .systemDarkMenuBar {
+      darkMenuBarProbe?.toggle()
+      return
+    }
     guard keyCalibration != nil else { return }
     if let calibration = KeyCalibration.option(for: command) {
       keyCalibration = calibration

@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   let loginItem = LoginItem()
   let menuVisibility = MenuVisibility(
     defaults: .standard, key: AppSettings.showMenuBarIconKey)
+  private let darkMenuBarProbe = SystemDarkMenuBarProbe(bundleIdentifier: Bundle.main.bundleIdentifier)
   private var overlay: OverlayController?
   /// Nil under the production bundle identifier: only test copies get the Key calibration menu.
   private let keyCalibration = KeyCalibration.initial(bundleIdentifier: Bundle.main.bundleIdentifier)
@@ -58,9 +59,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let controller = OverlayController(settings: settings, keyCalibration: keyCalibration)
     statusMenu.onKeyCalibration = { [weak controller] in controller?.calibrateKey($0) }
     statusMenu.onAnimationPreview = { [weak controller] in controller?.preview($0) }
+    darkMenuBarProbe?.attach(to: statusMenu, overlay: controller)
     controller.start()
     overlay = controller
     sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }
     updateCoordinator.start()
+  }
+
+  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    darkMenuBarProbe?.terminationReply(to: sender) ?? .terminateNow
+  }
+
+  func applicationWillTerminate(_ notification: Notification) {
+    darkMenuBarProbe?.willTerminate()
   }
 }

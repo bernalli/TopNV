@@ -21,6 +21,7 @@ public enum MenuCommand: String, CaseIterable, Sendable {
   case about
   case reportIssue
   case quit
+  case systemDarkMenuBar
   /// Test copies only: the candidates of `KeyCalibration.options`, in order.
   case keyCalibration1, keyCalibration2, keyCalibration3, keyCalibration4, keyCalibration5,
     keyCalibration6

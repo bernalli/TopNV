@@ -10,3 +10,4 @@ BOOL KOFlushBackdrop(NSString * _Nullable * _Nullable reason);
 BOOL KORecommitBackdrop(CALayer *backdrop, NSString * _Nullable * _Nullable reason);
 BOOL KODetachBackdrop(CALayer *backdrop, NSString * _Nullable * _Nullable reason);
 NS_ASSUME_NONNULL_END
+#import "SystemDarkMenuBar.h"

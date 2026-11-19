@@ -15,6 +15,12 @@ final class OverlayController: NSObject {
 
   private let settings: AppSettings
   private let animationPreview: BarAnimationPreview?
+  var suspendMenuBarKey = false {
+    didSet {
+      if oldValue != suspendMenuBarKey { updateKeyedOverlay(spaceChanged: false) }
+    }
+  }
+
   private var bandState = BandState()
   private let keyedOverlay: KeyedOverlayController
   private var barWindows: [UInt32: OverlayWindow] = [:]
@@ -152,8 +158,7 @@ final class OverlayController: NSObject {
     }
 
     let cornerDisplays = currentCornerDisplays(on: screens, event: event)
-    keyedOverlay.update(frames: bandState.frames, enabled: settings.hideNotch,
-                        spaceChanged: event == .spaceChanged, cornerDisplays: cornerDisplays)
+    updateKeyedOverlay(spaceChanged: event == .spaceChanged)
 
     var desiredKeys: Set<String> = []
 
@@ -178,6 +183,11 @@ final class OverlayController: NSObject {
       windows[key]?.close()
       windows[key] = nil
     }
+  }
+
+  private func updateKeyedOverlay(spaceChanged: Bool) {
+    keyedOverlay.update(frames: bandState.frames, enabled: settings.hideNotch && !suspendMenuBarKey,
+                        spaceChanged: spaceChanged, cornerDisplays: lastCornerDisplays)
   }
 
   /// A screen missing from the list during a Space switch keeps its corners in `rebuild`. It
