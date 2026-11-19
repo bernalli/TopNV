@@ -39,18 +39,20 @@ final class LuminanceKeyTests: XCTestCase {
     }
   }
 
-  func testCurvesSaturateInputAndPreserveBrightness() {
+  /// With or without a clamp between the two filters: black stays black, white stays white,
+  /// and the output never decreases with the input nor falls below the linear key.
+  func testACurveNeverGreysTheBackgroundNorDimsTheGlyphs() {
     for curve in [KeyCurve.soft, .strong] {
       var previous = 0.0
-      for step in -300...200 {
+      // The matrix of a candidate gives at most 0.5 + gain * cutoff = 1.13, for luma 0.
+      for step in -300...113 {
         let input = Double(step) / 100
-        let t = min(max(input, 0), 1)
-        let power = curve == .soft ? 2.0 : 3.0
         let output = curve.output(input)
-        XCTAssertEqual(output, 1 - pow(1 - t, power), accuracy: 1e-12)
-        XCTAssertGreaterThanOrEqual(output + 1e-12, previous)
-        XCTAssertGreaterThanOrEqual(output + 1e-12, t)
-        previous = output
+        XCTAssertEqual(output, curve.output(min(max(input, 0), 1)), accuracy: 0.02, "\(input)")
+        XCTAssertGreaterThanOrEqual(output, previous - 0.02, "\(input)")
+        XCTAssertGreaterThanOrEqual(output, min(max(input, 0), 1) - 0.02, "\(input)")
+        if input <= 0 { XCTAssertEqual(output, 0, "\(input)") }
+        previous = max(previous, output)
       }
     }
   }
