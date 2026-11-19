@@ -21,6 +21,7 @@ import TopNVCore
   private var refreshScheduled = false
   var onAnimationPreview: ((BarAnimation) -> Void)?
   private var lastAnimation: BarAnimation?
+  private let relativeKey = RelativeMenuBarKey.shared
   private let isTestCopy: Bool
   var darkMenuBarProbe: SystemDarkMenuBarProbe?
 
@@ -89,6 +90,9 @@ import TopNVCore
   func refresh() {
     refreshScheduled = false
     var rows = MenuLayout.rows(for: state)
+    if isTestCopy, let index = rows.firstIndex(where: { $0.id == "separator.app" }) {
+      rows.insert(.relativeKey(available: relativeKey.available, enabled: relativeKey.enabled), at: index)
+    }
     darkMenuBarProbe?.insertRow(in: &rows)
     renderer?.apply(rows, to: menu)
     if statusItem.isVisible != visibility.isVisible { statusItem.isVisible = visibility.isVisible }
@@ -125,12 +129,18 @@ import TopNVCore
       if let url = AppLink.reportIssue.url { NSWorkspace.shared.open(url) }
     case .quit: NSApp.terminate(nil)
     case .previewCurtain, .previewInk, .previewArrows, .previewBreath, .previewCalm, .previewStretch,
-         .previewBlind, .previewWave, .replayAnimation, .systemDarkMenuBar:
+         .previewBlind, .previewWave, .replayAnimation, .systemDarkMenuBar, .relativeKey:
       performTestCommand(command)
     }
   }
 
   private func performTestCommand(_ command: MenuCommand) {
+    if command == .relativeKey {
+      guard isTestCopy else { return }
+      relativeKey.toggle()
+      refresh()
+      return
+    }
     if command == .systemDarkMenuBar {
       darkMenuBarProbe?.toggle()
       return

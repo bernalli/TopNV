@@ -5,6 +5,16 @@ public struct LuminanceKey: Sendable {
   public let gain: Float
   public let cutoff: Float
 
+  /// Scale both endpoints by the same unfiltered background sample. Below one SDR
+  /// code value the denominator is indistinguishable from black.
+  public static func forBackdrop(backgroundLuma: Float?, relativeEnabled: Bool) -> Self {
+    guard relativeEnabled, let backgroundLuma, backgroundLuma.isFinite,
+          (1.0 / 255...1).contains(backgroundLuma) else { return .normal }
+    let white = 0.20 * backgroundLuma
+    let black = 0.93 * backgroundLuma
+    return Self(gain: 1 / (black - white), cutoff: (white + black) / 2)
+  }
+
   /// Luma at and above which the output is black.
   public var blackPoint: Float { cutoff + 0.5 / gain }
   /// Luma at and below which the output is white.

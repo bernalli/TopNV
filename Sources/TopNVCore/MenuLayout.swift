@@ -21,6 +21,7 @@ public enum MenuCommand: String, CaseIterable, Sendable {
   case about
   case reportIssue
   case quit
+  case relativeKey
   case systemDarkMenuBar
 }
 

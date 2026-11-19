@@ -160,6 +160,7 @@ extension KeyedOverlayController {
     guard let backdrop = Self.backdrop(LuminanceKey.normal.matrix, bounds: bounds, scale: scale, reason: &reason)
     else { disable(reason); return }
 
+    RelativeMenuBarKey.shared.observe(backdrop)
     let window = OverlayWindow(frame: frame, level: .init(rawValue: 26), isOpaque: false,
                                behavior: OverlayBehavior.keyed)
     window.alphaValue = 0
