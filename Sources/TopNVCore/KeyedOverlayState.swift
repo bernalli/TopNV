@@ -4,7 +4,7 @@
 /// for its own reasons (option off, new geometry) starts again from a new value.
 public struct KeyedOverlayState {
   public enum Appearance: Sendable { case light, dark, unknown }
-  public enum Context: Sendable { case desktop, slidingDesktop, fullScreen, unknown }
+  public enum Context: Sendable { case desktop, fullScreen, unknown }
 
   public struct Input {
     public let activeWindowIDs: [Int]
@@ -14,9 +14,12 @@ public struct KeyedOverlayState {
     public let enabled: Bool
     public let now: Double
     public let desktopRevealed: Bool
+    /// The desktop of the display slides in a Space switch: the samples mix two Spaces.
+    public let spaceSliding: Bool
 
     public init(activeWindowIDs: [Int], appearance: Appearance, context: Context,
-                menuVisible: Bool, enabled: Bool, now: Double, desktopRevealed: Bool = false) {
+                menuVisible: Bool, enabled: Bool, now: Double, desktopRevealed: Bool = false,
+                spaceSliding: Bool = false) {
       self.activeWindowIDs = activeWindowIDs
       self.appearance = appearance
       self.context = context
@@ -24,6 +27,7 @@ public struct KeyedOverlayState {
       self.enabled = enabled
       self.now = now
       self.desktopRevealed = desktopRevealed
+      self.spaceSliding = spaceSliding
     }
   }
 
@@ -48,6 +52,13 @@ public struct KeyedOverlayState {
   private var departureCandidate: Int?
   private var nextCreation = 0.0
   private var settleUntil = 0.0
+  /// The first sliding sample since the last notification or the last settled sample at rest.
+  private var slidingSince: Double?
+  /// The evidence is trusted again this long after a notification or the last sliding sample.
+  private static let settleTime = 0.5
+  /// Sliding samples postpone the decision only this long without a notification: a slide
+  /// signal that never ends must not keep a window shown, or keep a display without one.
+  private static let longestSlide = 3.0
 
   public init() {}
 
@@ -69,11 +80,25 @@ public struct KeyedOverlayState {
     generation &+= 1
     pending = nil
     if departureCandidate == nil, let lastActive { departureCandidate = lastActive }
-    settleUntil = now + 0.5
+    settleUntil = now + Self.settleTime
+    // The notification ends a slide: the next one is measured from its own first sample.
+    slidingSince = nil
   }
 
   public mutating func update(_ input: Input) -> Decision {
     var result = Decision()
+    // The notification of a Space switch comes when the slide ends. During the slide the menu
+    // bar and the appearance belong to two Spaces at once, so every sliding sample postpones
+    // the decision as the notification does. A window keeps the gate of its own Space.
+    if input.spaceSliding {
+      let since = slidingSince ?? input.now
+      slidingSince = since
+      if input.now - since <= Self.longestSlide {
+        settleUntil = max(settleUntil, input.now + Self.settleTime)
+      }
+    } else if input.now >= settleUntil {
+      slidingSince = nil
+    }
     let active = Set(input.activeWindowIDs).sorted()
     let keeper = active.first
     if let departureCandidate, input.now >= settleUntil {
@@ -95,10 +120,7 @@ public struct KeyedOverlayState {
     if let keeper {
       // While the evidence settles after a Space change the window keeps the gate it had
       // when its Space was last active. Hiding it here turns the bar grey after every switch.
-      // While both desktops are sliding the menu can disappear and the appearance probe
-      // still belongs to the departing Space. Neither should change either window's gate.
-      let sliding = input.context == .slidingDesktop && input.enabled && input.appearance != .unknown
-      if settled && !sliding {
+      if settled {
         visibility[keeper] = show
         result.gates[keeper] = show
         if show {

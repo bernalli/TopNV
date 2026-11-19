@@ -158,10 +158,14 @@ final class KeyedOverlayController {
     let decision = state.update(.init(
       activeWindowIDs: active, appearance: appearance,
       context: evidence.context, menuVisible: evidence.menuVisible, enabled: enabled,
-      now: ProcessInfo.processInfo.systemUptime, desktopRevealed: evidence.desktopRevealed))
+      now: ProcessInfo.processInfo.systemUptime, desktopRevealed: evidence.desktopRevealed,
+      spaceSliding: evidence.spaceSliding))
     states[displayID] = state
+    // The gate of the active window makes the trace enough to follow a Space switch.
+    let gate = active.min().flatMap { state.visibility[$0] }.map { "\($0)" } ?? "none"
     let trace = "appearance=\(appearance) context=\(evidence.context) "
       + "menu=\(evidence.menuVisible) revealed=\(evidence.desktopRevealed) "
+      + "sliding=\(evidence.spaceSliding) gate=\(gate) "
       + "list=\(metadata != nil) active=\(active.count) "
       + "windows=\(entries.count) create=\(decision.create != nil)"
     if traces[displayID] != trace {

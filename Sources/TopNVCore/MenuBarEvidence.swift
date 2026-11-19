@@ -37,6 +37,9 @@ public enum MenuBarEvidence {
     public let menuVisible: Bool
     /// Show Desktop or a click on the wallpaper: the backdrop under the menu bar is darker.
     public let desktopRevealed: Bool
+    /// A Space switch slides the desktop of this display sideways. Every other value then mixes
+    /// the Space that leaves with the Space that arrives.
+    public let spaceSliding: Bool
   }
 
   /// Converts the dictionaries of `CGWindowListCopyWindowInfo`. Window titles are never read.
@@ -97,7 +100,8 @@ public enum MenuBarEvidence {
                               windows: [Window]?) -> Result {
     guard let windows, valid(frame), valid(visibleFrame), valid(bandFrame),
           frame.contains(visibleFrame), frame.contains(bandFrame) else {
-      return Result(context: .unknown, menuVisible: false, desktopRevealed: false)
+      return Result(context: .unknown, menuVisible: false, desktopRevealed: false,
+                    spaceSliding: false)
     }
     let tolerance: CGFloat = 2
     // The menu bar surface: a Window Server window along the top edge, as wide as the band.
@@ -129,31 +133,25 @@ public enum MenuBarEvidence {
         && $0.bounds.minY <= frame.minY + tolerance
         && $0.bounds.maxY >= frame.maxY - tolerance
     }
-    let context: KeyedOverlayState.Context
-    if coveringApp || noReservedTop {
-      context = .fullScreen
-    } else {
-      context = desktopsAreSliding(windows, on: frame) ? .slidingDesktop : .desktop
+    // The windows bound to a Space slide with it: the desktop window of WindowManager (negative
+    // layer, as large as the display) and our keyed windows. One of them displaced sideways and
+    // still over the display is a Space switch in progress. The menu bar slides too.
+    let spaceSliding = windows.contains {
+      let bound = ($0.isWindowManager && $0.layer < 0 && sameSize($0.bounds, frame, tolerance))
+        || ($0.owner == .ownApp && $0.layer == overlayLevel
+              && sameSize($0.bounds, bandFrame, tolerance))
+      return bound && valid($0.bounds)
+        && abs($0.bounds.minX - frame.minX) > tolerance
+        && abs($0.bounds.maxY - frame.maxY) <= tolerance
+        && $0.bounds.intersection(frame).width > tolerance
     }
-    return Result(context: context,
-                  menuVisible: menuVisible, desktopRevealed: desktopRevealed)
+    return Result(context: coveringApp || noReservedTop ? .fullScreen : .desktop,
+                  menuVisible: menuVisible, desktopRevealed: desktopRevealed,
+                  spaceSliding: spaceSliding)
   }
 
-  /// During a horizontal swipe the two desktop surfaces keep their full size and move
-  /// to opposite sides of the display origin. At rest a surface aligns with the display.
-  private static func desktopsAreSliding(_ windows: [Window], on frame: CGRect) -> Bool {
-    var left = false
-    var right = false
-    var overlapsDisplay = false
-    for window in windows where window.isWindowManager && window.layer < 0 && window.alpha > 0 {
-      let bounds = window.bounds
-      guard bounds.size == frame.size, bounds.minY == frame.minY else { continue }
-      if bounds.minX == frame.minX { return false }
-      left = left || bounds.minX < frame.minX
-      right = right || bounds.minX > frame.minX
-      overlapsDisplay = overlapsDisplay || bounds.intersection(frame).width > 0
-    }
-    return left && right && overlapsDisplay
+  private static func sameSize(_ a: CGRect, _ b: CGRect, _ tolerance: CGFloat) -> Bool {
+    abs(a.size.width - b.size.width) <= tolerance && abs(a.size.height - b.size.height) <= tolerance
   }
 
   private static func finiteNumber(_ value: Any?) -> Double? {
