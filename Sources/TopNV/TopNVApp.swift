@@ -28,7 +28,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   let loginItem = LoginItem()
   let menuVisibility = MenuVisibility(
     defaults: .standard, key: AppSettings.showMenuBarIconKey)
-  private let darkMenuBarProbe = SystemDarkMenuBarProbe(bundleIdentifier: Bundle.main.bundleIdentifier)
   private var overlay: OverlayController?
   private let isTestCopy = TestCopy.matches(Bundle.main.bundleIdentifier)
   private let updateConfiguration = UpdateConfiguration(infoDictionary: Bundle.main.infoDictionary)
@@ -57,18 +56,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     Application.statusMenu = statusMenu
     let controller = OverlayController(settings: settings)
     statusMenu.onAnimationPreview = { [weak controller] in controller?.preview($0) }
-    darkMenuBarProbe?.attach(to: statusMenu, overlay: controller)
     controller.start()
     overlay = controller
     sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }
     updateCoordinator.start()
-  }
-
-  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    darkMenuBarProbe?.terminationReply(to: sender) ?? .terminateNow
-  }
-
-  func applicationWillTerminate(_ notification: Notification) {
-    darkMenuBarProbe?.willTerminate()
   }
 }

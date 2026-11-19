@@ -23,7 +23,7 @@ final class StatusMenuControllerTests: XCTestCase {
     defaults = nil
   }
 
-  private func makeController(updates: UpdateMenuModel? = nil)
+  private func makeController(updates: UpdateMenuModel? = nil, isTestCopy: Bool = false)
     -> (StatusMenuController, MenuVisibility, AppSettings)
   {
     let settings = AppSettings(defaults: defaults)
@@ -31,9 +31,36 @@ final class StatusMenuControllerTests: XCTestCase {
       defaults: defaults, key: AppSettings.showMenuBarIconKey, schedule: { $0() })
     let controller = StatusMenuController(
       settings: settings, loginItem: LoginItem(), updates: updates ?? UpdateMenuModel(updater: nil),
-      visibility: visibility)
+      visibility: visibility, isTestCopy: isTestCopy)
     self.controller = controller
     return (controller, visibility, settings)
+  }
+
+  /// The production menu has no animation preview, and a preview command that reaches it does nothing.
+  func testOnlyATestCopyHasAndPerformsTheAnimationPreview() {
+    let commands = BarAnimation.allCases.compactMap { MenuCommand(rawValue: $0.rawValue) } + [.replayAnimation]
+    XCTAssertEqual(commands.count, 9)
+    var previews: [BarAnimation] = []
+
+    let (production, _, productionSettings) = makeController()
+    production.onAnimationPreview = { previews.append($0) }
+    XCTAssertTrue(productionSettings.hideNotch)
+    XCTAssertFalse(production.menu.items.contains { $0.title == "Animation preview" })
+    for command in commands { production.perform(command) }
+    XCTAssertEqual(previews, [])
+    NSStatusBar.system.removeStatusItem(production.statusItem)
+
+    let (testCopy, _, settings) = makeController(isTestCopy: true)
+    testCopy.onAnimationPreview = { previews.append($0) }
+    XCTAssertTrue(testCopy.menu.items.contains { $0.title == "Animation preview" })
+    testCopy.perform(.replayAnimation)
+    XCTAssertEqual(previews, [])
+    testCopy.perform(.previewCalm)
+    testCopy.perform(.replayAnimation)
+    XCTAssertEqual(previews, [.calm, .calm])
+    settings.hideNotch = false
+    for command in commands { testCopy.perform(command) }
+    XCTAssertEqual(previews, [.calm, .calm])
   }
 
   func testTheStatusItemCanBeRemovedByTheUserAndShowsTheMenu() {

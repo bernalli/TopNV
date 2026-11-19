@@ -23,7 +23,6 @@ import TopNVCore
   private var lastAnimation: BarAnimation?
   private let relativeKey = RelativeMenuBarKey.shared
   private let isTestCopy: Bool
-  var darkMenuBarProbe: SystemDarkMenuBarProbe?
 
   private static let icon: NSImage? = {
     let image =
@@ -93,7 +92,6 @@ import TopNVCore
     if isTestCopy, let index = rows.firstIndex(where: { $0.id == "separator.app" }) {
       rows.insert(.relativeKey(available: relativeKey.available, enabled: relativeKey.enabled), at: index)
     }
-    darkMenuBarProbe?.insertRow(in: &rows)
     renderer?.apply(rows, to: menu)
     if statusItem.isVisible != visibility.isVisible { statusItem.isVisible = visibility.isVisible }
   }
@@ -129,7 +127,7 @@ import TopNVCore
       if let url = AppLink.reportIssue.url { NSWorkspace.shared.open(url) }
     case .quit: NSApp.terminate(nil)
     case .previewCurtain, .previewInk, .previewArrows, .previewBreath, .previewCalm, .previewStretch,
-         .previewBlind, .previewWave, .replayAnimation, .systemDarkMenuBar, .relativeKey:
+         .previewBlind, .previewWave, .replayAnimation, .relativeKey:
       performTestCommand(command)
     }
   }
@@ -139,10 +137,6 @@ import TopNVCore
       guard isTestCopy else { return }
       relativeKey.toggle()
       refresh()
-      return
-    }
-    if command == .systemDarkMenuBar {
-      darkMenuBarProbe?.toggle()
       return
     }
     guard isTestCopy, settings.hideNotch,

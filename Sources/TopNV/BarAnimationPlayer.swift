@@ -13,6 +13,8 @@ final class BarAnimationPlayer: NSObject {
   private var start: CFTimeInterval = 0
   private var nextCheck: CFTimeInterval = 0
   private var currentTargets: (() -> [PreviewBandTarget])?
+  /// Past the end by this much, the display link has stopped with its display.
+  private static let overdueMS = 300.0
 
   func play(_ variant: BarAnimation, targets: @escaping () -> [PreviewBandTarget]) {
     cancel()
@@ -78,6 +80,13 @@ final class BarAnimationPlayer: NSObject {
       for surface in surfaces { surface.restore() }
       surfaces.removeAll()
     }
+  }
+
+  /// The display link is the only clock of an animation. A caller with a clock of its own ends
+  /// an animation that the link left unfinished, so the band never stays partly open.
+  func finishIfOverdue() {
+    guard link != nil, (CACurrentMediaTime() - start) * 1000 >= durationMS + Self.overdueMS else { return }
+    cancel()
   }
 
   func cancel(ifShowing bar: OverlayWindow) {

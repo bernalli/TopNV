@@ -22,7 +22,6 @@ public enum MenuCommand: String, CaseIterable, Sendable {
   case reportIssue
   case quit
   case relativeKey
-  case systemDarkMenuBar
 }
 
 /// One native menu item. `id` is stable while the state changes, so an open menu keeps the same

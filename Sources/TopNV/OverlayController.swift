@@ -12,12 +12,6 @@ final class OverlayController: NSObject {
   private var entranceState = BandEntrance()
   private var entranceEvent = BandEntrance.Event.sample
   private var appliedHideNotch = false
-  var suspendMenuBarKey = false {
-    didSet {
-      if oldValue != suspendMenuBarKey { updateKeyedOverlay(spaceChanged: false) }
-    }
-  }
-
   private var bandState = BandState()
   private let keyedOverlay = KeyedOverlayController()
   private var barWindows: [UInt32: OverlayWindow] = [:]
@@ -180,7 +174,7 @@ final class OverlayController: NSObject {
   }
 
   private func updateKeyedOverlay(spaceChanged: Bool) {
-    keyedOverlay.update(frames: bandState.frames, enabled: settings.hideNotch && !suspendMenuBarKey,
+    keyedOverlay.update(frames: bandState.frames, enabled: settings.hideNotch,
                         spaceChanged: spaceChanged, cornerDisplays: lastCornerDisplays)
   }
 
@@ -202,6 +196,8 @@ final class OverlayController: NSObject {
     let hidden = Set(visibility.compactMap { $0.value ? nil : $0.key })
     let changed = hidden != revealedDisplays
     if changed { animationPreview.cancel() }
+    animationPreview.finishIfOverdue()
+    for player in entrances.values { player.finishIfOverdue() }
     let actions = entranceState.update(entranceEvent, enabled: appliedHideNotch, samples: samples,
                                        reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     for (id, action) in actions {

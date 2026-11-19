@@ -82,6 +82,55 @@ final class BarAnimationTests: XCTestCase {
     XCTAssertEqual(BarAnimation.stretch.corner(at: 324, top: true).progress, 0)
   }
 
+  /// The production entrance for any clock value and any notch, also outside its range.
+  func testTheCalmEntranceOnlyGrowsFromTheNotchToTheEdgesForAnyClock() {
+    let variant = BarAnimation.calm
+    let end = variant.durationMS
+    // The band arrives at 72% of the reference duration, then the corners fade in.
+    let arrival = end * 0.72
+    let times = [-Double.infinity, -1000, -1, 0] + stride(from: 1.0, through: end, by: 7)
+      + [end, end + 1, 5000, .infinity]
+    for (width, notch) in [(1512.0, 185.0), (1000, 150), (1000, 0), (1000, -40), (1000, 10), (1000, 1200), (0, 0)] {
+      let half = width / 2
+      let start = min(max(0, notch / 2 - width * 0.011), max(half, 0))
+      var previous = (halfWidth: -Double.infinity, top: 0.0, bottom: 0.0)
+      for time in times {
+        let frame = variant.frame(at: time, width: width, height: 33, notch: notch)
+        let top = variant.corner(at: time, top: true).progress
+        let bottom = variant.corner(at: time, top: false).progress
+        let context = "width \(width) notch \(notch) time \(time)"
+        XCTAssertTrue(frame.halfWidth.isFinite && top.isFinite && bottom.isFinite, context)
+        XCTAssertEqual(frame.height, 33, context)
+        XCTAssertEqual(frame.glyphOpacity, 1, context)
+        XCTAssertEqual(top, bottom, context)
+        XCTAssertTrue((0...1).contains(top), context)
+        XCTAssertGreaterThanOrEqual(top, previous.top, context)
+        if notch <= width {
+          XCTAssertGreaterThanOrEqual(frame.halfWidth, start - 1e-9, context)
+          XCTAssertLessThanOrEqual(frame.halfWidth, half + 1e-9, context)
+          XCTAssertGreaterThanOrEqual(frame.halfWidth, previous.halfWidth - 1e-9, context)
+        }
+        if time <= 0 {
+          XCTAssertEqual(frame.halfWidth, max(0, notch / 2 - width * 0.011), accuracy: 1e-9, context)
+        }
+        if time <= arrival - 1 { XCTAssertEqual(top, 0, context) }
+        if time >= arrival + 1 { XCTAssertEqual(frame.halfWidth, half, accuracy: 1e-9, context) }
+        if time >= end { XCTAssertEqual(top, 1, context) }
+        previous = (frame.halfWidth, top, bottom)
+      }
+    }
+  }
+
+  func testAClockWithoutAValueNeverMovesAnyVariant() {
+    for variant in BarAnimation.allCases {
+      let frame = variant.frame(at: .nan, width: 1000, height: 30, notch: 150)
+      XCTAssertTrue(frame.halfWidth.isFinite && frame.height.isFinite && frame.glyphOpacity.isFinite, variant.rawValue)
+      for top in [false, true] {
+        XCTAssertTrue((0...1).contains(variant.corner(at: .nan, top: top).progress), variant.rawValue)
+      }
+    }
+  }
+
   func testEveryVariantFinishesWithTheBarGlyphsAndBothCornerPairsVisible() {
     for variant in BarAnimation.allCases {
       let end = variant.durationMS

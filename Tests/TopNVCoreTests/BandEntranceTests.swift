@@ -162,11 +162,136 @@ final class BandEntranceTests: XCTestCase {
     }
   }
 
+  private let reservedVisible = CGRect(x: 0, y: 0, width: 1512, height: 949)
+  private var menu: MenuBarEvidence.Window { .init(owner: .windowServer, layer: 24, bounds: band) }
+
+  private func reservedEvidence(_ windows: [MenuBarEvidence.Window]?,
+                                systemFullScreen: Bool = false) -> MenuBarEvidence.Result {
+    MenuBarEvidence.evaluate(frame: frame, visibleFrame: reservedVisible, bandFrame: band,
+                             windows: windows, systemFullScreen: systemFullScreen)
+  }
+
+  /// The usual layout: the menu bar is always visible and reserves the top of the display.
+  func testAVisibleMenuBarAnimatesAtLaunchAndOnReturnFromShowDesktop() {
+    let ordinary = reservedEvidence([desktop(), menu])
+    let revealed = reservedEvidence([desktop(), menu, desktop(layer: 18)])
+    XCTAssertEqual(ordinary.context, .desktop)
+    XCTAssertTrue(ordinary.menuVisible)
+    XCTAssertEqual(BandEntrance.Sample(ordinary), .desktop)
+    XCTAssertEqual(BandEntrance.Sample(revealed), .revealed)
+    XCTAssertEqual(step(BandEntrance.Sample(ordinary), event: .settings), .start)
+    XCTAssertEqual(step(BandEntrance.Sample(revealed)), .restore)
+    XCTAssertEqual(step(BandEntrance.Sample(ordinary)), .start)
+    XCTAssertNil(step(BandEntrance.Sample(ordinary)))
+  }
+
+  func testAReservedTopWithoutTheMenuSurfacePermitsOnlyAnOrdinaryReveal() {
+    XCTAssertEqual(BandEntrance.Sample(reservedEvidence([desktop()])), .unavailable)
+    let revealed = [desktop(), desktop(layer: 18)]
+    XCTAssertEqual(BandEntrance.Sample(reservedEvidence(revealed)), .revealed)
+    XCTAssertEqual(BandEntrance.Sample(reservedEvidence(revealed, systemFullScreen: true)), .unavailable)
+  }
+
+  /// A native full-screen Space on a notched display keeps the menu surface and adds the backdrop.
+  func testWithAVisibleMenuBarFullScreenSlidingAndMissingEvidenceInterruptWithoutReplay() {
+    let ordinary = BandEntrance.Sample(reservedEvidence([desktop(), menu]))
+    let samples = [
+      reservedEvidence([desktop(), menu, desktop(layer: MenuBarEvidence.fullScreenBackdropLayer)]),
+      reservedEvidence([desktop(), menu, .init(owner: .application, layer: 0, bounds: frame)]),
+      reservedEvidence([desktop(), menu, desktop(offset: 200)]),
+      reservedEvidence([desktop(offset: 200)]),
+      reservedEvidence(nil)
+    ]
+    for evidence in samples {
+      state = BandEntrance()
+      XCTAssertEqual(step(ordinary, event: .settings), .start)
+      XCTAssertEqual(BandEntrance.Sample(evidence), .unavailable)
+      XCTAssertEqual(step(BandEntrance.Sample(evidence)), .restore)
+      XCTAssertNil(step(ordinary))
+    }
+  }
+
+  func testOnlyASettingsEventActivates() {
+    XCTAssertNil(step(.desktop))
+    XCTAssertNil(step(.desktop, event: .settings))
+    state = BandEntrance()
+    XCTAssertEqual(step(.desktop, event: .system), .restore)
+    XCTAssertNil(step(.desktop, event: .settings))
+  }
+
+  /// Any order of events, samples, displays and switches matches a model written per display.
+  func testRandomTransitionsMatchThePerDisplayModel() {
+    var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+    func next(_ bound: Int) -> Int {
+      seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+      return Int((seed >> 33) % UInt64(bound))
+    }
+    let events: [BandEntrance.Event] = [.sample, .sample, .sample, .settings, .system]
+    let kinds: [BandEntrance.Sample?] = [.desktop, .desktop, .revealed, .revealed, .unavailable, nil]
+    var starts = 0
+    for _ in 0..<300 {
+      var entrance = BandEntrance()
+      var model = EntranceModel()
+      for _ in 0..<80 {
+        let event = events[next(events.count)]
+        let enabled = next(10) != 0
+        let reduced = next(12) == 0
+        var samples: [UInt32: BandEntrance.Sample] = [:]
+        for id in [UInt32(1), 2, 12] {
+          if let sample = kinds[next(kinds.count)] { samples[id] = sample }
+        }
+        let actions = entrance.update(event, enabled: enabled, samples: samples, reduceMotion: reduced)
+        let expected = model.update(event, enabled: enabled, samples: samples, reduced: reduced)
+        XCTAssertEqual(actions, expected)
+        for (id, action) in actions where action == .start {
+          starts += 1
+          XCTAssertEqual(samples[id], .desktop)
+          XCTAssertTrue(enabled && !reduced && event != .system)
+        }
+      }
+    }
+    XCTAssertGreaterThan(starts, 100)
+  }
+
   func testRevealOnOneDisplayLeavesItsNeighbourAlone() {
     _ = state.update(.settings, enabled: true, samples: [1: .desktop, 2: .desktop], reduceMotion: false)
     let hide = state.update(.sample, enabled: true, samples: [1: .revealed, 2: .desktop], reduceMotion: false)
     XCTAssertEqual(hide, [1: .restore])
     let show = state.update(.sample, enabled: true, samples: [1: .desktop, 2: .desktop], reduceMotion: false)
     XCTAssertEqual(show, [1: .start])
+  }
+}
+
+/// What each display showed last, kept apart from the type under test.
+private struct EntranceModel {
+  enum Display { case desktop, revealed, blocked }
+  var displays: [UInt32: Display] = [:]
+  var wasEnabled = false
+
+  mutating func update(_ event: BandEntrance.Event, enabled: Bool, samples: [UInt32: BandEntrance.Sample],
+                       reduced: Bool) -> [UInt32: BandEntrance.Action] {
+    let activating = event == .settings && enabled && !wasEnabled
+    wasEnabled = enabled
+    var actions: [UInt32: BandEntrance.Action] = [:]
+    var next: [UInt32: Display] = [:]
+    for id in Set(displays.keys).union(samples.keys) {
+      guard enabled, let sample = samples[id] else {
+        if displays[id] != nil { actions[id] = .restore }
+        continue
+      }
+      let before = displays[id]
+      switch sample {
+      case .desktop: next[id] = .desktop
+      case .unavailable: next[id] = .blocked
+      case .revealed: next[id] = event == .system || before == .blocked ? .blocked : .revealed
+      }
+      if event == .system || sample != .desktop || reduced {
+        actions[id] = .restore
+      } else if activating || before == .revealed {
+        actions[id] = .start
+      }
+    }
+    displays = next
+    return actions
   }
 }

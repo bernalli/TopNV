@@ -22,7 +22,8 @@ struct AnimationTiming {
   static let slow = Self(0.4, 0, 0.1, 1)
 
   func progress(_ time: Double, from start: Double = 0, to end: Double) -> Double {
-    if time <= start { return 0 }
+    // A clock without a value stays at the start instead of reaching the geometry.
+    if !(time > start) { return 0 }
     if time >= end { return 1 }
     let fraction = (time - start) / (end - start)
     if firstX == firstY && secondX == secondY { return fraction }
