@@ -5,13 +5,17 @@ final class AnimationMenuTests: XCTestCase {
   private func state(bundle: String?, selection: BarAnimation? = nil) -> MenuState {
     var state = MenuState(hideNotch: true, roundCorners: false, cornersOnAllDisplays: false,
                           launchAtLogin: false, loginNeedsApproval: false, loginError: nil, updates: .hidden,
-                          keyCalibration: KeyCalibration.initial(bundleIdentifier: bundle))
+                          isTestCopy: TestCopy.matches(bundle))
     state.lastAnimation = selection
     return state
   }
 
+  func testTestCopyHasNoKeyCalibrationMenu() {
+    XCTAssertFalse(MenuLayout.rows(for: state(bundle: "test.copy")).contains { $0.id == "keyCalibration" })
+  }
+
   func testPreviewIsAbsentFromProductionAndUnidentifiedCopies() {
-    for bundle in [nil, "", KeyCalibration.productionBundleIdentifier.uppercased()] {
+    for bundle in [nil, "", "IO.GITHUB.BERNALLI.TOPNV"] {
       XCTAssertFalse(MenuLayout.rows(for: state(bundle: bundle)).contains { $0.id == "animationPreview" })
     }
   }

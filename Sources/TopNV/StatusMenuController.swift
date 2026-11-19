@@ -19,14 +19,10 @@ import TopNVCore
   private var subscriptions: Set<AnyCancellable> = []
   private var visibilityObservation: NSKeyValueObservation?
   private var refreshScheduled = false
-  /// Test copies only: the checked candidate. Nil in production, so the menu has no calibration
-  /// and the calibration commands do nothing.
   var onAnimationPreview: ((BarAnimation) -> Void)?
   private var lastAnimation: BarAnimation?
-  private var keyCalibration: KeyCalibration?
+  private let isTestCopy: Bool
   var darkMenuBarProbe: SystemDarkMenuBarProbe?
-  /// Called with the candidate chosen in the Key calibration submenu.
-  var onKeyCalibration: ((KeyCalibration) -> Void)?
 
   private static let icon: NSImage? = {
     let image =
@@ -39,9 +35,9 @@ import TopNVCore
 
   init(
     settings: AppSettings, loginItem: LoginItem, updates: UpdateMenuModel,
-    visibility: MenuVisibility, keyCalibration: KeyCalibration? = nil
+    visibility: MenuVisibility, isTestCopy: Bool = false
   ) {
-    self.keyCalibration = keyCalibration
+    self.isTestCopy = isTestCopy
     self.settings = settings
     self.loginItem = loginItem
     self.updates = updates
@@ -103,7 +99,7 @@ import TopNVCore
       hideNotch: settings.hideNotch, roundCorners: settings.roundCorners,
       cornersOnAllDisplays: settings.cornersOnAllDisplays, launchAtLogin: loginItem.isEnabled,
       loginNeedsApproval: loginItem.needsApproval, loginError: loginItem.errorMessage,
-      updates: updates.items, keyCalibration: keyCalibration)
+      updates: updates.items, isTestCopy: isTestCopy)
     state.lastAnimation = lastAnimation
     return state
   }
@@ -129,8 +125,7 @@ import TopNVCore
       if let url = AppLink.reportIssue.url { NSWorkspace.shared.open(url) }
     case .quit: NSApp.terminate(nil)
     case .previewCurtain, .previewInk, .previewArrows, .previewBreath, .previewCalm, .previewStretch,
-         .previewBlind, .previewWave, .replayAnimation, .keyCalibration1, .keyCalibration2, .keyCalibration3,
-         .keyCalibration4, .keyCalibration5, .keyCalibration6, .systemDarkMenuBar:
+         .previewBlind, .previewWave, .replayAnimation, .systemDarkMenuBar:
       performTestCommand(command)
     }
   }
@@ -140,14 +135,7 @@ import TopNVCore
       darkMenuBarProbe?.toggle()
       return
     }
-    guard keyCalibration != nil else { return }
-    if let calibration = KeyCalibration.option(for: command) {
-      keyCalibration = calibration
-      onKeyCalibration?(calibration)
-      scheduleRefresh()
-      return
-    }
-    guard settings.hideNotch,
+    guard isTestCopy, settings.hideNotch,
           let choice = command == .replayAnimation ? lastAnimation : BarAnimation(rawValue: command.rawValue)
     else { return }
     lastAnimation = choice

@@ -25,10 +25,16 @@ final class PreviewBandSurface {
   private let originalView: NSView?
   private let originalColor: NSColor
   private let originalOpaque: Bool
-  private let originalMask: CALayer?
-  private let backdropFrames: [CGRect]
+  private struct KeyClip {
+    let window: OverlayWindow
+    let originalMask: CALayer?
+    let mask: CAShapeLayer
+    let backdrops: [(layer: CALayer, frame: CGRect)]
+  }
+
+  private var keys: [KeyClip] = []
+  private var currentPath: CGPath = CGMutablePath()
   private let band = CAShapeLayer()
-  private let keyedMask = CAShapeLayer()
   private let coverMask = CAShapeLayer()
   private let leftCover = CALayer()
   private let rightCover = CALayer()
@@ -42,8 +48,6 @@ final class PreviewBandSurface {
     originalView = bar.contentView
     originalColor = bar.backgroundColor
     originalOpaque = bar.isOpaque
-    originalMask = target.keyed?.contentView?.layer?.mask
-    backdropFrames = target.backdrops.map(\.frame)
     corners = target.corners.map { PreviewCorner(corner: $0.key, window: $0.value) }
     let view = NSView(frame: bounds)
     view.wantsLayer = true
@@ -53,10 +57,6 @@ final class PreviewBandSurface {
     bar.isOpaque = false
     bar.backgroundColor = .clear
     bar.contentView = view
-    keyedMask.frame = bounds
-    keyedMask.contentsScale = bar.backingScaleFactor
-    target.keyed?.contentView?.layer?.mask = keyedMask
-
     // Black above the real glyphs can fade or retreat without moving or capturing them.
     switch variant {
     case .arrows, .breath, .stretch, .wave:
@@ -77,6 +77,30 @@ final class PreviewBandSurface {
     default:
       cover = nil
     }
+    if let window = target.keyed { includeKey(window, backdrops: target.backdrops) }
+  }
+
+  func includeKey(_ window: OverlayWindow, backdrops: [CALayer]) {
+    guard !keys.contains(where: { $0.window === window }), let root = window.contentView?.layer else { return }
+    let mask = CAShapeLayer()
+    mask.frame = band.bounds
+    mask.contentsScale = window.backingScaleFactor
+    let clip = KeyClip(window: window, originalMask: root.mask, mask: mask, backdrops: backdrops.map { ($0, $0.frame) })
+    keys.append(clip)
+    root.mask = mask
+    drawKey(clip)
+  }
+
+  private func drawKey(_ clip: KeyClip) {
+    clip.mask.path = oriented(currentPath, in: clip.window.contentView?.layer)
+    // The compositor may sample a private backdrop outside an ancestor's mask.
+    let extent = currentPath.boundingBoxOfPath.intersection(band.bounds)
+    for (layer, _) in clip.backdrops {
+      let flipped = layer.superlayer?.isGeometryFlipped == true
+      layer.frame = extent.isNull || extent.isEmpty ? .zero : CGRect(
+        x: extent.minX, y: flipped ? extent.minY : band.bounds.height - extent.maxY,
+        width: extent.width, height: extent.height)
+    }
   }
 
   func draw(_ variant: BarAnimation, elapsed: Double) {
@@ -85,18 +109,10 @@ final class PreviewBandSurface {
     let hidden = elapsed < 0
     let path = hidden ? CGMutablePath() : Self.path(variant, frame, width: size.width)
     band.path = oriented(path, in: band.superlayer)
-    keyedMask.path = oriented(path, in: target.keyed?.contentView?.layer)
+    currentPath = path
+    keys.forEach(drawKey)
     coverMask.path = oriented(path, in: cover?.contentView?.layer)
 
-    // Also bound the actual private sampling surfaces. Rectangular wipes therefore do not rely
-    // on the compositor applying an ancestor mask to a window-server-aware backdrop.
-    let extent = hidden ? CGRect.zero : path.boundingBoxOfPath.intersection(band.bounds)
-    for layer in target.backdrops {
-      let flipped = layer.superlayer?.isGeometryFlipped == true
-      layer.frame = extent.isNull || extent.isEmpty ? .zero : CGRect(
-        x: extent.minX, y: flipped ? extent.minY : size.height - extent.maxY,
-        width: extent.width, height: extent.height)
-    }
     let side = max(0, size.width / 2 - frame.glyphHalfWidth)
     let fading = variant == .stretch || variant == .breath
     leftCover.frame = CGRect(x: 0, y: 0, width: fading ? size.width : side, height: size.height)
@@ -142,8 +158,10 @@ final class PreviewBandSurface {
   func restore() {
     cover?.orderOut(nil)
     cover?.close()
-    target.keyed?.contentView?.layer?.mask = originalMask
-    for (layer, frame) in zip(target.backdrops, backdropFrames) { layer.frame = frame }
+    for clip in keys {
+      clip.window.contentView?.layer?.mask = clip.originalMask
+      for (layer, frame) in clip.backdrops { layer.frame = frame }
+    }
     target.bar.contentView = originalView
     target.bar.backgroundColor = originalColor
     target.bar.isOpaque = originalOpaque

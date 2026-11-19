@@ -42,10 +42,11 @@ public enum MenuBarEvidence {
     /// A Space switch slides the desktop of this display sideways. Every other value then mixes
     /// the Space that leaves with the Space that arrives.
     public let spaceSliding: Bool
-    /// Measured and traced, not yet evidence: at rest a native full-screen Space lists a
-    /// WindowManager window as large as the display one level above the desktop level. No
-    /// desktop Space lists it. It is a signal for one display, unlike the system signal.
+    /// At rest a native full-screen Space has a WindowManager backdrop one level above
+    /// the desktop level. This signal is local to the display.
     public let fullScreenBackdrop: Bool
+    /// The base band can animate on an ordinary desktop even when the key is gated off.
+    let permitsBandEntrance: Bool
   }
 
   /// Converts the dictionaries of `CGWindowListCopyWindowInfo`. Window titles are never read.
@@ -104,11 +105,12 @@ public enum MenuBarEvidence {
   }
 
   public static func evaluate(frame: CGRect, visibleFrame: CGRect, bandFrame: CGRect,
-                              windows: [Window]?, systemFullScreen: Bool = false) -> Result {
+                              windows: [Window]?, systemFullScreen: Bool = false,
+                              displayFrames: [CGRect] = []) -> Result {
     guard let windows, valid(frame), valid(visibleFrame), valid(bandFrame),
           frame.contains(visibleFrame), frame.contains(bandFrame) else {
       return Result(context: .unknown, nativeFullScreen: false, menuVisible: false, desktopRevealed: false,
-                    spaceSliding: false, fullScreenBackdrop: false)
+                    spaceSliding: false, fullScreenBackdrop: false, permitsBandEntrance: false)
     }
     let tolerance: CGFloat = 2
     // The menu bar surface: a Window Server window along the top edge, as wide as the band.
@@ -152,8 +154,7 @@ public enum MenuBarEvidence {
     // layer, as large as the display) and our keyed windows. One of them displaced sideways and
     // still over the display is a Space switch in progress. The menu bar slides too.
     let spaceSliding = windows.contains {
-      let bound = ($0.isWindowManager && $0.layer < 0 && $0.alpha > 0
-                     && sameSize($0.bounds, frame, tolerance))
+      let bound = isSpaceBackground($0, frame: frame, tolerance: tolerance)
         || ($0.owner == .ownApp && $0.layer == overlayLevel
               && sameSize($0.bounds, bandFrame, tolerance))
       return bound && valid($0.bounds)
@@ -161,11 +162,37 @@ public enum MenuBarEvidence {
         && abs($0.bounds.maxY - frame.maxY) <= tolerance
         && $0.bounds.intersection(frame).width > tolerance
     }
-    return Result(context: nativeFullScreen || coveringApp || noReservedTop ? .fullScreen : .desktop,
+    let backdrop = fullScreenBackdrop(frame: frame, windows: windows, tolerance)
+    let fullScreenApp = nativeFullScreen || coveringApp
+    let autoHiddenMenu = noReservedTop && autoHiddenDesktop(frame, windows, displayFrames, systemFullScreen, tolerance)
+    let reservedMenu = !noReservedTop && (menuVisible || (desktopRevealed && !systemFullScreen))
+    let permitsBandEntrance = !fullScreenApp && !backdrop && !spaceSliding && (reservedMenu || autoHiddenMenu)
+    return Result(context: fullScreenApp || noReservedTop ? .fullScreen : .desktop,
                   nativeFullScreen: nativeFullScreen,
                   menuVisible: menuVisible, desktopRevealed: desktopRevealed,
-                  spaceSliding: spaceSliding,
-                  fullScreenBackdrop: fullScreenBackdrop(frame: frame, windows: windows, tolerance))
+                  spaceSliding: spaceSliding, fullScreenBackdrop: backdrop, permitsBandEntrance: permitsBandEntrance)
+  }
+
+  private static func isSpaceBackground(_ window: Window, frame: CGRect, tolerance: CGFloat) -> Bool {
+    window.isWindowManager && window.layer < 0 && window.alpha > 0 && sameSize(window.bounds, frame, tolerance)
+  }
+
+  private static func stationaryBackground(_ windows: [Window], _ frame: CGRect, _ tolerance: CGFloat) -> Bool {
+    windows.contains {
+      isSpaceBackground($0, frame: frame, tolerance: tolerance) && valid($0.bounds)
+        && abs($0.bounds.minX - frame.minX) <= tolerance
+        && abs($0.bounds.minY - frame.minY) <= tolerance
+    }
+  }
+
+  /// A stationary Space background can prove a desktop with an auto-hidden menu.
+  /// A system fullscreen signal requires evidence that attributes it to another display.
+  private static func autoHiddenDesktop(_ frame: CGRect, _ windows: [Window], _ displayFrames: [CGRect],
+                                        _ systemFullScreen: Bool, _ tolerance: CGFloat) -> Bool {
+    guard stationaryBackground(windows, frame, tolerance) else { return false }
+    return !systemFullScreen || displayFrames.contains {
+      $0 != frame && fullScreenBackdrop(frame: $0, windows: windows, tolerance)
+    }
   }
 
   private static func fullScreenBackdrop(frame: CGRect, windows: [Window], _ tolerance: CGFloat) -> Bool {

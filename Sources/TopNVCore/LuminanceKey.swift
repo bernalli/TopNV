@@ -11,10 +11,7 @@ public struct LuminanceKey: Sendable {
   public var whitePoint: Float { cutoff - 0.5 / gain }
 
   /// The 4x5 `colorMatrix` of the backdrop: the same luma row for red, green and blue, opaque alpha.
-  public var matrix: [Float] { Self.matrix(gain: gain, cutoff: cutoff) }
-
-  /// The matrix of any linear key, also of a calibration candidate.
-  public static func matrix(gain: Float, cutoff: Float) -> [Float] {
+  public var matrix: [Float] {
     let row: [Float] = [-gain * 0.2126, -gain * 0.7152, -gain * 0.0722, 0, 0.5 + gain * cutoff]
     return row + row + row + [0, 0, 0, 0, 1]
   }

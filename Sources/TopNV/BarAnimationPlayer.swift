@@ -5,7 +5,7 @@ import TopNVCore
 /// One display clock owns the pause, both band windows and all four corners. Cancellation removes
 /// the presentation overrides synchronously, even in the initial pause or during a replay.
 @MainActor
-final class BarAnimationPreview: NSObject {
+final class BarAnimationPlayer: NSObject {
   private var link: CADisplayLink?
   private var surfaces: [PreviewBandSurface] = []
   private var variant = BarAnimation.curtain
@@ -18,15 +18,31 @@ final class BarAnimationPreview: NSObject {
     cancel()
     let initial = targets()
     guard let screen = initial.first?.bar.screen else { return }
+    begin(variant, initial: initial, screen: screen, pause: 0.6, validate: targets)
+  }
+
+  func enter(_ target: PreviewBandTarget, on screen: NSScreen) {
+    cancel()
+    begin(.calm, initial: [target], screen: screen, pause: 0, validate: nil)
+  }
+
+  func includeKey(_ window: OverlayWindow, backdrop: CALayer) {
+    guard let surface = surfaces.first else { return }
+    transaction { surface.includeKey(window, backdrops: [backdrop]) }
+  }
+
+  private func begin(_ variant: BarAnimation, initial: [PreviewBandTarget], screen: NSScreen,
+                     pause: Double, validate: (() -> [PreviewBandTarget])?) {
+    guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
     self.variant = variant
     durationMS = variant.durationMS(rounded: initial.contains { !$0.corners.isEmpty })
-    currentTargets = targets
+    currentTargets = validate
     let now = CACurrentMediaTime()
-    start = now + 0.6
+    start = now + pause
     nextCheck = now + 0.1
     transaction {
       surfaces = initial.map { PreviewBandSurface(target: $0, variant: variant) }
-      for surface in surfaces { surface.draw(variant, elapsed: -1) }
+      for surface in surfaces { surface.draw(variant, elapsed: pause > 0 ? -1 : 0) }
     }
     let link = screen.displayLink(target: self, selector: #selector(tick))
     self.link = link
@@ -37,10 +53,11 @@ final class BarAnimationPreview: NSObject {
     let now = CACurrentMediaTime()
     let elapsed = (now - start) * 1000
     if elapsed >= durationMS { cancel(); return }
-    if now >= nextCheck {
+    if let currentTargets, now >= nextCheck {
       nextCheck = now + 0.1
       // The keyed controller may have replaced a window or gated it during the pause.
-      guard let targets = currentTargets?(), targets.count == surfaces.count,
+      let targets = currentTargets()
+      guard targets.count == surfaces.count,
             surfaces.allSatisfy({ surface in
               targets.contains { $0.bar === surface.target.bar && $0.keyed === surface.target.keyed }
             }) else { cancel(); return }

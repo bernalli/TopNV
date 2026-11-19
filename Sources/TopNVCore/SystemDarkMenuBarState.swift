@@ -32,7 +32,7 @@ public struct SystemDarkMenuBarState: Sendable {
   private var resumeKeyDuringRestore = false
 
   public init?(bundleIdentifier: String?, saved: Any?) {
-    guard KeyCalibration.initial(bundleIdentifier: bundleIdentifier) != nil else { return nil }
+    guard TestCopy.matches(bundleIdentifier) else { return nil }
     if let flag = saved as? NSNumber, CFGetTypeID(flag) == CFBooleanGetTypeID(), !flag.boolValue {
       phase = .off
     } else {

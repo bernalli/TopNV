@@ -30,32 +30,10 @@ final class KeyedOverlayController {
   /// Displays with a base band or corners, even if the optional keyed effect fails.
   private var sampledDisplays: Set<UInt32> = []
   private var desktopOverlayVisibility: [UInt32: Bool] = [:]
-  /// Visibility of the base band and corners on each sampled display.
-  var onDesktopOverlayVisibility: (([UInt32: Bool]) -> Void)?
-  /// Test copies restore preview layers before the ordinary keyed effect updates its windows.
+  /// Delivered before keyed gates change so a returning window already has its presentation mask.
+  var onDesktopSample: (([UInt32: Bool], [UInt32: BandEntrance.Sample]) -> Void)?
+  var onKeyWillShow: ((UInt32, OverlayWindow, CALayer) -> Void)?
   var onPreviewInvalidated: ((UInt32) -> Void)?
-  /// Test copies only: the chosen normal key. Nil in production, for the whole session.
-  private var calibration: KeyCalibration?
-  private var calibrationNeedsRebuild = false
-
-  init(calibration: KeyCalibration? = nil) {
-    self.calibration = calibration
-  }
-
-  private var normalMatrix: [Float] { KeyCalibration.normalMatrix(calibration) }
-
-  /// Test copies only: replaces the normal key. The windows are closed and created again, as
-  /// after a change of geometry, so no live backdrop is changed. Without a calibration at
-  /// launch, as in production, it does nothing.
-  func calibrate(_ calibration: KeyCalibration) {
-    guard self.calibration != nil, self.calibration != calibration else { return }
-    self.calibration = calibration
-    let line = "Key calibration: gain=\(calibration.gain) cutoff=\(calibration.cutoff)"
-    Self.logger.info("\(line, privacy: .public)")
-    guard !failed else { return }
-    calibrationNeedsRebuild = true
-    reconcile()
-  }
 
   private var keyedActive: Bool { enabled && !frames.isEmpty && !failed }
   private var needsSamples: Bool { !sampledDisplays.isEmpty }
@@ -97,12 +75,11 @@ final class KeyedOverlayController {
     }, uniquingKeysWith: { first, _ in first })
     // One copy of the window list per sample serves all overlays.
     let metadata = needsSamples ? windowMetadata(screens: screens) : nil
-    if !failed { reconcileKeyed(byID: byID, metadata: metadata) }
     updateDesktopOverlayVisibility(byID: byID, metadata: metadata)
+    if !failed { reconcileKeyed(byID: byID, metadata: metadata) }
   }
 
   private func reconcileKeyed(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?) {
-    if calibrationNeedsRebuild, !rebuildForCalibration() { return }
     closeChangedWindows(byID: byID)
     guard !failed else { return }
     guard enabled, !frames.isEmpty else {
@@ -167,7 +144,9 @@ final class KeyedOverlayController {
     for id in decision.close { close(id) }
     guard !failed else { return }
     for (id, shown) in decision.gates {
-      entries[id]?.window.alphaValue = shown ? 1 : 0
+      guard let entry = entries[id] else { continue }
+      if shown && entry.window.alphaValue == 0 { onKeyWillShow?(displayID, entry.window, entry.backdrop) }
+      entry.window.alphaValue = shown ? 1 : 0
     }
     if let reservation = decision.create {
       create(displayID: displayID, frame: frame, screen: screen, reservation: reservation)
@@ -178,22 +157,13 @@ final class KeyedOverlayController {
 // MARK: - Keyed window lifecycle
 
 extension KeyedOverlayController {
-  /// Closes every keyed window for a new calibration. False when closing disabled the effect.
-  private func rebuildForCalibration() -> Bool {
-    calibrationNeedsRebuild = false
-    for id in Array(entries.keys) { close(id) }
-    guard !failed else { return false }
-    for id in states.keys { states[id]?.resetForWindowReplacement() }
-    return true
-  }
-
   private func create(displayID: UInt32, frame: CGRect, screen: NSScreen,
                       reservation: KeyedOverlayState.Reservation) {
     guard !failed else { return }
     let scale = screen.backingScaleFactor
     let bounds = CGRect(origin: .zero, size: frame.size)
     var reason: NSString?
-    guard let backdrop = Self.backdrop(normalMatrix, bounds: bounds, scale: scale, reason: &reason)
+    guard let backdrop = Self.backdrop(LuminanceKey.normal.matrix, bounds: bounds, scale: scale, reason: &reason)
     else { disable(reason); return }
 
     let window = OverlayWindow(frame: frame, level: .init(rawValue: 26), isOpaque: false,
@@ -282,21 +252,30 @@ extension KeyedOverlayController {
   /// Missing or unknown evidence keeps the overlays visible; a screen missing for a moment keeps its state.
   private func updateDesktopOverlayVisibility(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?) {
     var visibility: [UInt32: Bool] = [:]
+    var samples: [UInt32: BandEntrance.Sample] = [:]
+    let fullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
+    let displayFrames = byID.values.map(\.frame)
     for id in sampledDisplays {
       guard let screen = byID[id] else {
         visibility[id] = desktopOverlayVisibility[id] ?? true
         continue
       }
-      visibility[id] = CornerVisibility.visible(frame: screen.frame, visibleFrame: screen.visibleFrame,
-                                                bandFrame: frames[id], windows: metadata)
+      let band = frames[id] ?? CGRect(x: screen.frame.minX, y: screen.frame.maxY - 1,
+                                      width: screen.frame.width, height: 1)
+      let evidence = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame,
+                                             bandFrame: band, windows: metadata, systemFullScreen: fullScreen,
+                                             displayFrames: displayFrames)
+      visibility[id] = CornerVisibility.visible(evidence)
+      if frames[id] != nil {
+        samples[id] = BandEntrance.Sample(evidence)
+      }
     }
-    guard visibility != desktopOverlayVisibility else { return }
     for (id, shown) in visibility where desktopOverlayVisibility[id] != shown {
       let line = "Desktop overlays, display \(id): visible=\(shown)"
       Self.logger.info("\(line, privacy: .public)")
     }
     desktopOverlayVisibility = visibility
-    onDesktopOverlayVisibility?(visibility)
+    onDesktopSample?(visibility, samples)
   }
 
   /// Copying metadata neither captures pixels nor requests Screen Recording. Window titles
@@ -333,10 +312,16 @@ extension KeyedOverlayController {
     evidence.context == .desktop && evidence.menuVisible && !evidence.spaceSliding && !evidence.desktopRevealed
   }
 
+  /// Include visible windows on both Spaces until the keyed state reconciles membership.
+  func includeVisibleKeys(on displayID: UInt32, in player: BarAnimationPlayer) {
+    for entry in entries.values where entry.displayID == displayID && entry.window.alphaValue > 0 {
+      player.includeKey(entry.window, backdrop: entry.backdrop)
+    }
+  }
+
   /// Sample only while the preview is requested. The ordinary gates continue to own window alpha.
   func previewTarget(screen: NSScreen, id: UInt32, bar: OverlayWindow,
                      corners: [ScreenCorner: OverlayWindow]) -> PreviewBandTarget? {
-    guard calibration != nil else { return nil }
     let evidence = MenuBarEvidence.evaluate(
       frame: screen.frame, visibleFrame: screen.visibleFrame, bandFrame: bar.frame,
       windows: windowMetadata(screens: NSScreen.screens),

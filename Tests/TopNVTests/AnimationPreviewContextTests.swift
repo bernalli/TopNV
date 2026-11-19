@@ -7,7 +7,7 @@ import XCTest
 @MainActor
 final class AnimationPreviewContextTests: XCTestCase {
   func testOnlyAnInterruptedDisplayInvalidatesThePreviewSynchronously() {
-    let controller = KeyedOverlayController(calibration: KeyCalibration.initial(bundleIdentifier: "test.copy"))
+    let controller = KeyedOverlayController()
     var invalidated: [UInt32] = []
     controller.onPreviewInvalidated = { invalidated.append($0) }
 

@@ -6,6 +6,41 @@ import XCTest
 
 @MainActor
 final class PreviewBandSurfaceTests: XCTestCase {
+  func testKeyJoiningMidEntranceUsesTheCurrentBandWidthAndRestoresItsGate() throws {
+    _ = NSApplication.shared
+    let rect = CGRect(x: 0, y: 0, width: 1000, height: 30)
+    let bar = BarWindow(frame: rect)
+    let keyed = OverlayWindow(frame: rect, level: .normal, isOpaque: false, behavior: .transient)
+    defer { bar.close(); keyed.close() }
+    let view = NSView(frame: rect)
+    view.wantsLayer = true
+    keyed.contentView = view
+    let root = try XCTUnwrap(view.layer)
+    let originalMask = CALayer()
+    root.mask = originalMask
+    let backdrop = CALayer()
+    backdrop.frame = rect
+    root.addSublayer(backdrop)
+    let target = PreviewBandTarget(notchWidth: 150, bar: bar, keyed: nil, backdrops: [], corners: [:])
+    let surface = PreviewBandSurface(target: target, variant: .calm)
+    surface.draw(.calm, elapsed: 180)
+    surface.includeKey(keyed, backdrops: [backdrop])
+    surface.includeKey(keyed, backdrops: [backdrop])
+
+    let band = try XCTUnwrap(bar.contentView?.layer?.sublayers?.first as? CAShapeLayer)
+    let width = try XCTUnwrap(band.path).boundingBoxOfPath.width
+    XCTAssertLessThan(width, rect.width)
+    XCTAssertEqual(backdrop.frame.width, width, accuracy: 0.001)
+    surface.draw(.calm, elapsed: 300)
+    XCTAssertGreaterThan(backdrop.frame.width, width)
+
+    keyed.alphaValue = 0
+    surface.restore()
+    XCTAssertTrue(root.mask === originalMask)
+    XCTAssertEqual(backdrop.frame, rect)
+    XCTAssertEqual(keyed.alphaValue, 0)
+  }
+
   func testPauseTopStripAndInterruptionOnBothBandWindows() throws {
     _ = NSApplication.shared
     let rect = CGRect(x: 0, y: 0, width: 1000, height: 30)
