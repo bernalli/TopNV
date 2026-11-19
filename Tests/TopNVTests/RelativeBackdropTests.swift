@@ -6,9 +6,32 @@ import XCTest
 @testable import TopNV
 
 @MainActor final class RelativeBackdropTests: XCTestCase {
+  func testOrdinaryKeyIsTheStartupFilterEvenAfterAValidSample() async throws {
+    let key = RelativeMenuBarKey(isTestCopy: true)
+    XCTAssertFalse(key.enabled)
+    let layer = try makeLayer()
+    let original = try XCTUnwrap(layer.filters?.first as? NSObject)
+    key.observe(layer)
+    (layer.delegate as? KOSampledBackdrop)?.backdropLayer(layer, didChangeLuma: 0.12)
+    await drainSamples()
+    XCTAssertTrue(layer.filters?.first as? NSObject === original)
+  }
+
+  func testProductionDoesNotObserveOrEnableTheExperiment() throws {
+    let key = RelativeMenuBarKey(isTestCopy: false)
+    let layer = try makeLayer()
+    key.observe(layer)
+    key.toggle()
+    XCTAssertFalse(key.available)
+    XCTAssertFalse(key.enabled)
+    XCTAssertNil(layer.delegate)
+    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
+  }
+
   func testLiveBackdropsUseTheirOwnSampleAndRestoreTheOriginalFilter() async throws {
-    let key = RelativeMenuBarKey()
+    let key = RelativeMenuBarKey(isTestCopy: true)
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    key.toggle()
     let left = try makeLayer()
     let right = try makeLayer()
     let ordinary = try XCTUnwrap(left.filters?.first as? NSObject)

@@ -4,9 +4,9 @@ import TopNVCore
 import os
 
 /// Each keyed window follows its own bar's unfiltered mean luminance. A new window
-/// starts with its ordinary filter and keeps it until the render server delivers a sample.
+/// keeps the ordinary filter unless the experiment is explicitly enabled in a test copy.
 @MainActor final class RelativeMenuBarKey {
-  static let shared = RelativeMenuBarKey()
+  static let shared = RelativeMenuBarKey(isTestCopy: TestCopy.matches(Bundle.main.bundleIdentifier))
 
   private final class Entry {
     let source: KOSampledBackdrop
@@ -17,11 +17,10 @@ import os
 
   private let entries = NSMapTable<CALayer, Entry>.weakToStrongObjects()
   private(set) var available: Bool
-  private(set) var enabled: Bool
+  private(set) var enabled = false
 
-  init() {
-    available = Self.probe()
-    enabled = available
+  init(isTestCopy: Bool) {
+    available = isTestCopy && Self.probe()
   }
 
   func observe(_ layer: CALayer) {

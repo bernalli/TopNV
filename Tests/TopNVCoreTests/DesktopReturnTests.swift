@@ -19,7 +19,8 @@ final class DesktopReturnTests: XCTestCase {
       .init(owner: .application, layer: 0, bounds: bounds, number: number)
     ]
     if let surface {
-      windows.append(.init(owner: .desktop, layer: surface, bounds: frame, isWindowManager: true, alpha: alpha, number: 21046))
+      windows.append(.init(owner: .desktop, layer: surface, bounds: frame, isWindowManager: true,
+                           alpha: alpha, number: 21046))
     }
     if sliding {
       windows.append(.init(owner: .desktop, layer: -1, bounds: frame.offsetBy(dx: 200, dy: 0), isWindowManager: true))

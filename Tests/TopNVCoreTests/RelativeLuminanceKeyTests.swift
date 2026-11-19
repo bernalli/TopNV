@@ -37,6 +37,13 @@ final class RelativeLuminanceKeyTests: XCTestCase {
     }
   }
 
+  func testLowBarMeanCanEraseAStatusGlyphThatTheOrdinaryKeyShows() {
+    let relative = LuminanceKey.forBackdrop(backgroundLuma: 0.12, relativeEnabled: true)
+    let glyph: Float = 0.15
+    XCTAssertEqual(output(relative, glyph), 0)
+    XCTAssertEqual(output(.normal, glyph), 0.68, accuracy: 0.001)
+  }
+
   func testSwitchRestoresProductionEvenWithAValidSample() {
     let disabled = LuminanceKey.forBackdrop(backgroundLuma: 0.85, relativeEnabled: false)
     XCTAssertEqual(disabled.matrix, LuminanceKey.normal.matrix)
