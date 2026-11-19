@@ -127,8 +127,11 @@ final class NativeFullScreenStateTests: XCTestCase {
       XCTAssertTrue(result.gates.isEmpty)
       XCTAssertNil(result.keyChange)
       XCTAssertNil(result.create)
-      // A confirmed departure in the same sample can already have emptied the count.
-      XCTAssertLessThanOrEqual(state.creationsThisVisit, max(0, before - distinct.count))
+      // Only windows committed in this visit are refunded, at most one creation each. A
+      // confirmed departure in the same sample can already have emptied the count.
+      XCTAssertLessThanOrEqual(state.creationsThisVisit, before)
+      XCTAssertTrue(state.creationsThisVisit == 0
+                      || state.creationsThisVisit >= before - distinct.count)
       XCTAssertTrue(distinct.allSatisfy { state.visibility[$0] == nil })
     } else {
       XCTAssertEqual(result.close, Array(distinct.dropFirst()))

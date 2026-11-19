@@ -131,6 +131,31 @@ final class KeyedOverlayStateTests: XCTestCase {
     XCTAssertNotNil(state.update(input(time: 43)).create)
   }
 
+  func testFullScreenRefundsOnlyWindowsCommittedThisVisit() throws {
+    var state = State()
+    let previous = try XCTUnwrap(state.update(input(time: 10)).create)
+    XCTAssertTrue(state.commit(previous, windowID: 1))
+    _ = state.update(input(active: [1], time: 11))
+    state.spaceDidChange(now: 12)
+
+    for id in 2...4 {
+      let request = try XCTUnwrap(state.update(input(time: Double(id + 11))).create)
+      XCTAssertTrue(state.commit(request, windowID: id))
+    }
+    XCTAssertEqual(state.creationsThisVisit, 3)
+
+    func fullScreen(_ id: Int, at time: Double) -> State.Input {
+      .init(activeWindowIDs: [id], appearance: .light, context: .fullScreen,
+            menuVisible: true, enabled: true, now: time, nativeFullScreen: true)
+    }
+    XCTAssertEqual(state.update(fullScreen(1, at: 16)).close, [1])
+    XCTAssertEqual(state.creationsThisVisit, 3)
+    XCTAssertEqual(state.update(fullScreen(2, at: 17)).close, [2])
+    XCTAssertEqual(state.creationsThisVisit, 2)
+    _ = state.update(fullScreen(2, at: 18))
+    XCTAssertEqual(state.creationsThisVisit, 2)
+  }
+
   func testFullScreenWithRevealedMenuHidesExistingAndNeverCreates() {
     var state = State()
     _ = state.update(input(active: [1]))

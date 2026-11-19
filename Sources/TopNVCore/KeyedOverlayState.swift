@@ -48,6 +48,7 @@ public struct KeyedOverlayState {
 
   public private(set) var visibility: [Int: Bool] = [:]
   public private(set) var creationsThisVisit = 0
+  private var committedThisVisit: Set<Int> = []
   private var generation: UInt64 = 0
   private var serial: UInt64 = 0
   private var pending: Reservation?
@@ -70,6 +71,7 @@ public struct KeyedOverlayState {
   public mutating func resetForWindowReplacement() {
     visibility.removeAll()
     creationsThisVisit = 0
+    committedThisVisit.removeAll()
     generation &+= 1
     pending = nil
     lastActive = nil
@@ -108,6 +110,7 @@ public struct KeyedOverlayState {
       // evidence of another visit. A transient membership drop alone is not.
       if !active.contains(departureCandidate) {
         creationsThisVisit = 0
+        committedThisVisit.removeAll()
         generation &+= 1
         pending = nil
       }
@@ -120,11 +123,11 @@ public struct KeyedOverlayState {
     let keeper = closeAll ? nil : active.first
     lastActive = keeper
     result.close = active.filter { $0 != keeper }
-    for id in result.close { visibility[id] = nil }
-    // The windows closed in a full-screen Space had joined it: closing them is not a failed
-    // creation. Without the refund three closures leave the next desktop without a window
-    // until another visit. A creation that never joined a Space stays spent.
-    creationsThisVisit = max(0, creationsThisVisit - (closeAll ? active.count : 0))
+    for id in result.close {
+      visibility[id] = nil
+      let wasCharged = committedThisVisit.remove(id) != nil
+      if closeAll && wasCharged { creationsThisVisit -= 1 }
+    }
     let show = input.enabled && input.appearance == .light
       && input.context == .desktop && input.menuVisible
     if let keeper {
@@ -157,11 +160,13 @@ public struct KeyedOverlayState {
   public mutating func commit(_ reservation: Reservation, windowID: Int) -> Bool {
     guard pending == reservation, reservation.generation == generation else { return false }
     pending = nil
+    committedThisVisit.insert(windowID)
     visibility[windowID] = false
     return true
   }
 
   public mutating func forget(_ windowID: Int) {
+    committedThisVisit.remove(windowID)
     visibility[windowID] = nil
   }
 }
