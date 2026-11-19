@@ -14,8 +14,6 @@ final class KeyedOverlayController {
     let scale: CGFloat
   }
 
-  /// Points at the bottom of the menu bar where its background is below the key.
-  private static let maskHeight: CGFloat = 7
   private static let logger = Logger(subsystem: "TopNV", category: "KeyedOverlay")
   private var entries: [Int: Entry] = [:]
   private var states: [UInt32: KeyedOverlayState] = [:]
@@ -170,18 +168,8 @@ extension KeyedOverlayController {
     window.contentView = view
     guard let root = view.layer else { window.close(); disable(nil); return }
     root.contentsScale = scale
-    // The band can be a point taller than the menu bar: the mask is measured from the bar.
-    let menuBarHeight = screen.frame.maxY - screen.visibleFrame.maxY
-    let below = menuBarHeight > 0 ? min(max(frame.height - menuBarHeight, 0), 1) : 0
-    let maskHeight = Self.maskHeight + below
-    let mask = CALayer()
-    mask.frame = CGRect(x: 0, y: root.isGeometryFlipped ? frame.height - maskHeight : 0,
-                        width: frame.width, height: maskHeight)
-    mask.contentsScale = scale
-    mask.backgroundColor = NSColor.black.cgColor
-    mask.isOpaque = true
-    mask.zPosition = 1
-    root.addSublayer(mask)
+    Self.addBottomMask(to: root, size: frame.size, menuHeight: screen.frame.maxY - screen.visibleFrame.maxY,
+                       scale: scale)
     // Own the resource before a private operation can fail.
     let id = window.windowNumber
     guard id > 0 else { window.close(); disable("overlay window has no number"); return }
@@ -204,6 +192,17 @@ extension KeyedOverlayController {
         }
       }
     }
+  }
+
+  static func addBottomMask(to root: CALayer, size: CGSize, menuHeight: CGFloat, scale: CGFloat) {
+    let mask = CALayer()
+    mask.frame = ScreenGeometry.keyedBottomMask(size: size, menuHeight: menuHeight,
+                                               scale: scale, flipped: root.isGeometryFlipped)
+    mask.contentsScale = scale
+    mask.backgroundColor = NSColor.black.cgColor
+    mask.isOpaque = true
+    mask.zPosition = 1
+    root.addSublayer(mask)
   }
 
   private static func backdrop(_ matrix: [Float], bounds: CGRect, scale: CGFloat,

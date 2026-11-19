@@ -8,7 +8,7 @@ import XCTest
 final class PreviewBandSurfaceTests: XCTestCase {
   func testKeyJoiningMidEntranceUsesTheCurrentBandWidthAndRestoresItsGate() throws {
     _ = NSApplication.shared
-    let rect = CGRect(x: 0, y: 0, width: 1000, height: 30)
+    let rect = CGRect(x: 0, y: 0, width: 1512, height: 33)
     let bar = BarWindow(frame: rect)
     let keyed = OverlayWindow(frame: rect, level: .normal, isOpaque: false, behavior: .transient)
     defer { bar.close(); keyed.close() }
@@ -16,6 +16,10 @@ final class PreviewBandSurfaceTests: XCTestCase {
     view.wantsLayer = true
     keyed.contentView = view
     let root = try XCTUnwrap(view.layer)
+    KeyedOverlayController.addBottomMask(to: root, size: rect.size, menuHeight: 33, scale: 2)
+    let plate = try XCTUnwrap(root.sublayers?.first)
+    let bottom = CGRect(x: 0, y: root.isGeometryFlipped ? 25.5 : 0, width: 1512, height: 7.5)
+    XCTAssertEqual(plate.frame, bottom)
     let originalMask = CALayer()
     root.mask = originalMask
     let backdrop = CALayer()
@@ -33,11 +37,14 @@ final class PreviewBandSurfaceTests: XCTestCase {
     XCTAssertEqual(backdrop.frame.width, width, accuracy: 0.001)
     surface.draw(.calm, elapsed: 300)
     XCTAssertGreaterThan(backdrop.frame.width, width)
+    XCTAssertEqual(plate.frame, bottom)
 
     keyed.alphaValue = 0
     surface.restore()
     XCTAssertTrue(root.mask === originalMask)
     XCTAssertEqual(backdrop.frame, rect)
+    XCTAssertEqual(plate.frame, bottom)
+    XCTAssertTrue(plate.superlayer === root)
     XCTAssertEqual(keyed.alphaValue, 0)
   }
 

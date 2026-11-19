@@ -40,6 +40,15 @@ public enum ScreenGeometry {
     return CGRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
   }
 
+  /// Local frame of the opaque plate along the bottom edge of the keyed window.
+  public static func keyedBottomMask(size: CGSize, menuHeight: CGFloat, scale: CGFloat, flipped: Bool) -> CGRect {
+    let menu = menuHeight > 0 ? min(menuHeight, size.height) : size.height
+    // On a 33-pt Retina menu the last glyph pixel is row 50. The gradient can
+    // lighten row 51. Round towards the bottom so a glyph is never partly covered.
+    let top = min(size.height, ceil(max(0, menu - 7.5) * scale) / scale)
+    return CGRect(x: 0, y: flipped ? top : 0, width: size.width, height: size.height - top)
+  }
+
   /// The radius actually used for a screen: never negative and never larger than half of the
   /// shorter screen side.
   public static func effectiveRadius(_ radius: CGFloat, frame: CGRect) -> CGFloat {
