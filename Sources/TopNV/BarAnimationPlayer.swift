@@ -1,11 +1,17 @@
 import AppKit
 import QuartzCore
 import TopNVCore
+import os
 
 /// One display clock owns the pause, both band windows and all four corners. Cancellation removes
 /// the presentation overrides synchronously, even in the initial pause or during a replay.
 @MainActor
 final class BarAnimationPlayer: NSObject {
+  private static let logger = Logger(subsystem: "TopNV", category: "DesktopReturn")
+  private var returnTiming: ReturnTiming?
+  private var returnID: String?
+  private var sawEnd = false
+  private var lastTick: CFTimeInterval = 0
   private var link: CADisplayLink?
   private var surfaces: [PreviewBandSurface] = []
   private var variant = BarAnimation.curtain
@@ -23,8 +29,13 @@ final class BarAnimationPlayer: NSObject {
     begin(variant, initial: initial, screen: screen, pause: 0.6, validate: targets)
   }
 
-  func enter(_ target: PreviewBandTarget, on screen: NSScreen) {
+  func enter(_ target: PreviewBandTarget, on screen: NSScreen, returnSignal: CFTimeInterval?, displayID: UInt32) {
     cancel()
+    if let returnSignal {
+      returnTiming = ReturnTiming()
+      returnID = "\(displayID)/\(Int(returnSignal * 1000))"
+      record("signalStart", at: returnSignal)
+    }
     begin(.calm, initial: [target], screen: screen, pause: 0, validate: nil)
   }
 
@@ -40,12 +51,14 @@ final class BarAnimationPlayer: NSObject {
     durationMS = variant.durationMS(rounded: initial.contains { !$0.corners.isEmpty })
     currentTargets = validate
     let now = CACurrentMediaTime()
+    lastTick = now
     start = now + pause
     nextCheck = now + 0.1
     transaction {
       surfaces = initial.map { PreviewBandSurface(target: $0, variant: variant) }
       for surface in surfaces { surface.draw(variant, elapsed: pause > 0 ? -1 : 0) }
     }
+    record("animationStart", at: now)
     let link = screen.displayLink(target: self, selector: #selector(tick))
     self.link = link
     link.add(to: .main, forMode: .common)
@@ -53,8 +66,10 @@ final class BarAnimationPlayer: NSObject {
 
   @objc private func tick() {
     let now = CACurrentMediaTime()
-    let elapsed = (now - start) * 1000
-    if elapsed >= durationMS { cancel(); return }
+    lastTick = now
+    let realMS = (now - start) * 1000
+    let elapsed = returnTiming.map { $0.progress(at: realMS) * durationMS } ?? realMS
+    if elapsed >= durationMS { finish("complete"); return }
     if let currentTargets, now >= nextCheck {
       nextCheck = now + 0.1
       // The keyed controller may have replaced a window or gated it during the pause.
@@ -71,7 +86,26 @@ final class BarAnimationPlayer: NSObject {
     }
   }
 
-  func cancel() {
+  func surfaceEnded(at time: CFTimeInterval) {
+    guard returnTiming != nil, !sawEnd else { return }
+    sawEnd = true
+    returnTiming?.surfaceEnded(at: (time - start) * 1000)
+    record("signalEnd", at: time)
+  }
+
+  private func record(_ event: String, at time: CFTimeInterval) {
+    guard let returnID else { return }
+    let line = "return=\(returnID) \(event)MS=\(Int(time * 1000))"
+    Self.logger.info("\(line, privacy: .public)")
+  }
+
+  func cancel() { finish("cancelled") }
+
+  private func finish(_ reason: String) {
+    if link != nil { record("animationEnd_\(reason)", at: CACurrentMediaTime()) }
+    returnTiming = nil
+    returnID = nil
+    sawEnd = false
     link?.invalidate()
     link = nil
     currentTargets = nil
@@ -85,8 +119,10 @@ final class BarAnimationPlayer: NSObject {
   /// The display link is the only clock of an animation. A caller with a clock of its own ends
   /// an animation that the link left unfinished, so the band never stays partly open.
   func finishIfOverdue() {
-    guard link != nil, (CACurrentMediaTime() - start) * 1000 >= durationMS + Self.overdueMS else { return }
-    cancel()
+    let now = CACurrentMediaTime()
+    guard link != nil, (now - start) * 1000 >= durationMS,
+          (now - lastTick) * 1000 >= Self.overdueMS else { return }
+    finish("overdue")
   }
 
   func cancel(ifShowing bar: OverlayWindow) {

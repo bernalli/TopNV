@@ -31,7 +31,7 @@ final class KeyedOverlayController {
   private var sampledDisplays: Set<UInt32> = []
   private var desktopOverlayVisibility: [UInt32: Bool] = [:]
   /// Delivered before keyed gates change so a returning window already has its presentation mask.
-  var onDesktopSample: (([UInt32: Bool], [UInt32: BandEntrance.Sample]) -> Void)?
+  var onDesktopSample: (([UInt32: Bool], [UInt32: BandEntrance.Sample], [UInt32: Int]) -> Void)?
   var onKeyWillShow: ((UInt32, OverlayWindow, CALayer) -> Void)?
   var onPreviewInvalidated: ((UInt32) -> Void)?
 
@@ -275,7 +275,7 @@ extension KeyedOverlayController {
       Self.logger.info("\(line, privacy: .public)")
     }
     desktopOverlayVisibility = visibility
-    onDesktopSample?(visibility, samples)
+    onDesktopSample?(visibility, samples, results.compactMapValues(\.revealLayer))
     scheduleSamples(duringReveal: results.values.contains { $0.revealLayer != nil || $0.desktopRevealed })
     return results
   }

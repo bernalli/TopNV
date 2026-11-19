@@ -53,8 +53,8 @@ final class OverlayController: NSObject {
       guard let self, let bar = barWindows[id] else { return }
       animationPreview.cancel(ifShowing: bar)
     }
-    keyedOverlay.onDesktopSample = { [weak self] visibility, samples in
-      self?.apply(visibility: visibility, samples: samples)
+    keyedOverlay.onDesktopSample = { [weak self] visibility, samples, layers in
+      self?.apply(visibility: visibility, samples: samples, layers: layers)
     }
     keyedOverlay.onKeyWillShow = { [weak self] id, window, backdrop in
       self?.entrances[id]?.includeKey(window, backdrop: backdrop)
@@ -192,7 +192,9 @@ final class OverlayController: NSObject {
     settings.roundCorners && (settings.cornersOnAllDisplays || CGDisplayIsBuiltin(displayID) != 0)
   }
 
-  private func apply(visibility: [UInt32: Bool], samples: [UInt32: BandEntrance.Sample]) {
+  private func apply(visibility: [UInt32: Bool], samples: [UInt32: BandEntrance.Sample],
+                     layers: [UInt32: Int]) {
+    let signalTime = CACurrentMediaTime()
     let hidden = Set(visibility.compactMap { $0.value ? nil : $0.key })
     let changed = hidden != revealedDisplays
     if changed { animationPreview.cancel() }
@@ -210,9 +212,13 @@ final class OverlayController: NSObject {
         let player = entrances[id] ?? BarAnimationPlayer()
         entrances[id] = player
         player.enter(PreviewBandTarget(notchWidth: screen.previewNotchWidth, bar: bar, keyed: nil,
-                                       backdrops: [], corners: corners(on: id)), on: screen)
+                                       backdrops: [], corners: corners(on: id)), on: screen,
+                     returnSignal: entranceEvent == .sample ? signalTime : nil, displayID: id)
         keyedOverlay.includeVisibleKeys(on: id, in: player)
       }
+    }
+    for (id, player) in entrances where samples[id] == .desktop && layers[id] == nil {
+      player.surfaceEnded(at: signalTime)
     }
     guard changed else { return }
     revealedDisplays = hidden
