@@ -23,6 +23,9 @@ final class KeyedOverlayController {
   private var reconciling = false
   /// The last evidence logged for each display; a line is written only when it changes.
   private var traces: [UInt32: String] = [:]
+  var actualBarFrame: ((UInt32) -> CGRect?)?
+  private let isTestCopy = TestCopy.matches(Bundle.main.bundleIdentifier)
+  private var geometryPhases: [UInt32: String] = [:]
   private var monitor: MenuBarConditionsMonitor?
   private var timer: Timer?
   private var dock: NSRunningApplication?
@@ -51,6 +54,7 @@ final class KeyedOverlayController {
       monitor = MenuBarConditionsMonitor()
       monitor?.onChange = { [weak self] in self?.reconcile() }
     }
+    geometryPhases.removeAll()
     desktopReturns.removeAll()
     reconcile()
     if !keyedActive { stopMonitoring() }
@@ -73,6 +77,7 @@ final class KeyedOverlayController {
     if !failed {
       reconcileKeyed(byID: byID, evidence: evidence, listAvailable: metadata != nil, systemFullScreen: fullScreen)
     }
+    if isTestCopy { logGeometry(byID: byID, windows: metadata) }
   }
 
   private func reconcileKeyed(byID: [UInt32: NSScreen], evidence: [UInt32: MenuBarEvidence.Result],
@@ -199,6 +204,7 @@ extension KeyedOverlayController {
     let mask = CALayer()
     mask.frame = ScreenGeometry.keyedBottomMask(size: size, menuHeight: menuHeight,
                                                scale: scale, flipped: root.isGeometryFlipped)
+    mask.name = "Bottom plate"
     mask.contentsScale = scale
     mask.backgroundColor = NSColor.black.cgColor
     mask.isOpaque = true
@@ -304,6 +310,34 @@ extension KeyedOverlayController {
     return MenuBarEvidence.windows(from: list, ownPID: ProcessInfo.processInfo.processIdentifier,
                                    frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
                                    primaryScreenHeight: primary.frame.maxY, dockPID: dock?.processIdentifier)
+  }
+}
+
+// MARK: - Test-copy geometry
+
+extension KeyedOverlayController {
+  private func logGeometry(byID: [UInt32: NSScreen], windows: [MenuBarEvidence.Window]?) {
+    for id in frames.keys where geometryPhases[id] != "steady" {
+      guard let screen = byID[id], let bar = actualBarFrame?(id) else { continue }
+      let menu = windows?.first {
+        $0.owner == .windowServer && $0.layer == Int(CGWindowLevelForKey(.mainMenuWindow))
+          && abs($0.bounds.maxY - screen.frame.maxY) <= 2 && abs($0.bounds.minX - screen.frame.minX) <= 2
+          && abs($0.bounds.width - bar.width) <= 2
+      }
+      let entry = entries.values.first { $0.displayID == id && $0.window.isOnActiveSpace }
+      let root = entry?.window.contentView?.layer
+      let plate = root?.sublayers?.first { $0.name == "Bottom plate" }
+      let phase = menu == nil || entry == nil ? "incomplete" : (root?.mask == nil ? "steady" : "animating")
+      guard geometryPhases[id] != phase else { continue }
+      geometryPhases[id] = phase
+      let geometry = OverlayGeometry(screen: screen.frame, scale: screen.backingScaleFactor)
+      let line = "display=\(id) phase=\(phase) scale=\(geometry.scale) topLeftPixels "
+        + "menuLayer=\(menu?.layer ?? -1) menu=\(geometry.pixels(menu?.bounds)) bar=\(geometry.pixels(bar)) "
+        + "key=\(geometry.pixels(entry?.window.frame)) "
+        + "plate=\(geometry.pixels(layer: plate, window: entry?.window.frame)) "
+        + "backdrop=\(geometry.pixels(layer: entry?.backdrop, window: entry?.window.frame))"
+      Self.logger.info("\(line, privacy: .public)")
+    }
   }
 }
 

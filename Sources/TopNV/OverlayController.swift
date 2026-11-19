@@ -49,6 +49,7 @@ final class OverlayController: NSObject {
   }
 
   func start() {
+    keyedOverlay.actualBarFrame = { [weak self] id in self?.barWindows[id]?.frame }
     keyedOverlay.onPreviewInvalidated = { [weak self] id in
       guard let self, let bar = barWindows[id] else { return }
       animationPreview.cancel(ifShowing: bar)

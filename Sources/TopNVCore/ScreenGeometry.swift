@@ -35,7 +35,9 @@ public enum ScreenGeometry {
     frame: CGRect, visibleFrame: CGRect, safeAreaTop: CGFloat
   ) -> CGRect? {
     guard isNotched(safeAreaTop: safeAreaTop) else { return nil }
-    let height = menuBarHeight(frame: frame, visibleFrame: visibleFrame, safeAreaTop: safeAreaTop)
+    // The system surface ends above a one-point separator (rows 66 and 67 at 2x).
+    let gap = frame.maxY - visibleFrame.maxY
+    let height = min(frame.height, max(safeAreaTop, gap > 0 ? gap + 1 : 0))
     guard height > 0 else { return nil }
     return CGRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
   }

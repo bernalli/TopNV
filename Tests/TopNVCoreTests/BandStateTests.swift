@@ -4,7 +4,7 @@ import XCTest
 @testable import TopNVCore
 
 final class BandStateTests: XCTestCase {
-  private let original = CGRect(x: 0, y: 949, width: 1512, height: 33)
+  private let original = CGRect(x: 0, y: 948, width: 1512, height: 34)
 
   private func screen(
     id: UInt32 = 1, inset: CGFloat = 32, gap: CGFloat = 33,
@@ -61,7 +61,7 @@ final class BandStateTests: XCTestCase {
       state.update(.screenConfigurationChanged, screens: [screen(gap: 0)], hideNotch: true),
       [.show(displayID: 1, frame: original)])
     let moved = CGRect(x: -1512, y: 200, width: 1512, height: 982)
-    let grown = CGRect(x: -1512, y: 1142, width: 1512, height: 40)
+    let grown = CGRect(x: -1512, y: 1141, width: 1512, height: 41)
     XCTAssertEqual(
       state.update(
         .screenConfigurationChanged, screens: [screen(gap: 40, frame: moved)], hideNotch: true),
@@ -106,7 +106,7 @@ final class BandStateTests: XCTestCase {
     let scaled = screen(inset: 27, gap: 28, frame: CGRect(x: 0, y: 0, width: 1800, height: 1169))
     XCTAssertEqual(
       state.update(.screenConfigurationChanged, screens: [scaled], hideNotch: true),
-      [.show(displayID: 1, frame: CGRect(x: 0, y: 1141, width: 1800, height: 28))])
+      [.show(displayID: 1, frame: CGRect(x: 0, y: 1140, width: 1800, height: 29))])
     // The area below the camera housing is a shorter screen without a notch.
     let below = screen(inset: 0, gap: 0, frame: CGRect(x: 0, y: 0, width: 1512, height: 950))
     XCTAssertEqual(
@@ -158,7 +158,7 @@ final class BandStateTests: XCTestCase {
     XCTAssertTrue(state.frames.isEmpty)
     XCTAssertEqual(
       state.update(.screenConfigurationChanged, screens: [screen(id: 2, gap: 40)], hideNotch: true),
-      [.show(displayID: 2, frame: CGRect(x: 0, y: 942, width: 1512, height: 40))])
+      [.show(displayID: 2, frame: CGRect(x: 0, y: 941, width: 1512, height: 41))])
   }
 
   func testHideNotchOffClosesAndReenableUsesTheLastConfirmedGeometry() {
@@ -180,7 +180,7 @@ final class BandStateTests: XCTestCase {
       state.update(.screenConfigurationChanged, screens: [screen(gap: 40)], hideNotch: false), [])
     XCTAssertEqual(
       state.update(.settingsChanged, screens: [screen(inset: 0)], hideNotch: true),
-      [.show(displayID: 1, frame: CGRect(x: 0, y: 942, width: 1512, height: 40))])
+      [.show(displayID: 1, frame: CGRect(x: 0, y: 941, width: 1512, height: 41))])
   }
 
   func testMeasurementsRemainIndependentForEachDisplay() {
@@ -190,7 +190,7 @@ final class BandStateTests: XCTestCase {
     XCTAssertEqual(
       state.update(.settingsChanged, screens: [screen(id: 2, inset: 0)], hideNotch: true), [])
     XCTAssertEqual(
-      state.frames, [1: original, 2: CGRect(x: 0, y: 942, width: 1512, height: 40)])
+      state.frames, [1: original, 2: CGRect(x: 0, y: 941, width: 1512, height: 41)])
     XCTAssertEqual(
       state.update(.screenConfigurationChanged, screens: [screen()], hideNotch: true),
       [.close(displayID: 2), .show(displayID: 1, frame: original)])

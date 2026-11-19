@@ -17,6 +17,17 @@ final class KeyedBottomMaskTests: XCTestCase {
     }
   }
 
+  func testOpaquePlateReachesTheTwoSeparatorPixelsBelowTheSystemMenu() throws {
+    let frame = CGRect(x: -1512, y: 100, width: 1512, height: 982)
+    let visible = CGRect(x: -1512, y: 100, width: 1512, height: 949)
+    let band = try XCTUnwrap(ScreenGeometry.barRect(frame: frame, visibleFrame: visible, safeAreaTop: 32))
+    XCTAssertEqual(band.maxY, frame.maxY)
+    let plate = ScreenGeometry.keyedBottomMask(size: band.size, menuHeight: 33, scale: 2, flipped: true)
+    XCTAssertEqual(plate.minY * 2, 51)
+    XCTAssertEqual(plate.maxY * 2, 68)
+    XCTAssertEqual((frame.maxY - band.minY) * 2, 68)
+  }
+
   func testHiddenMenuUsesTheBandAndOneTimesScalePreservesWholeGlyphPixels() {
     let size = CGSize(width: 1512, height: 33)
     let retina = ScreenGeometry.keyedBottomMask(size: size, menuHeight: 0, scale: 2, flipped: true)
