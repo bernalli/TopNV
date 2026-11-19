@@ -10,8 +10,33 @@ static void Report(NSException *exception, NSString **reason) {
     if (reason) *reason = [NSString stringWithFormat:@"%@: %@", exception.name, exception.reason];
 }
 
-CALayer *KOCreateBackdrop(const float *values, size_t count, CGRect bounds,
-                          CGFloat contentsScale, NSString **reason) {
+// `filterWithType:` returns an object for any name: only `filterTypes` tells a known filter.
+static id MakeFilter(Class filterType, NSString *kind) {
+    SEL types = NSSelectorFromString(@"filterTypes");
+    Require([filterType respondsToSelector:types], @"CAFilter.filterTypes unavailable");
+    id known = ((id (*)(id, SEL))[filterType methodForSelector:types])(filterType, types);
+    Require([known isKindOfClass:[NSArray class]] && [known containsObject:kind],
+            [@"CAFilter does not know " stringByAppendingString:kind]);
+    SEL factory = NSSelectorFromString(@"filterWithType:");
+    Require([filterType respondsToSelector:factory], @"CAFilter.filterWithType: unavailable");
+    NSMethodSignature *signature = [filterType methodSignatureForSelector:factory];
+    Require(signature && signature.numberOfArguments == 3 &&
+            signature.methodReturnType[0] == '@' && [signature getArgumentTypeAtIndex:2][0] == '@',
+            @"CAFilter factory signature changed");
+    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
+    invocation.target = filterType;
+    invocation.selector = factory;
+    [invocation setArgument:&kind atIndex:2];
+    [invocation invoke];
+    __unsafe_unretained id returned = nil;
+    [invocation getReturnValue:&returned];
+    id filter = returned;
+    Require(filter != nil, [@"CAFilter rejected " stringByAppendingString:kind]);
+    return filter;
+}
+
+CALayer *KOCreateBackdrop(const float *values, size_t count, const double *curve, size_t curveCount,
+                          CGRect bounds, CGFloat contentsScale, NSString **reason) {
     @try {
         Require([NSThread isMainThread], @"Backdrop setup requires the main thread");
         Require(values != NULL && count == 20, @"A color matrix must have 20 floats");
@@ -19,25 +44,23 @@ CALayer *KOCreateBackdrop(const float *values, size_t count, CGRect bounds,
         Class filterType = NSClassFromString(@"CAFilter");
         Require(backdropType && [backdropType isSubclassOfClass:[CALayer class]], @"CABackdropLayer unavailable");
         Require(filterType != Nil, @"CAFilter unavailable");
-        SEL factory = NSSelectorFromString(@"filterWithType:");
-        Require([filterType respondsToSelector:factory], @"CAFilter.filterWithType: unavailable");
-        NSMethodSignature *signature = [filterType methodSignatureForSelector:factory];
-        Require(signature && signature.numberOfArguments == 3 &&
-                signature.methodReturnType[0] == '@' && [signature getArgumentTypeAtIndex:2][0] == '@',
-                @"CAFilter factory signature changed");
-        NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
-        invocation.target = filterType;
-        invocation.selector = factory;
-        NSString *kind = @"colorMatrix";
-        [invocation setArgument:&kind atIndex:2];
-        [invocation invoke];
-        __unsafe_unretained id returned = nil;
-        [invocation getReturnValue:&returned];
-        id filter = returned;
-        Require(filter != nil, @"CAFilter rejected colorMatrix");
+        Require(curve == NULL || curveCount == 4, @"A luminance curve must have 4 control values");
+        id filter = MakeFilter(filterType, @"colorMatrix");
         NSValue *matrix = [NSValue valueWithBytes:values objCType:"{CAColorMatrix=ffffffffffffffffffff}"];
         [filter setValue:matrix forKey:@"inputColorMatrix"];
         Require([[filter valueForKey:@"inputColorMatrix"] isEqual:matrix], @"Color matrix readback differs");
+        NSMutableArray *filters = [NSMutableArray arrayWithObject:filter];
+        if (curve != NULL) {
+            // The matrix leaves the same grey on the three channels and alpha 1: the curve reads
+            // that grey as luma and clamps its own output.
+            id shape = MakeFilter(filterType, @"luminanceCurveMap");
+            NSArray<NSNumber *> *controls = @[@(curve[0]), @(curve[1]), @(curve[2]), @(curve[3])];
+            [shape setValue:controls forKey:@"inputValues"];
+            [shape setValue:@1.0 forKey:@"inputAmount"];
+            Require([[shape valueForKey:@"inputValues"] isEqual:controls], @"Luminance curve readback differs");
+            Require([[shape valueForKey:@"inputAmount"] isEqual:@1.0], @"Luminance curve amount readback differs");
+            [filters addObject:shape];
+        }
 
         CALayer *layer = [backdropType layer];
         Require(layer != nil, @"CABackdropLayer allocation failed");
@@ -57,8 +80,8 @@ CALayer *KOCreateBackdrop(const float *values, size_t count, CGRect bounds,
         layer.frame = bounds;
         layer.contentsScale = contentsScale;
         layer.masksToBounds = YES;
-        layer.filters = @[filter];
-        Require(layer.filters.count == 1 && layer.filters.firstObject == filter, @"Backdrop did not retain its filter");
+        layer.filters = filters;
+        Require([layer.filters isEqual:filters], @"Backdrop did not retain its filters");
         return layer;
     } @catch (NSException *exception) {
         Report(exception, reason);
@@ -91,9 +114,10 @@ BOOL KOFlushBackdrop(NSString **reason) {
 BOOL KORecommitBackdrop(CALayer *backdrop, NSString **reason) {
     @try {
         // A fresh array makes the assignment a real change, so the flush carries it to the render server.
-        Require(backdrop.filters.count == 1, @"Backdrop lost its filter");
+        NSUInteger count = backdrop.filters.count;
+        Require(count == 1 || count == 2, @"Backdrop lost its filters");
         backdrop.filters = [NSArray arrayWithArray:backdrop.filters];
-        Require(backdrop.filters.count == 1, @"Backdrop rejected its filter");
+        Require(backdrop.filters.count == count, @"Backdrop rejected its filters");
         [CATransaction flush];
         return YES;
     } @catch (NSException *exception) {

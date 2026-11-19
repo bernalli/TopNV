@@ -23,6 +23,57 @@ final class LuminanceKeyTests: XCTestCase {
     XCTAssertEqual(LuminanceKey.revealed.blackPoint, 0.2833, accuracy: 1e-4)
   }
 
+  /// Production ships the linear key until a curve is chosen on the real menu bar.
+  func testProductionKeysHaveNoCurve() {
+    XCTAssertNil(LuminanceKey.normal.curve)
+    XCTAssertNil(LuminanceKey.revealed.curve)
+  }
+
+  func testTheCurvesAreTheFilterBezier() {
+    XCTAssertEqual(KeyCurve.soft.values, [0, 2.0 / 3.0, 1, 1])
+    XCTAssertEqual(KeyCurve.strong.values, [0, 1, 1, 1])
+    for step in 0...100 {
+      let input = Double(step) / 100
+      XCTAssertEqual(KeyCurve.soft.output(input), 1 - pow(1 - input, 2), accuracy: 1e-12)
+      XCTAssertEqual(KeyCurve.strong.output(input), 1 - pow(1 - input, 3), accuracy: 1e-12)
+    }
+  }
+
+  /// With or without a clamp between the two filters: black stays black, white stays white,
+  /// and the output never decreases with the input nor falls below the linear key.
+  func testACurveNeverGreysTheBackgroundNorDimsTheGlyphs() {
+    for curve in [KeyCurve.soft, .strong] {
+      var previous = 0.0
+      // The matrix of a candidate gives at most 0.5 + gain * cutoff = 1.13, for luma 0.
+      for step in -300...113 {
+        let input = Double(step) / 100
+        let output = curve.output(input)
+        XCTAssertEqual(output, curve.output(min(max(input, 0), 1)), accuracy: 0.02, "\(input)")
+        XCTAssertGreaterThanOrEqual(output, previous - 0.02, "\(input)")
+        XCTAssertGreaterThanOrEqual(output, min(max(input, 0), 1) - 0.02, "\(input)")
+        if input <= 0 { XCTAssertEqual(output, 0, "\(input)") }
+        previous = max(previous, output)
+      }
+    }
+  }
+
+  func testTheOutputOfAKeyWithACurve() {
+    let key = LuminanceKey.normal
+    for curve in [nil, KeyCurve.soft, .strong] {
+      func output(_ luma: Float) -> Double {
+        LuminanceKey.output(luma: luma, gain: key.gain, cutoff: key.cutoff, curve: curve)
+      }
+      XCTAssertEqual(output(key.blackPoint), 0, accuracy: 1e-5)
+      XCTAssertEqual(output(1), 0)
+      XCTAssertEqual(output(key.whitePoint), 1, accuracy: 1e-5)
+      XCTAssertGreaterThan(output(0), 0.98)
+    }
+    // A glyph at half opacity over a background at luma 0.6: luma 0.35.
+    XCTAssertEqual(LuminanceKey.output(luma: 0.35, gain: 3, cutoff: 0.21, curve: nil), 0.08, accuracy: 1e-5)
+    XCTAssertEqual(LuminanceKey.output(luma: 0.35, gain: 3, cutoff: 0.21, curve: .soft), 0.1536, accuracy: 1e-5)
+    XCTAssertEqual(LuminanceKey.output(luma: 0.35, gain: 1.9, cutoff: 0.3, curve: .soft), 0.6462, accuracy: 1e-3)
+  }
+
   func testTheMatrixKeysLumaFromTheWhitePointToTheBlackPoint() {
     for key in [LuminanceKey.normal, .revealed] {
       let matrix = key.matrix
