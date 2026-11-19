@@ -323,9 +323,6 @@ extension KeyedOverlayController {
 
   private func changesVisibleWindows(_ decision: KeyedOverlayState.Decision) -> Bool {
     if !decision.close.isEmpty { return true }
-    if let change = decision.keyChange, let entry = entries[change.windowID], entry.key != change.key {
-      return true
-    }
     return decision.gates.contains { id, shown in
       guard let window = entries[id]?.window else { return false }
       return window.alphaValue != (shown ? 1 : 0)
@@ -349,6 +346,6 @@ extension KeyedOverlayController {
       $0.displayID == id && $0.window.isOnActiveSpace && $0.window.alphaValue > 0
     }
     return PreviewBandTarget(notchWidth: screen.previewNotchWidth, bar: bar, keyed: entry?.window,
-                             backdrops: entry.map { [$0.normal, $0.revealed] } ?? [], corners: corners)
+                             backdrops: entry.map { [$0.backdrop] } ?? [], corners: corners)
   }
 }
