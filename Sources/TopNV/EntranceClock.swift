@@ -16,7 +16,7 @@ protocol EntranceTiming: AnyObject {
 @MainActor
 final class EntranceClock: NSObject, EntranceTiming {
   private static let logger = Logger(subsystem: "TopNV", category: "DesktopReturn")
-  /// Past the end by this much, the display link has stopped with its display.
+  /// Minimum time in milliseconds without a display-link tick before finishing an expired entrance.
   private static let overdueMS = 300.0
   private let display: UInt32
   private var link: CADisplayLink?
