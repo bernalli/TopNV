@@ -4,7 +4,9 @@ import QuartzCore
 import TopNVCore
 import os
 
-/// Owns only the optional keyed effect. Failure never changes the original band or corners.
+/// Owns the optional keyed effect and the samples of the window list. The same samples tell the
+/// rounded corners when the desktop is revealed, also while the effect is off or has failed.
+/// Failure of the effect never changes the original band or corners.
 @MainActor
 final class KeyedOverlayController {
   /// Both backdrops stay attached; only the one of the current key is visible.
@@ -39,6 +41,11 @@ final class KeyedOverlayController {
   private var traces: [UInt32: String] = [:]
   private var monitor: MenuBarConditionsMonitor?
   private var timer: Timer?
+  /// Displays with rounded corners, and their last visibility sent to `onCornerVisibility`.
+  private var cornerDisplays: Set<UInt32> = []
+  private var cornerVisibility: [UInt32: Bool] = [:]
+  /// Called with the visibility of the corners of every display in `cornerDisplays` when it changes.
+  var onCornerVisibility: (([UInt32: Bool]) -> Void)?
   /// Test copies only: the chosen normal key. Nil in production, for the whole session.
   private var calibration: KeyCalibration?
   private var calibrationNeedsRebuild = false
@@ -62,17 +69,24 @@ final class KeyedOverlayController {
     reconcile()
   }
 
-  func update(frames: [UInt32: CGRect], enabled: Bool, spaceChanged: Bool) {
+  private var keyedActive: Bool { enabled && !frames.isEmpty && !failed }
+  private var needsSamples: Bool { keyedActive || !cornerDisplays.isEmpty }
+
+  /// `cornerDisplays` are the displays with rounded corners; see `onCornerVisibility`.
+  func update(frames: [UInt32: CGRect], enabled: Bool, spaceChanged: Bool,
+              cornerDisplays: Set<UInt32> = []) {
     self.frames = frames
     self.enabled = enabled
-    guard !failed else { return }
-    if spaceChanged {
+    self.cornerDisplays = cornerDisplays
+    if spaceChanged && !failed {
       let now = ProcessInfo.processInfo.systemUptime
       for id in states.keys { states[id]?.spaceDidChange(now: now) }
     }
-    if enabled && !frames.isEmpty && monitor == nil {
+    if keyedActive && monitor == nil {
       monitor = MenuBarConditionsMonitor()
       monitor?.onChange = { [weak self] in self?.reconcile() }
+    }
+    if needsSamples && timer == nil {
       let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
         MainActor.assumeIsolated { self?.reconcile() }
       }
@@ -81,28 +95,33 @@ final class KeyedOverlayController {
       RunLoop.main.add(timer, forMode: .common)
     }
     reconcile()
-    if !enabled || frames.isEmpty { stopMonitoring() }
+    if !keyedActive { stopMonitoring() }
   }
 
   private func reconcile() {
-    guard !failed, !reconciling else { return }
+    guard !reconciling else { return }
     reconciling = true
     defer { reconciling = false }
-    if calibrationNeedsRebuild, !rebuildForCalibration() { return }
-
     let screens = NSScreen.screens
     let byID = Dictionary(screens.compactMap { screen -> (UInt32, NSScreen)? in
       guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
       else { return nil }
       return (id, screen)
     }, uniquingKeysWith: { first, _ in first })
+    // One copy of the window list per sample serves the keyed effect and the corners.
+    let metadata = needsSamples ? windowMetadata(screens: screens) : nil
+    if !failed { reconcileKeyed(byID: byID, metadata: metadata) }
+    updateCorners(byID: byID, metadata: metadata)
+  }
+
+  private func reconcileKeyed(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?) {
+    if calibrationNeedsRebuild, !rebuildForCalibration() { return }
     closeChangedWindows(byID: byID)
     guard !failed else { return }
     guard enabled, !frames.isEmpty else {
       states.removeAll()
       return
     }
-    let metadata = windowMetadata(screens: screens)
     let systemFullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
     for (displayID, frame) in frames.sorted(by: { $0.key < $1.key }) {
       guard let screen = byID[displayID] else { continue }
@@ -284,17 +303,39 @@ extension KeyedOverlayController {
     states.removeAll()
   }
 
+  /// The appearance monitor serves only the keyed effect; the timer stops when nothing needs samples.
   private func stopMonitoring() {
-    timer?.invalidate()
-    timer = nil
     monitor?.stop()
     monitor = nil
+    guard !needsSamples else { return }
+    timer?.invalidate()
+    timer = nil
   }
 }
 
-// MARK: - Window list
+// MARK: - Samples shared with the rounded corners
 
 extension KeyedOverlayController {
+  /// Missing or unknown evidence keeps the corners; a screen missing for a moment keeps its state.
+  private func updateCorners(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?) {
+    var visibility: [UInt32: Bool] = [:]
+    for id in cornerDisplays {
+      guard let screen = byID[id] else {
+        visibility[id] = cornerVisibility[id] ?? true
+        continue
+      }
+      visibility[id] = CornerVisibility.visible(frame: screen.frame, visibleFrame: screen.visibleFrame,
+                                                bandFrame: frames[id], windows: metadata)
+    }
+    guard visibility != cornerVisibility else { return }
+    for (id, shown) in visibility where cornerVisibility[id] != shown {
+      let line = "Rounded corners, display \(id): visible=\(shown)"
+      Self.logger.info("\(line, privacy: .public)")
+    }
+    cornerVisibility = visibility
+    onCornerVisibility?(visibility)
+  }
+
   /// Copying metadata neither captures pixels nor requests Screen Recording. Window titles
   /// are deliberately never read. The first screen defines the CG/AppKit Y-axis conversion.
   private func windowMetadata(screens: [NSScreen]) -> [MenuBarEvidence.Window]? {
