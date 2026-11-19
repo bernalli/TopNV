@@ -94,6 +94,8 @@ public struct KeyedOverlayState {
   }
 
   private mutating func updateSlideTiming(_ input: Input) {
+    // A sample without a usable clock neither starts nor ends a slide.
+    guard input.now.isFinite else { return }
     if input.spaceSliding {
       // Only consecutive sliding samples establish motion. An isolated pulse followed by a
       // short gap can be a flickering signal, so require the full quiet interval after it.

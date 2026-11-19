@@ -26,4 +26,48 @@ final class SlideTimingTests: XCTestCase {
     // 11:00:05.834 to 11:00:10.231, including the gate loss at 11:00:09.430.
     assertGateStaysOn(slides: [0..<44])
   }
+
+  private func sample(_ state: inout KeyedOverlayState, now: Double, sliding: Bool, menu: Bool)
+    -> KeyedOverlayState.Decision {
+    state.update(.init(activeWindowIDs: [1], appearance: .light, context: .desktop,
+                       menuVisible: menu, enabled: true, now: now, spaceSliding: sliding))
+  }
+
+  /// A stuck signal that drops one or two samples in a row is still one slide, whatever the
+  /// length of its runs: only a real rest starts a new measure.
+  func testAStuckSignalWithShortDropoutsIsBoundedForEveryRunLength() throws {
+    for run in 1...8 {
+      for dropout in 1...2 {
+        var state = KeyedOverlayState()
+        _ = sample(&state, now: 10, sliding: false, menu: true)
+        var hiddenAt: Double?
+        for step in 0..<100 {
+          let time = 20 + 0.1 * Double(step)
+          let result = sample(&state, now: time, sliding: step % (run + dropout) < run, menu: false)
+          if result.gates[1] == false, hiddenAt == nil { hiddenAt = time }
+        }
+        XCTAssertLessThanOrEqual(try XCTUnwrap(hiddenAt, "run \(run) dropout \(dropout)"), 25.51,
+                                 "run \(run) dropout \(dropout)")
+      }
+    }
+  }
+
+  /// A sliding sample whose clock is not finite must neither leave the next slide without
+  /// protection nor remove its cap.
+  func testANonFiniteClockWhileSlidingLeavesTheNextSlideProtectedAndBounded() throws {
+    for bad in [Double.nan, .infinity, -.infinity] {
+      var state = KeyedOverlayState()
+      _ = sample(&state, now: 10, sliding: false, menu: true)
+      _ = sample(&state, now: bad, sliding: true, menu: true)
+      _ = sample(&state, now: 20, sliding: false, menu: true)
+      var hiddenAt: Double?
+      for step in 1..<100 {
+        let time = 20 + 0.1 * Double(step)
+        if sample(&state, now: time, sliding: true, menu: false).gates[1] == false, hiddenAt == nil {
+          hiddenAt = time
+        }
+      }
+      XCTAssertEqual(try XCTUnwrap(hiddenAt, "\(bad)"), 25.6, accuracy: 0.11, "\(bad)")
+    }
+  }
 }
