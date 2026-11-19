@@ -3,10 +3,6 @@ import CoreGraphics
 import Foundation
 
 /// Public, title-free window metadata. All rectangles use AppKit's global coordinates.
-/// Public metadata cannot tell a zoomed desktop window from a full-screen window that stays
-/// below the camera housing: with the Dock hidden or at a side both have the same bounds. That
-/// full-screen layout shows a black strip, which the appearance gate reports as dark, so only
-/// a window that reaches the top edge is taken as evidence here.
 public enum MenuBarEvidence {
   public enum Owner { case windowServer, desktop, ownApp, application }
 
@@ -20,20 +16,24 @@ public enum MenuBarEvidence {
     /// Owned by `WindowManager`. Such a window is also a `.desktop` window, never evidence of a
     /// full-screen app; at a layer of zero or more it can reveal the desktop.
     public let isWindowManager: Bool
+    public let isFrontmostApp: Bool
     public let alpha: Double
 
     public init(owner: Owner, layer: Int, bounds: CGRect, isWindowManager: Bool = false,
-                alpha: Double = 1) {
+                alpha: Double = 1, isFrontmostApp: Bool = false) {
       self.owner = owner
       self.layer = layer
       self.bounds = bounds
       self.isWindowManager = isWindowManager
       self.alpha = alpha
+      self.isFrontmostApp = isFrontmostApp
     }
   }
 
   public struct Result {
     public let context: KeyedOverlayState.Context
+    /// The active app is in native full screen and has a matching window on this display.
+    public let nativeFullScreen: Bool
     public let menuVisible: Bool
     /// Show Desktop or a click on the wallpaper: the backdrop under the menu bar is darker.
     public let desktopRevealed: Bool
@@ -47,7 +47,7 @@ public enum MenuBarEvidence {
   /// incomplete evidence is never permission to create. A window without an owner name is a
   /// plain application window, which can only suppress the effect.
   public static func windows(from list: [[String: Any]], ownPID: Int32,
-                             primaryScreenHeight: CGFloat) -> [Window]? {
+                             frontmostPID: Int32? = nil, primaryScreenHeight: CGFloat) -> [Window]? {
     guard primaryScreenHeight.isFinite, primaryScreenHeight > 0 else { return nil }
     var result: [Window] = []
     result.reserveCapacity(list.count)
@@ -91,16 +91,17 @@ public enum MenuBarEvidence {
       // Quartz measures from the top of the primary screen, AppKit from its bottom.
       result.append(Window(owner: owner, layer: Int(layer),
                            bounds: CGRect(x: x, y: minY, width: width, height: height),
-                           isWindowManager: pid != ownPID && name == "WindowManager", alpha: alpha))
+                           isWindowManager: pid != ownPID && name == "WindowManager", alpha: alpha,
+                           isFrontmostApp: owner == .application && pid == frontmostPID))
     }
     return result
   }
 
   public static func evaluate(frame: CGRect, visibleFrame: CGRect, bandFrame: CGRect,
-                              windows: [Window]?) -> Result {
+                              windows: [Window]?, systemFullScreen: Bool = false) -> Result {
     guard let windows, valid(frame), valid(visibleFrame), valid(bandFrame),
           frame.contains(visibleFrame), frame.contains(bandFrame) else {
-      return Result(context: .unknown, menuVisible: false, desktopRevealed: false,
+      return Result(context: .unknown, nativeFullScreen: false, menuVisible: false, desktopRevealed: false,
                     spaceSliding: false)
     }
     let tolerance: CGFloat = 2
@@ -122,6 +123,14 @@ public enum MenuBarEvidence {
         && $0.bounds.intersection(frame).width >= frame.width * 0.4
         && $0.bounds.minY <= frame.minY + tolerance
         && $0.bounds.maxY >= bandFrame.maxY - tolerance
+    }
+    // Native full screen can split one app into several surfaces below the camera housing.
+    // A zoomed desktop window with a hidden Dock can reach the same bottom edge.
+    let nativeFullScreen = systemFullScreen && windows.contains {
+      $0.isFrontmostApp && $0.owner == .application && $0.layer == 0 && $0.alpha > 0 && valid($0.bounds)
+        && abs($0.bounds.minY - frame.minY) <= tolerance
+        && $0.bounds.intersection(frame).height > 0
+        && $0.bounds.intersection(frame).width >= frame.width * 0.4
     }
     let noReservedTop = visibleFrame.maxY >= frame.maxY - tolerance
     // Show Desktop and a click on the wallpaper add a WindowManager window from the bottom edge
@@ -146,7 +155,8 @@ public enum MenuBarEvidence {
         && abs($0.bounds.maxY - frame.maxY) <= tolerance
         && $0.bounds.intersection(frame).width > tolerance
     }
-    return Result(context: coveringApp || noReservedTop ? .fullScreen : .desktop,
+    return Result(context: nativeFullScreen || coveringApp || noReservedTop ? .fullScreen : .desktop,
+                  nativeFullScreen: nativeFullScreen,
                   menuVisible: menuVisible, desktopRevealed: desktopRevealed,
                   spaceSliding: spaceSliding)
   }

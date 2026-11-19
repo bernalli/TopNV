@@ -122,9 +122,11 @@ final class KeyedOverlayController {
       states.removeAll()
       return
     }
+    let systemFullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
     for (displayID, frame) in frames.sorted(by: { $0.key < $1.key }) {
       guard let screen = byID[displayID] else { continue }
-      reconcile(displayID: displayID, frame: frame, screen: screen, metadata: metadata)
+      reconcile(displayID: displayID, frame: frame, screen: screen, metadata: metadata,
+                systemFullScreen: systemFullScreen)
       guard !failed else { return }
     }
   }
@@ -147,9 +149,9 @@ final class KeyedOverlayController {
   }
 
   private func reconcile(displayID: UInt32, frame: CGRect, screen: NSScreen,
-                         metadata: [MenuBarEvidence.Window]?) {
+                         metadata: [MenuBarEvidence.Window]?, systemFullScreen: Bool) {
     let evidence = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame,
-                                            bandFrame: frame, windows: metadata)
+                                            bandFrame: frame, windows: metadata, systemFullScreen: systemFullScreen)
     var state = states[displayID] ?? KeyedOverlayState()
     let active = entries.compactMap { id, entry in
       entry.displayID == displayID && entry.window.isOnActiveSpace ? id : nil
@@ -159,15 +161,16 @@ final class KeyedOverlayController {
       activeWindowIDs: active, appearance: appearance,
       context: evidence.context, menuVisible: evidence.menuVisible, enabled: enabled,
       now: ProcessInfo.processInfo.systemUptime, desktopRevealed: evidence.desktopRevealed,
-      spaceSliding: evidence.spaceSliding))
+      spaceSliding: evidence.spaceSliding, nativeFullScreen: evidence.nativeFullScreen))
     states[displayID] = state
     // The gate of the active window makes the trace enough to follow a Space switch.
     let gate = active.min().flatMap { state.visibility[$0] }.map { "\($0)" } ?? "none"
     let trace = "appearance=\(appearance) context=\(evidence.context) "
       + "menu=\(evidence.menuVisible) revealed=\(evidence.desktopRevealed) "
+      + "systemFullScreen=\(systemFullScreen) nativeFullScreen=\(evidence.nativeFullScreen) "
       + "sliding=\(evidence.spaceSliding) gate=\(gate) "
       + "list=\(metadata != nil) active=\(active.count) "
-      + "windows=\(entries.count) create=\(decision.create != nil)"
+      + "windows=\(entries.count) close=\(decision.close.count) create=\(decision.create != nil)"
     if traces[displayID] != trace {
       traces[displayID] = trace
       Self.logger.info("Keyed menu bar, display \(displayID, privacy: .public): \(trace, privacy: .public)")
@@ -186,7 +189,11 @@ final class KeyedOverlayController {
       create(displayID: displayID, frame: frame, screen: screen, key: key, reservation: reservation)
     }
   }
+}
 
+// MARK: - Keyed window lifecycle
+
+extension KeyedOverlayController {
   /// Closes every keyed window for a new calibration. False when closing disabled the effect.
   private func rebuildForCalibration() -> Bool {
     calibrationNeedsRebuild = false
@@ -335,6 +342,7 @@ extension KeyedOverlayController {
           let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID)
             as? [[String: Any]] else { return nil }
     return MenuBarEvidence.windows(from: list, ownPID: ProcessInfo.processInfo.processIdentifier,
+                                   frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
                                    primaryScreenHeight: primary.frame.maxY)
   }
 }

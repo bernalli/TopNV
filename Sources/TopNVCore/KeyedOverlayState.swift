@@ -16,10 +16,11 @@ public struct KeyedOverlayState {
     public let desktopRevealed: Bool
     /// The desktop of the display slides in a Space switch: the samples mix two Spaces.
     public let spaceSliding: Bool
+    public let nativeFullScreen: Bool
 
     public init(activeWindowIDs: [Int], appearance: Appearance, context: Context,
                 menuVisible: Bool, enabled: Bool, now: Double, desktopRevealed: Bool = false,
-                spaceSliding: Bool = false) {
+                spaceSliding: Bool = false, nativeFullScreen: Bool = false) {
       self.activeWindowIDs = activeWindowIDs
       self.appearance = appearance
       self.context = context
@@ -28,6 +29,7 @@ public struct KeyedOverlayState {
       self.now = now
       self.desktopRevealed = desktopRevealed
       self.spaceSliding = spaceSliding
+      self.nativeFullScreen = nativeFullScreen
     }
   }
 
@@ -100,7 +102,6 @@ public struct KeyedOverlayState {
       slidingSince = nil
     }
     let active = Set(input.activeWindowIDs).sorted()
-    let keeper = active.first
     if let departureCandidate, input.now >= settleUntil {
       // A notification plus the settled departure of its confirmed window is
       // evidence of another visit. A transient membership drop alone is not.
@@ -111,10 +112,14 @@ public struct KeyedOverlayState {
       }
       self.departureCandidate = nil
     }
-    lastActive = keeper
-    result.close = Array(active.dropFirst())
-    for id in result.close { visibility[id] = nil }
     let settled = input.now >= settleUntil
+    // Only a settled native full-screen Space relinquishes its last keyed window.
+    // On a desktop a covering borderless window can come and go without spending a creation.
+    let closeAll = settled && input.context == .fullScreen && input.nativeFullScreen
+    let keeper = closeAll ? nil : active.first
+    lastActive = keeper
+    result.close = active.filter { $0 != keeper }
+    for id in result.close { visibility[id] = nil }
     let show = input.enabled && input.appearance == .light
       && input.context == .desktop && input.menuVisible
     if let keeper {
