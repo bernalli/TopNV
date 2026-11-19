@@ -18,6 +18,8 @@ final class OverlayController: NSObject {
   private let keyedOverlay: KeyedOverlayController
   private var barWindows: [UInt32: OverlayWindow] = [:]
   private var windows: [String: OverlayWindow] = [:]
+  /// Displays whose desktop is revealed: their corner windows are transparent meanwhile.
+  private var hiddenCornerDisplays: Set<UInt32> = []
   private var pendingScreenRebuild: Task<Void, Never>?
   private var pendingSettingsRebuild: Task<Void, Never>?
   private var settingsSubscription: AnyCancellable?
@@ -35,6 +37,9 @@ final class OverlayController: NSObject {
   }
 
   func start() {
+    keyedOverlay.onCornerVisibility = { [weak self] visibility in
+      self?.cornerVisibilityDidChange(visibility)
+    }
     NotificationCenter.default.addObserver(
       self, selector: #selector(systemDidChange(_:)),
       name: NSApplication.didChangeScreenParametersNotification, object: nil)
@@ -116,26 +121,25 @@ final class OverlayController: NSObject {
       }
     }
 
+    let cornerDisplays = Set(screens.compactMap { screen -> UInt32? in
+      guard let displayID = screen.displayID, wantsCorners(on: displayID) else { return nil }
+      return displayID
+    })
     keyedOverlay.update(frames: bandState.frames, enabled: settings.hideNotch,
-                        spaceChanged: event == .spaceChanged)
+                        spaceChanged: event == .spaceChanged, cornerDisplays: cornerDisplays)
 
     var desiredKeys: Set<String> = []
 
     for screen in screens {
-      guard let displayID = screen.displayID else { continue }
-
-      let wantsCorners =
-        settings.roundCorners
-        && (settings.cornersOnAllDisplays || CGDisplayIsBuiltin(displayID) != 0)
-      if wantsCorners {
-        let rects = ScreenGeometry.cornerRects(
-          frame: screen.frame, radius: ScreenGeometry.cornerRadius,
-          topInset: bandState.frames[displayID]?.height ?? 0)
-        for (corner, rect) in rects {
-          let key = "\(displayID).\(corner.rawValue)"
-          desiredKeys.insert(key)
-          show(key: key, frame: rect) { CornerWindow(corner: corner, frame: rect) }
-        }
+      guard let displayID = screen.displayID, cornerDisplays.contains(displayID) else { continue }
+      let rects = ScreenGeometry.cornerRects(
+        frame: screen.frame, radius: ScreenGeometry.cornerRadius,
+        topInset: bandState.frames[displayID]?.height ?? 0)
+      for (corner, rect) in rects {
+        let key = "\(displayID).\(corner.rawValue)"
+        desiredKeys.insert(key)
+        show(key: key, frame: rect) { CornerWindow(corner: corner, frame: rect) }
+        windows[key]?.alphaValue = hiddenCornerDisplays.contains(displayID) ? 0 : 1
       }
     }
 
@@ -146,6 +150,20 @@ final class OverlayController: NSObject {
       windows[key]?.orderOut(nil)
       windows[key]?.close()
       windows[key] = nil
+    }
+  }
+
+  private func wantsCorners(on displayID: CGDirectDisplayID) -> Bool {
+    settings.roundCorners && (settings.cornersOnAllDisplays || CGDisplayIsBuiltin(displayID) != 0)
+  }
+
+  /// While the desktop of a display is revealed its corners turn transparent, as they disappear
+  /// in Mission Control. They are neither closed nor created again.
+  private func cornerVisibilityDidChange(_ visibility: [UInt32: Bool]) {
+    hiddenCornerDisplays = Set(visibility.compactMap { $0.value ? nil : $0.key })
+    for (key, window) in windows {
+      let hidden = hiddenCornerDisplays.contains { key.hasPrefix("\($0).") }
+      window.alphaValue = hidden ? 0 : 1
     }
   }
 
