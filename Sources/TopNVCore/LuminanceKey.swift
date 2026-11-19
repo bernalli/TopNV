@@ -1,29 +1,9 @@
-/// Luminance keys `clamp(0.5 + gain * (cutoff - Y))` on BT.709 luma for the keyed menu bar.
-/// On a light wallpaper macOS draws two different backdrops under the menu bar, and no single
-/// linear key fits both:
-/// - normal: the menu bar backdrop under nearly black glyphs. Black from Y 0.3767 and white up
-///   to Y 0.0433: the bar is black and the icons stay sharp. Calibrated by eye on the real menu
-///   bar (18-11) with the calibration menu of a test copy. Screenshots do not contain the keyed
-///   layer and do not show the backdrop of the render server, which is darker than they suggest:
-///   a key measured on them (black from Y 0.7325) left the bar grey.
-/// - revealed: Show Desktop or a click on the wallpaper darkens the backdrop to Y about 0.32.
-///   A steeper key, black from Y 0.2833, keeps that background black.
-public enum LuminanceKey: Sendable {
-  case normal, revealed
-
-  public var gain: Float {
-    switch self {
-    case .normal: return 3
-    case .revealed: return 6
-    }
-  }
-
-  public var cutoff: Float {
-    switch self {
-    case .normal: return 0.21
-    case .revealed: return 0.2
-    }
-  }
+/// The normal menu bar key, calibrated by eye on the render server backdrop. Screenshots
+/// omit the keyed layer and make the backdrop appear lighter than it is.
+public struct LuminanceKey: Sendable {
+  public static let normal = Self(gain: 3, cutoff: 0.21)
+  public let gain: Float
+  public let cutoff: Float
 
   /// Luma at and above which the output is black.
   public var blackPoint: Float { cutoff + 0.5 / gain }
@@ -37,10 +17,5 @@ public enum LuminanceKey: Sendable {
   public static func matrix(gain: Float, cutoff: Float) -> [Float] {
     let row: [Float] = [-gain * 0.2126, -gain * 0.7152, -gain * 0.0722, 0, 0.5 + gain * cutoff]
     return row + row + row + [0, 0, 0, 0, 1]
-  }
-
-  /// The revealed desktop has its own key; everything else uses the normal one.
-  public static func choose(desktopRevealed: Bool) -> LuminanceKey {
-    desktopRevealed ? .revealed : .normal
   }
 }

@@ -265,7 +265,6 @@ final class SpaceSlidingTests: XCTestCase {
                                           menu: false, time: 20 + 0.1 * Double(step), sliding: true))
           XCTAssertEqual(result.gates, [:])
           XCTAssertNil(result.create)
-          XCTAssertNil(result.keyChange)
         }
         XCTAssertEqual(state.visibility, [1: true])
       }
@@ -519,11 +518,9 @@ final class SpaceSlidingTests: XCTestCase {
           // Turning the option off is certain even while two Spaces mix.
           XCTAssertEqual(result.gates, [keeper: false])
           XCTAssertNil(result.create)
-          XCTAssertNil(result.keyChange)
         } else if now < frozenUntil {
           XCTAssertTrue(result.gates.isEmpty)
           XCTAssertNil(result.create)
-          XCTAssertNil(result.keyChange)
         } else if let keeper = distinct.first {
           XCTAssertEqual(result.gates, [keeper: allPositive])
         }

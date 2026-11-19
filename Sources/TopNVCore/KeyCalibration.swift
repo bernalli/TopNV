@@ -41,7 +41,7 @@ public struct KeyCalibration: Equatable, Sendable {
   }
 
   /// The matrix of the normal key: the chosen candidate, without a calibration the production
-  /// key. The revealed key is never calibrated.
+  /// key.
   public static func normalMatrix(_ calibration: KeyCalibration?) -> [Float] {
     guard let calibration else { return LuminanceKey.normal.matrix }
     return LuminanceKey.matrix(gain: calibration.gain, cutoff: calibration.cutoff)

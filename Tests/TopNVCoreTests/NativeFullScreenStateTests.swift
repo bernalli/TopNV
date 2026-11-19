@@ -125,7 +125,6 @@ final class NativeFullScreenStateTests: XCTestCase {
     if model.closesAll {
       XCTAssertEqual(result.close, distinct)
       XCTAssertTrue(result.gates.isEmpty)
-      XCTAssertNil(result.keyChange)
       XCTAssertNil(result.create)
       // Only windows committed in this visit are refunded, at most one creation each. A
       // confirmed departure in the same sample can already have emptied the count.

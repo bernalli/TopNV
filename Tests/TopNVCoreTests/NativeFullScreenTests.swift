@@ -46,7 +46,6 @@ final class NativeFullScreenTests: XCTestCase {
     XCTAssertEqual(decision.close.sorted(), [8, 9])
     XCTAssertEqual(state.visibility, [7: true])
     XCTAssertTrue(decision.gates.isEmpty)
-    XCTAssertNil(decision.keyChange)
     XCTAssertNil(update(&state, evidence, active: []).create)
   }
 

@@ -1,5 +1,6 @@
 /// Decisions for a single display. Space membership is supplied by NSWindow, never guessed
-/// from a Space number. Inactive windows retain their last gate while the desktop slides.
+/// from a Space number. Inactive windows retain their last gate while the desktop slides,
+/// except while Show Desktop masks the display.
 /// `forget` does not return a creation to the visit budget: an adapter that closes windows
 /// for its own reasons (option off, new geometry) starts again from a new value. Only the
 /// windows this value closes in a native full-screen Space return their creations.
@@ -43,22 +44,25 @@ public struct KeyedOverlayState {
     public var close: [Int] = []
     public var gates: [Int: Bool] = [:]
     public var create: Reservation?
-    public fileprivate(set) var keyChange: (windowID: Int, key: LuminanceKey)?
   }
 
   public private(set) var visibility: [Int: Bool] = [:]
   public private(set) var creationsThisVisit = 0
   private var committedThisVisit: Set<Int> = []
+  /// Windows visible before Show Desktop can return even during Space settling.
+  private var resumeAfterReveal: Set<Int> = []
   private var generation: UInt64 = 0
   private var serial: UInt64 = 0
   private var pending: Reservation?
   private var lastActive: Int?
   private var departureCandidate: Int?
   private var nextCreation = 0.0
+  private var membershipGraceUntil = 0.0
   private var settleUntil = 0.0
   private var slidingSince: Double?
   private var slideResetAt = 0.0
   private var previousSampleSliding = false
+  private static let creationRetryTime = 0.5
   /// The evidence is trusted again this long after a notification or the last sliding sample.
   private static let settleTime = 0.5
   /// At 10 Hz a single missed sample is common, but measured pauses between slides last 0.3 s.
@@ -72,6 +76,7 @@ public struct KeyedOverlayState {
   /// on the original deadline.
   public mutating func resetForWindowReplacement() {
     visibility.removeAll()
+    resumeAfterReveal.removeAll()
     creationsThisVisit = 0
     committedThisVisit.removeAll()
     generation &+= 1
@@ -79,6 +84,7 @@ public struct KeyedOverlayState {
     lastActive = nil
     departureCandidate = nil
     nextCreation = 0
+    membershipGraceUntil = 0
   }
 
   /// Notifications alone are not proof of a new visit. In particular, repeated notifications
@@ -86,6 +92,7 @@ public struct KeyedOverlayState {
   public mutating func spaceDidChange(now: Double) {
     generation &+= 1
     pending = nil
+    guard now.isFinite else { return }
     if departureCandidate == nil, let lastActive { departureCandidate = lastActive }
     settleUntil = now + Self.settleTime
     // The notification ends a slide: the next one is measured from its own first sample.
@@ -115,18 +122,17 @@ public struct KeyedOverlayState {
     var result = Decision()
     updateSlideTiming(input)
     let active = Set(input.activeWindowIDs).sorted()
-    if let departureCandidate, input.now >= settleUntil {
-      // A notification plus the settled departure of its confirmed window is
-      // evidence of another visit. A transient membership drop alone is not.
-      if !active.contains(departureCandidate) {
-        creationsThisVisit = 0
-        committedThisVisit.removeAll()
-        generation &+= 1
-        pending = nil
-      }
-      self.departureCandidate = nil
+    let settled = input.now.isFinite && input.now >= settleUntil
+    // A notification plus the settled departure of its confirmed window is
+    // evidence of another visit. A transient membership drop alone is not.
+    let confirmedDeparture = settled && departureCandidate.map { !active.contains($0) } == true
+    if confirmedDeparture {
+      creationsThisVisit = 0
+      committedThisVisit.removeAll()
+      generation &+= 1
+      pending = nil
     }
-    let settled = input.now >= settleUntil
+    if settled { departureCandidate = nil }
     // Only a settled native full-screen Space relinquishes its last keyed window.
     // On a desktop a covering borderless window can come and go without spending a creation.
     let closeAll = settled && input.context == .fullScreen && input.nativeFullScreen
@@ -134,35 +140,68 @@ public struct KeyedOverlayState {
     lastActive = keeper
     result.close = active.filter { $0 != keeper }
     for id in result.close {
+      resumeAfterReveal.remove(id)
       visibility[id] = nil
       let wasCharged = committedThisVisit.remove(id) != nil
       if closeAll && wasCharged { creationsThisVisit -= 1 }
     }
     let show = input.enabled && input.appearance == .light
-      && input.context == .desktop && input.menuVisible
+      && input.context == .desktop && input.menuVisible && !input.desktopRevealed
+    result.gates = gatesForReveal(keeper: keeper, revealed: input.desktopRevealed,
+                                  canRestore: show && input.now.isFinite)
+    if confirmedDeparture || keeper != nil {
+      membershipGraceUntil = 0
+    } else if result.gates.values.contains(true) {
+      // Restored windows may briefly report no active membership. Let membership catch up
+      // before reserving another window, using the same interval as creation retries.
+      membershipGraceUntil = input.now + Self.creationRetryTime
+    }
     if let keeper {
-      // While the evidence settles after a Space change the window keeps the gate it had
-      // when its Space was last active. Hiding it here turns the bar grey after every switch.
-      if settled || !input.enabled {
-        visibility[keeper] = show
-        result.gates[keeper] = show
-        if show {
-          result.keyChange = (keeper, LuminanceKey.choose(desktopRevealed: input.desktopRevealed))
-        }
+      if let gate = gate(for: keeper, input: input, settled: settled, show: show) {
+        result.gates[keeper] = gate
       }
       pending = nil
     } else if settled && show && pending == nil && creationsThisVisit < 3
-      && input.now >= nextCreation {
+      && input.now >= nextCreation && input.now >= membershipGraceUntil {
       creationsThisVisit += 1
       serial &+= 1
       let reservation = Reservation(generation: generation, serial: serial)
       pending = reservation
       result.create = reservation
-      nextCreation = input.now + 0.5
+      nextCreation = input.now + Self.creationRetryTime
     } else if !show {
       pending = nil
     }
+    visibility.merge(result.gates) { _, shown in shown }
     return result
+  }
+
+  /// Both Spaces can still draw during a slide even when only one reports active membership.
+  /// The keeper's gate is reconciled separately against the current Space's evidence.
+  private mutating func gatesForReveal(keeper: Int?, revealed: Bool, canRestore: Bool) -> [Int: Bool] {
+    var gates: [Int: Bool] = [:]
+    if revealed {
+      for (id, shown) in visibility where shown {
+        resumeAfterReveal.insert(id)
+        gates[id] = false
+      }
+    } else if canRestore {
+      for id in resumeAfterReveal where id != keeper {
+        resumeAfterReveal.remove(id)
+        gates[id] = true
+      }
+    }
+    return gates
+  }
+
+  /// Space changes freeze the last gate. Show Desktop may mask it immediately, but only
+  /// a window that was visible before the reveal may resume before settling.
+  private mutating func gate(for keeper: Int, input: Input, settled: Bool, show: Bool) -> Bool? {
+    if input.desktopRevealed && input.enabled { return false }
+    let resume = show && input.now.isFinite && resumeAfterReveal.contains(keeper)
+    guard settled || !input.enabled || resume else { return nil }
+    resumeAfterReveal.remove(keeper)
+    return show
   }
 
   /// A creation can complete only once and only in the visit that reserved it. The adapter
@@ -176,6 +215,7 @@ public struct KeyedOverlayState {
   }
 
   public mutating func forget(_ windowID: Int) {
+    resumeAfterReveal.remove(windowID)
     committedThisVisit.remove(windowID)
     visibility[windowID] = nil
   }

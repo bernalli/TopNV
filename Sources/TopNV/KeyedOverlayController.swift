@@ -4,32 +4,18 @@ import QuartzCore
 import TopNVCore
 import os
 
-/// Owns the optional keyed effect and the samples of the window list. The same samples tell the
-/// rounded corners when the desktop is revealed, also while the effect is off or has failed.
-/// Failure of the effect never changes the original band or corners.
+/// Samples the window list for the keyed effect, base band and corners of each display.
 @MainActor
 final class KeyedOverlayController {
-  /// Both backdrops stay attached; only the one of the current key is visible.
   private struct Entry {
     let window: OverlayWindow
-    let normal: CALayer
-    let revealed: CALayer
+    let backdrop: CALayer
     let displayID: UInt32
     let scale: CGFloat
-    var key: LuminanceKey
   }
 
-  /// No single linear key fits both backdrops macOS draws under the menu bar (`LuminanceKey`).
-  private enum Key {
-    /// Backdrop of the menu bar: black from Y 0.3767, white up to Y 0.0433, calibrated by eye.
-    /// A test copy uses its `KeyCalibration`.
-    static let normal = LuminanceKey.normal
-    /// Darker backdrop while the desktop is revealed (Y about 0.32): black from Y 0.2833.
-    static let revealed = LuminanceKey.revealed
-    /// Black points over the bottom of the menu bar, where its background is below the key.
-    static let maskHeight: CGFloat = 7
-  }
-
+  /// Points at the bottom of the menu bar where its background is below the key.
+  private static let maskHeight: CGFloat = 7
   private static let logger = Logger(subsystem: "TopNV", category: "KeyedOverlay")
   private var entries: [Int: Entry] = [:]
   private var states: [UInt32: KeyedOverlayState] = [:]
@@ -41,11 +27,11 @@ final class KeyedOverlayController {
   private var traces: [UInt32: String] = [:]
   private var monitor: MenuBarConditionsMonitor?
   private var timer: Timer?
-  /// Displays with rounded corners, and their last visibility sent to `onCornerVisibility`.
-  private var cornerDisplays: Set<UInt32> = []
-  private var cornerVisibility: [UInt32: Bool] = [:]
-  /// Called with the visibility of the corners of every display in `cornerDisplays` when it changes.
-  var onCornerVisibility: (([UInt32: Bool]) -> Void)?
+  /// Displays with a base band or corners, even if the optional keyed effect fails.
+  private var sampledDisplays: Set<UInt32> = []
+  private var desktopOverlayVisibility: [UInt32: Bool] = [:]
+  /// Visibility of the base band and corners on each sampled display.
+  var onDesktopOverlayVisibility: (([UInt32: Bool]) -> Void)?
   /// Test copies restore preview layers before the ordinary keyed effect updates its windows.
   var onPreviewInvalidated: ((UInt32) -> Void)?
   /// Test copies only: the chosen normal key. Nil in production, for the whole session.
@@ -72,14 +58,13 @@ final class KeyedOverlayController {
   }
 
   private var keyedActive: Bool { enabled && !frames.isEmpty && !failed }
-  private var needsSamples: Bool { keyedActive || !cornerDisplays.isEmpty }
+  private var needsSamples: Bool { !sampledDisplays.isEmpty }
 
-  /// `cornerDisplays` are the displays with rounded corners; see `onCornerVisibility`.
   func update(frames: [UInt32: CGRect], enabled: Bool, spaceChanged: Bool,
               cornerDisplays: Set<UInt32> = []) {
     self.frames = frames
     self.enabled = enabled
-    self.cornerDisplays = cornerDisplays
+    self.sampledDisplays = cornerDisplays.union(frames.keys)
     if spaceChanged && !failed {
       let now = ProcessInfo.processInfo.systemUptime
       for id in states.keys { states[id]?.spaceDidChange(now: now) }
@@ -110,10 +95,10 @@ final class KeyedOverlayController {
       else { return nil }
       return (id, screen)
     }, uniquingKeysWith: { first, _ in first })
-    // One copy of the window list per sample serves the keyed effect and the corners.
+    // One copy of the window list per sample serves all overlays.
     let metadata = needsSamples ? windowMetadata(screens: screens) : nil
     if !failed { reconcileKeyed(byID: byID, metadata: metadata) }
-    updateCorners(byID: byID, metadata: metadata)
+    updateDesktopOverlayVisibility(byID: byID, metadata: metadata)
   }
 
   private func reconcileKeyed(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?) {
@@ -181,16 +166,11 @@ final class KeyedOverlayController {
     }
     for id in decision.close { close(id) }
     guard !failed else { return }
-    if let change = decision.keyChange {
-      show(change.key, on: change.windowID)
-    }
-    guard !failed else { return }
     for (id, shown) in decision.gates {
       entries[id]?.window.alphaValue = shown ? 1 : 0
     }
     if let reservation = decision.create {
-      let key = LuminanceKey.choose(desktopRevealed: evidence.desktopRevealed)
-      create(displayID: displayID, frame: frame, screen: screen, key: key, reservation: reservation)
+      create(displayID: displayID, frame: frame, screen: screen, reservation: reservation)
     }
   }
 }
@@ -207,17 +187,14 @@ extension KeyedOverlayController {
     return true
   }
 
-  private func create(displayID: UInt32, frame: CGRect, screen: NSScreen, key: LuminanceKey,
+  private func create(displayID: UInt32, frame: CGRect, screen: NSScreen,
                       reservation: KeyedOverlayState.Reservation) {
     guard !failed else { return }
     let scale = screen.backingScaleFactor
     let bounds = CGRect(origin: .zero, size: frame.size)
     var reason: NSString?
-    guard let normal = Self.backdrop(normalMatrix, bounds: bounds, scale: scale, reason: &reason),
-          let revealed = Self.backdrop(Key.revealed.matrix, bounds: bounds, scale: scale, reason: &reason)
+    guard let backdrop = Self.backdrop(normalMatrix, bounds: bounds, scale: scale, reason: &reason)
     else { disable(reason); return }
-    normal.isHidden = key != Key.normal
-    revealed.isHidden = key != Key.revealed
 
     let window = OverlayWindow(frame: frame, level: .init(rawValue: 26), isOpaque: false,
                                behavior: OverlayBehavior.keyed)
@@ -230,7 +207,7 @@ extension KeyedOverlayController {
     // The band can be a point taller than the menu bar: the mask is measured from the bar.
     let menuBarHeight = screen.frame.maxY - screen.visibleFrame.maxY
     let below = menuBarHeight > 0 ? min(max(frame.height - menuBarHeight, 0), 1) : 0
-    let maskHeight = Key.maskHeight + below
+    let maskHeight = Self.maskHeight + below
     let mask = CALayer()
     mask.frame = CGRect(x: 0, y: root.isGeometryFlipped ? frame.height - maskHeight : 0,
                         width: frame.width, height: maskHeight)
@@ -242,10 +219,8 @@ extension KeyedOverlayController {
     // Own the resource before a private operation can fail.
     let id = window.windowNumber
     guard id > 0 else { window.close(); disable("overlay window has no number"); return }
-    entries[id] = Entry(window: window, normal: normal, revealed: revealed, displayID: displayID,
-                        scale: scale, key: key)
-    guard KOAttachBackdrop(root, normal, &reason), KOAttachBackdrop(root, revealed, &reason)
-    else { disable(reason); return }
+    entries[id] = Entry(window: window, backdrop: backdrop, displayID: displayID, scale: scale)
+    guard KOAttachBackdrop(root, backdrop, &reason) else { disable(reason); return }
     guard states[displayID]?.commit(reservation, windowID: id) == true else { close(id); return }
     window.orderFrontRegardless()
     window.displayIfNeeded()
@@ -257,7 +232,7 @@ extension KeyedOverlayController {
           guard let self, !self.failed, let window,
                 let entry = self.entries[id], entry.window === window else { return }
           var reason: NSString?
-          if !KORecommitBackdrop(entry.normal, &reason) || !KORecommitBackdrop(entry.revealed, &reason) {
+          if !KORecommitBackdrop(entry.backdrop, &reason) {
             self.disable(reason)
           }
         }
@@ -272,29 +247,14 @@ extension KeyedOverlayController {
     }
   }
 
-  /// Switches only the window whose active Space has settled.
-  private func show(_ key: LuminanceKey, on id: Int) {
-    guard let entry = entries[id], entry.key != key else { return }
-    CATransaction.begin()
-    CATransaction.setDisableActions(true)
-    entry.normal.isHidden = key != Key.normal
-    entry.revealed.isHidden = key != Key.revealed
-    CATransaction.commit()
-    var reason: NSString?
-    guard KOFlushBackdrop(&reason) else { disable(reason); return }
-    entries[id]?.key = key
-  }
-
   private func close(_ id: Int) {
     guard let entry = entries.removeValue(forKey: id) else { return }
     entry.window.alphaValue = 0
-    var normalReason: NSString?
-    var revealedReason: NSString?
-    let normalDetached = KODetachBackdrop(entry.normal, &normalReason)
-    let revealedDetached = KODetachBackdrop(entry.revealed, &revealedReason)
+    var reason: NSString?
+    let detached = KODetachBackdrop(entry.backdrop, &reason)
     entry.window.close()
     states[entry.displayID]?.forget(id)
-    if !normalDetached || !revealedDetached { disable(normalReason ?? revealedReason) }
+    if !detached { disable(reason) }
   }
 
   private func disable(_ reason: NSString?) {
@@ -316,27 +276,27 @@ extension KeyedOverlayController {
   }
 }
 
-// MARK: - Samples shared with the rounded corners
+// MARK: - Samples shared with the base band and corners
 
 extension KeyedOverlayController {
-  /// Missing or unknown evidence keeps the corners; a screen missing for a moment keeps its state.
-  private func updateCorners(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?) {
+  /// Missing or unknown evidence keeps the overlays visible; a screen missing for a moment keeps its state.
+  private func updateDesktopOverlayVisibility(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?) {
     var visibility: [UInt32: Bool] = [:]
-    for id in cornerDisplays {
+    for id in sampledDisplays {
       guard let screen = byID[id] else {
-        visibility[id] = cornerVisibility[id] ?? true
+        visibility[id] = desktopOverlayVisibility[id] ?? true
         continue
       }
       visibility[id] = CornerVisibility.visible(frame: screen.frame, visibleFrame: screen.visibleFrame,
                                                 bandFrame: frames[id], windows: metadata)
     }
-    guard visibility != cornerVisibility else { return }
-    for (id, shown) in visibility where cornerVisibility[id] != shown {
-      let line = "Rounded corners, display \(id): visible=\(shown)"
+    guard visibility != desktopOverlayVisibility else { return }
+    for (id, shown) in visibility where desktopOverlayVisibility[id] != shown {
+      let line = "Desktop overlays, display \(id): visible=\(shown)"
       Self.logger.info("\(line, privacy: .public)")
     }
-    cornerVisibility = visibility
-    onCornerVisibility?(visibility)
+    desktopOverlayVisibility = visibility
+    onDesktopOverlayVisibility?(visibility)
   }
 
   /// Copying metadata neither captures pixels nor requests Screen Recording. Window titles

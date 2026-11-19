@@ -19,8 +19,8 @@ final class OverlayController: NSObject {
   private let keyedOverlay: KeyedOverlayController
   private var barWindows: [UInt32: OverlayWindow] = [:]
   private var windows: [String: OverlayWindow] = [:]
-  /// Displays whose desktop is revealed: their corner windows are transparent meanwhile.
-  private var hiddenCornerDisplays: Set<UInt32> = []
+  /// Displays whose desktop is revealed: their base band and corners are transparent.
+  private var revealedDisplays: Set<UInt32> = []
   /// Displays with rounded corners at the last rebuild.
   private var lastCornerDisplays: Set<UInt32> = []
   private var pendingScreenRebuild: Task<Void, Never>?
@@ -64,8 +64,8 @@ final class OverlayController: NSObject {
         animationPreview?.cancel(ifShowing: bar)
       }
     }
-    keyedOverlay.onCornerVisibility = { [weak self] visibility in
-      self?.cornerVisibilityDidChange(visibility)
+    keyedOverlay.onDesktopOverlayVisibility = { [weak self] visibility in
+      self?.desktopOverlayVisibilityDidChange(visibility)
     }
     NotificationCenter.default.addObserver(
       self, selector: #selector(systemDidChange(_:)),
@@ -142,6 +142,7 @@ final class OverlayController: NSObject {
         if window.frame != frame {
           window.setFrame(frame, display: false)
         }
+        window.alphaValue = revealedDisplays.contains(id) ? 0 : 1
         window.orderFrontRegardless()
       case .close(let id):
         barWindows[id]?.orderOut(nil)
@@ -165,7 +166,7 @@ final class OverlayController: NSObject {
         let key = "\(displayID).\(corner.rawValue)"
         desiredKeys.insert(key)
         show(key: key, frame: rect) { CornerWindow(corner: corner, frame: rect) }
-        windows[key]?.alphaValue = hiddenCornerDisplays.contains(displayID) ? 0 : 1
+        windows[key]?.alphaValue = revealedDisplays.contains(displayID) ? 0 : 1
       }
     }
 
@@ -193,13 +194,15 @@ final class OverlayController: NSObject {
     settings.roundCorners && (settings.cornersOnAllDisplays || CGDisplayIsBuiltin(displayID) != 0)
   }
 
-  /// While the desktop of a display is revealed its corners turn transparent, as they disappear
-  /// in Mission Control. They are neither closed nor created again.
-  private func cornerVisibilityDidChange(_ visibility: [UInt32: Bool]) {
+  /// Change opacity in place so the same windows can return on the first ordinary sample.
+  private func desktopOverlayVisibilityDidChange(_ visibility: [UInt32: Bool]) {
     animationPreview?.cancel()
-    hiddenCornerDisplays = Set(visibility.compactMap { $0.value ? nil : $0.key })
+    revealedDisplays = Set(visibility.compactMap { $0.value ? nil : $0.key })
+    for (id, window) in barWindows {
+      window.alphaValue = revealedDisplays.contains(id) ? 0 : 1
+    }
     for (key, window) in windows {
-      let hidden = hiddenCornerDisplays.contains { key.hasPrefix("\($0).") }
+      let hidden = revealedDisplays.contains { key.hasPrefix("\($0).") }
       window.alphaValue = hidden ? 0 : 1
     }
   }

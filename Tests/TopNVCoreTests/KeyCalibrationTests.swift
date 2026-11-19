@@ -52,7 +52,7 @@ final class KeyCalibrationTests: XCTestCase {
     }
   }
 
-  func testACandidateReplacesOnlyTheNormalKey() {
+  func testACandidateReplacesTheNormalKey() {
     XCTAssertEqual(KeyCalibration.normalMatrix(nil), LuminanceKey.normal.matrix)
     for option in KeyCalibration.options {
       let matrix = KeyCalibration.normalMatrix(option)
@@ -64,8 +64,6 @@ final class KeyCalibrationTests: XCTestCase {
       XCTAssertEqual(matrix == LuminanceKey.normal.matrix, option == KeyCalibration.options[4], option.title)
     }
     XCTAssertEqual(KeyCalibration.normalMatrix(KeyCalibration.options[4]), LuminanceKey.normal.matrix)
-    XCTAssertEqual(LuminanceKey.revealed.gain, 6)
-    XCTAssertEqual(LuminanceKey.revealed.cutoff, 0.2)
   }
 
   func testProductionHasNoCalibrationMenu() {
