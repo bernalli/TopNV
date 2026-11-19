@@ -1,7 +1,8 @@
 /// Decisions for a single display. Space membership is supplied by NSWindow, never guessed
 /// from a Space number. Inactive windows retain their last gate while the desktop slides.
 /// `forget` does not return a creation to the visit budget: an adapter that closes windows
-/// for its own reasons (option off, new geometry) starts again from a new value.
+/// for its own reasons (option off, new geometry) starts again from a new value. Only the
+/// windows this value closes in a native full-screen Space return their creations.
 public struct KeyedOverlayState {
   public enum Appearance: Sendable { case light, dark, unknown }
   public enum Context: Sendable { case desktop, fullScreen, unknown }
@@ -120,6 +121,10 @@ public struct KeyedOverlayState {
     lastActive = keeper
     result.close = active.filter { $0 != keeper }
     for id in result.close { visibility[id] = nil }
+    // The windows closed in a full-screen Space had joined it: closing them is not a failed
+    // creation. Without the refund three closures leave the next desktop without a window
+    // until another visit. A creation that never joined a Space stays spent.
+    creationsThisVisit = max(0, creationsThisVisit - (closeAll ? active.count : 0))
     let show = input.enabled && input.appearance == .light
       && input.context == .desktop && input.menuVisible
     if let keeper {

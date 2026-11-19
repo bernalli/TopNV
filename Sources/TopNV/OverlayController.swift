@@ -20,6 +20,8 @@ final class OverlayController: NSObject {
   private var windows: [String: OverlayWindow] = [:]
   /// Displays whose desktop is revealed: their corner windows are transparent meanwhile.
   private var hiddenCornerDisplays: Set<UInt32> = []
+  /// Displays with rounded corners at the last rebuild.
+  private var lastCornerDisplays: Set<UInt32> = []
   private var pendingScreenRebuild: Task<Void, Never>?
   private var pendingSettingsRebuild: Task<Void, Never>?
   private var settingsSubscription: AnyCancellable?
@@ -121,10 +123,7 @@ final class OverlayController: NSObject {
       }
     }
 
-    let cornerDisplays = Set(screens.compactMap { screen -> UInt32? in
-      guard let displayID = screen.displayID, wantsCorners(on: displayID) else { return nil }
-      return displayID
-    })
+    let cornerDisplays = currentCornerDisplays(on: screens, event: event)
     keyedOverlay.update(frames: bandState.frames, enabled: settings.hideNotch,
                         spaceChanged: event == .spaceChanged, cornerDisplays: cornerDisplays)
 
@@ -151,6 +150,16 @@ final class OverlayController: NSObject {
       windows[key]?.close()
       windows[key] = nil
     }
+  }
+
+  /// A screen missing from the list during a Space switch keeps its corners in `rebuild`. It
+  /// keeps their samples too, or they would no longer step aside until the next rebuild.
+  private func currentCornerDisplays(on screens: [NSScreen], event: BandState.Event) -> Set<UInt32> {
+    let present = Set(screens.compactMap(\.displayID))
+    var result = present.filter { wantsCorners(on: $0) }
+    if event == .spaceChanged { result.formUnion(lastCornerDisplays.subtracting(present)) }
+    lastCornerDisplays = result
+    return result
   }
 
   private func wantsCorners(on displayID: CGDirectDisplayID) -> Bool {

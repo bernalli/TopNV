@@ -168,6 +168,7 @@ final class KeyedOverlayController {
     let trace = "appearance=\(appearance) context=\(evidence.context) "
       + "menu=\(evidence.menuVisible) revealed=\(evidence.desktopRevealed) "
       + "systemFullScreen=\(systemFullScreen) nativeFullScreen=\(evidence.nativeFullScreen) "
+      + "backdrop=\(evidence.fullScreenBackdrop) "
       + "sliding=\(evidence.spaceSliding) gate=\(gate) "
       + "list=\(metadata != nil) active=\(active.count) "
       + "windows=\(entries.count) close=\(decision.close.count) create=\(decision.create != nil)"

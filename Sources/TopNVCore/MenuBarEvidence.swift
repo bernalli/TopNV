@@ -8,6 +8,8 @@ public enum MenuBarEvidence {
 
   /// The level of the keyed window. A window above it is drawn over the effect.
   public static let overlayLevel = 26
+  /// One level above the desktop level. See `Result.fullScreenBackdrop`.
+  public static let fullScreenBackdropLayer = Int(CGWindowLevelForKey(.desktopWindow)) + 1
 
   public struct Window {
     public let owner: Owner
@@ -40,6 +42,10 @@ public enum MenuBarEvidence {
     /// A Space switch slides the desktop of this display sideways. Every other value then mixes
     /// the Space that leaves with the Space that arrives.
     public let spaceSliding: Bool
+    /// Measured and traced, not yet evidence: at rest a native full-screen Space lists a
+    /// WindowManager window as large as the display one level above the desktop level. No
+    /// desktop Space lists it. It is a signal for one display, unlike the system signal.
+    public let fullScreenBackdrop: Bool
   }
 
   /// Converts the dictionaries of `CGWindowListCopyWindowInfo`. Window titles are never read.
@@ -102,7 +108,7 @@ public enum MenuBarEvidence {
     guard let windows, valid(frame), valid(visibleFrame), valid(bandFrame),
           frame.contains(visibleFrame), frame.contains(bandFrame) else {
       return Result(context: .unknown, nativeFullScreen: false, menuVisible: false, desktopRevealed: false,
-                    spaceSliding: false)
+                    spaceSliding: false, fullScreenBackdrop: false)
     }
     let tolerance: CGFloat = 2
     // The menu bar surface: a Window Server window along the top edge, as wide as the band.
@@ -158,7 +164,17 @@ public enum MenuBarEvidence {
     return Result(context: nativeFullScreen || coveringApp || noReservedTop ? .fullScreen : .desktop,
                   nativeFullScreen: nativeFullScreen,
                   menuVisible: menuVisible, desktopRevealed: desktopRevealed,
-                  spaceSliding: spaceSliding)
+                  spaceSliding: spaceSliding,
+                  fullScreenBackdrop: fullScreenBackdrop(frame: frame, windows: windows, tolerance))
+  }
+
+  private static func fullScreenBackdrop(frame: CGRect, windows: [Window], _ tolerance: CGFloat) -> Bool {
+    windows.contains {
+      $0.isWindowManager && $0.layer == fullScreenBackdropLayer && $0.alpha > 0 && valid($0.bounds)
+        && sameSize($0.bounds, frame, tolerance)
+        && abs($0.bounds.minX - frame.minX) <= tolerance
+        && abs($0.bounds.minY - frame.minY) <= tolerance
+    }
   }
 
   private static func sameSize(_ a: CGRect, _ b: CGRect, _ tolerance: CGFloat) -> Bool {
