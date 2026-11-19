@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   let menuVisibility = MenuVisibility(
     defaults: .standard, key: AppSettings.showMenuBarIconKey)
   private var overlay: OverlayController?
+  private var instantSwitch: InstantSpaceSwitch?
   /// Nil under the production bundle identifier: only test copies get the Key calibration menu.
   private let keyCalibration = KeyCalibration.initial(bundleIdentifier: Bundle.main.bundleIdentifier)
   private let updateConfiguration = UpdateConfiguration(infoDictionary: Bundle.main.infoDictionary)
@@ -51,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
+    if keyCalibration != nil { instantSwitch = InstantSpaceSwitch() }
     let statusMenu = StatusMenuController(
       settings: settings, loginItem: loginItem, updates: updates, visibility: menuVisibility,
       keyCalibration: keyCalibration)
@@ -61,5 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     overlay = controller
     sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }
     updateCoordinator.start()
+  }
+
+  func applicationWillTerminate(_ notification: Notification) {
+    instantSwitch?.stop()
   }
 }
