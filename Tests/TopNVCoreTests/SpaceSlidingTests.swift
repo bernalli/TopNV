@@ -339,7 +339,7 @@ final class SpaceSlidingTests: XCTestCase {
       let result = state.update(input(active: [1], menu: false, time: time, sliding: true))
       if result.gates[1] == false, hiddenAt == nil { hiddenAt = time }
     }
-    XCTAssertEqual(try XCTUnwrap(hiddenAt), 23.5, accuracy: 0.11)
+    XCTAssertEqual(try XCTUnwrap(hiddenAt), 25.5, accuracy: 0.11)
     XCTAssertEqual(state.visibility, [1: false])
   }
 
@@ -354,7 +354,7 @@ final class SpaceSlidingTests: XCTestCase {
                                         sliding: step % period == 0))
         if result.gates[1] == false, hiddenAt == nil { hiddenAt = time }
       }
-      XCTAssertLessThanOrEqual(try XCTUnwrap(hiddenAt), 23.71, "period \(period)")
+      XCTAssertLessThanOrEqual(try XCTUnwrap(hiddenAt), 25.51, "period \(period)")
     }
   }
 
@@ -444,7 +444,7 @@ final class SpaceSlidingTests: XCTestCase {
 
   /// For any order of samples, notifications, membership changes and slide signals: in the half
   /// second after a sliding sample nothing is gated or created while the slide is younger than
-  /// three seconds, a gate never names a window that is not the keeper, a window is shown and
+  /// five seconds, a gate never names a window that is not the keeper, a window is shown and
   /// created only on full positive evidence, and the visit budget holds.
   func testTurningTheOptionOffDuringASlideHidesAtOnce() {
     var state = State()
@@ -474,6 +474,9 @@ final class SpaceSlidingTests: XCTestCase {
       var nextID = 1
       var createdSinceNotification = 0
       var slideStart: Double?
+      var lastMotion = 0.0
+      var motionSamples = 0
+      var requiredQuiet = 0.5
       var frozenUntil = 0.0
       for _ in 0..<150 {
         now += [0.01, 0.05, 0.1, 0.1, 0.3, 0.7][next(6)]
@@ -482,6 +485,7 @@ final class SpaceSlidingTests: XCTestCase {
           createdSinceNotification = 0
           frozenUntil = now + 0.5
           slideStart = nil
+          motionSamples = 0
           continue
         }
         var active = known.filter { _ in next(3) == 0 }
@@ -494,11 +498,15 @@ final class SpaceSlidingTests: XCTestCase {
         let sliding = next(3) == 0
         let allPositive = appearance == .light && context == .desktop && menu && enabled
         if sliding {
+          motionSamples += 1
+          requiredQuiet = motionSamples >= 2 ? 0.25 : 0.5
+          lastMotion = now
           let start = slideStart ?? now
           slideStart = start
-          if now - start <= 3 { frozenUntil = max(frozenUntil, now + 0.5) }
-        } else if now >= frozenUntil {
-          slideStart = nil
+          if now - start <= 5 { frozenUntil = max(frozenUntil, now + 0.5) }
+        } else {
+          motionSamples = 0
+          if now >= lastMotion + requiredQuiet { slideStart = nil }
         }
         let result = state.update(.init(
           activeWindowIDs: active, appearance: appearance, context: context, menuVisible: menu,

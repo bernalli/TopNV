@@ -56,13 +56,15 @@ public struct KeyedOverlayState {
   private var departureCandidate: Int?
   private var nextCreation = 0.0
   private var settleUntil = 0.0
-  /// The first sliding sample since the last notification or the last settled sample at rest.
   private var slidingSince: Double?
+  private var slideResetAt = 0.0
+  private var previousSampleSliding = false
   /// The evidence is trusted again this long after a notification or the last sliding sample.
   private static let settleTime = 0.5
-  /// Sliding samples postpone the decision only this long without a notification: a slide
-  /// signal that never ends must not keep a window shown, or keep a display without one.
-  private static let longestSlide = 3.0
+  /// At 10 Hz a single missed sample is common, but measured pauses between slides last 0.3 s.
+  private static let slideRestTime = 0.25
+  /// A held gesture lasted 4.4 s. A stuck signal must still yield after this cap plus settling.
+  private static let longestSlide = 5.0
 
   public init() {}
 
@@ -88,22 +90,28 @@ public struct KeyedOverlayState {
     settleUntil = now + Self.settleTime
     // The notification ends a slide: the next one is measured from its own first sample.
     slidingSince = nil
+    previousSampleSliding = false
   }
 
-  public mutating func update(_ input: Input) -> Decision {
-    var result = Decision()
-    // The notification of a Space switch comes when the slide ends. During the slide the menu
-    // bar and the appearance belong to two Spaces at once, so every sliding sample postpones
-    // the decision as the notification does. A window keeps the gate of its own Space.
+  private mutating func updateSlideTiming(_ input: Input) {
     if input.spaceSliding {
+      // Only consecutive sliding samples establish motion. An isolated pulse followed by a
+      // short gap can be a flickering signal, so require the full quiet interval after it.
+      slideResetAt = input.now + (previousSampleSliding ? Self.slideRestTime : Self.settleTime)
       let since = slidingSince ?? input.now
       slidingSince = since
       if input.now - since <= Self.longestSlide {
         settleUntil = max(settleUntil, input.now + Self.settleTime)
       }
-    } else if input.now >= settleUntil {
+    } else if input.now >= slideResetAt {
       slidingSince = nil
     }
+    previousSampleSliding = input.spaceSliding
+  }
+
+  public mutating func update(_ input: Input) -> Decision {
+    var result = Decision()
+    updateSlideTiming(input)
     let active = Set(input.activeWindowIDs).sorted()
     if let departureCandidate, input.now >= settleUntil {
       // A notification plus the settled departure of its confirmed window is
