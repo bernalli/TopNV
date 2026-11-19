@@ -36,6 +36,10 @@ static BOOL DelegateMatches(Class cls, SEL selector) {
             ![[catalog filterTypes] containsObject:@"colorMatrix"] ||
             !DelegateMatches(self, @selector(backdropLayer:didChangeLuma:)) ||
             !DelegateMatches(self, @selector(backdropLayer:didSampleProtectedLuma:)) ||
+            ![layer respondsToSelector:NSSelectorFromString(@"setTracksLuma:")] ||
+            ![layer respondsToSelector:NSSelectorFromString(@"tracksLuma")] ||
+            ![layer respondsToSelector:NSSelectorFromString(@"setAllowsFilteredLuma:")] ||
+            ![layer respondsToSelector:NSSelectorFromString(@"allowsFilteredLuma")] ||
             layer.delegate || layer.filters.count != 1 ||
             ![[layer.filters.firstObject valueForKey:@"type"] isEqual:@"colorMatrix"]) return nil;
 
@@ -44,6 +48,7 @@ static BOOL DelegateMatches(Class cls, SEL selector) {
         source->_ordinaryFilters = layer.filters;
         source->_sample = [sample copy];
         // Sample the input of this bar. Including our own keyed output would create feedback.
+        // A layer stores any key it is given: only the selectors above prove these properties.
         [layer setValue:@NO forKey:@"allowsFilteredLuma"];
         [layer setValue:@YES forKey:@"tracksLuma"];
         if ([[layer valueForKey:@"allowsFilteredLuma"] boolValue] ||
