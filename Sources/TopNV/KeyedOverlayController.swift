@@ -48,7 +48,6 @@ final class KeyedOverlayController {
   }
 
   private var normalMatrix: [Float] { KeyCalibration.normalMatrix(calibration) }
-  private var normalCurve: KeyCurve? { KeyCalibration.normalCurve(calibration) }
 
   /// Test copies only: replaces the normal key. The windows are closed and created again, as
   /// after a change of geometry, so no live backdrop is changed. Without a calibration at
@@ -56,8 +55,7 @@ final class KeyedOverlayController {
   func calibrate(_ calibration: KeyCalibration) {
     guard self.calibration != nil, self.calibration != calibration else { return }
     self.calibration = calibration
-    let line = "Key calibration: gain=\(calibration.gain) cutoff=\(calibration.cutoff) "
-      + "curve=\(calibration.curve.map { "\($0.values)" } ?? "none")"
+    let line = "Key calibration: gain=\(calibration.gain) cutoff=\(calibration.cutoff)"
     Self.logger.info("\(line, privacy: .public)")
     guard !failed else { return }
     calibrationNeedsRebuild = true
@@ -193,10 +191,8 @@ extension KeyedOverlayController {
     let scale = screen.backingScaleFactor
     let bounds = CGRect(origin: .zero, size: frame.size)
     var reason: NSString?
-    guard let normal = Self.backdrop(normalMatrix, curve: normalCurve, bounds: bounds, scale: scale,
-                                     reason: &reason),
-          let revealed = Self.backdrop(Key.revealed.matrix, curve: Key.revealed.curve, bounds: bounds,
-                                       scale: scale, reason: &reason)
+    guard let normal = Self.backdrop(normalMatrix, bounds: bounds, scale: scale, reason: &reason),
+          let revealed = Self.backdrop(Key.revealed.matrix, bounds: bounds, scale: scale, reason: &reason)
     else { disable(reason); return }
     normal.isHidden = key != Key.normal
     revealed.isHidden = key != Key.revealed
@@ -247,14 +243,10 @@ extension KeyedOverlayController {
     }
   }
 
-  private static func backdrop(_ matrix: [Float], curve: KeyCurve?, bounds: CGRect, scale: CGFloat,
+  private static func backdrop(_ matrix: [Float], bounds: CGRect, scale: CGFloat,
                                reason: inout NSString?) -> CALayer? {
-    let controls = curve?.values ?? []
-    return matrix.withUnsafeBufferPointer { matrix in
-      controls.withUnsafeBufferPointer { controls in
-        KOCreateBackdrop(matrix.baseAddress!, matrix.count, controls.isEmpty ? nil : controls.baseAddress,
-                         controls.count, bounds, scale, &reason)
-      }
+    matrix.withUnsafeBufferPointer {
+      KOCreateBackdrop($0.baseAddress!, $0.count, bounds, scale, &reason)
     }
   }
 

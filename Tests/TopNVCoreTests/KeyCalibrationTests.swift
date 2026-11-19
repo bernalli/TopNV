@@ -29,19 +29,11 @@ final class KeyCalibrationTests: XCTestCase {
 
   func testTheCandidatesInOrder() {
     let options = KeyCalibration.options
-    XCTAssertEqual(options.map(\.gain), [3, 3, 3, 2.3, 1.9, 1.65])
-    XCTAssertEqual(options.map(\.cutoff), [0.21, 0.21, 0.21, 0.255, 0.3, 0.345])
-    XCTAssertEqual(options.map(\.curve), [nil, .soft, .strong, .soft, .soft, .soft])
+    XCTAssertEqual(options.map(\.gain), [12, 6, 4.5, 3.6, 3, 2.4])
+    XCTAssertEqual(options.map(\.cutoff), [0.228, 0.2, 0.2, 0.19, 0.21, 0.25])
     XCTAssertEqual(options.map(\.title), [
-      "3 / 0.21 (1.2.5)", "3 / 0.21 + soft curve", "3 / 0.21 + strong curve",
-      "2.3 / 0.255 + soft curve", "1.9 / 0.3 + soft curve", "1.65 / 0.345 + soft curve"
+      "12 / 0.228 (1.2.4)", "6 / 0.2", "4.5 / 0.2", "3.6 / 0.19", "3 / 0.21", "2.4 / 0.25"
     ])
-    // The raised black points stay under 0.7325, which was grey on the real bar (18-11).
-    let blackPoints = options.map { $0.cutoff + 0.5 / $0.gain }
-    XCTAssertEqual(blackPoints.map { ($0 * 100).rounded() / 100 }, [0.38, 0.38, 0.38, 0.47, 0.56, 0.65])
-    for option in options {
-      XCTAssertEqual(option.cutoff - 0.5 / option.gain, 0.04, accuracy: 0.005, option.title)
-    }
     XCTAssertEqual(Set(options.map(\.command)).count, options.count)
     for option in options {
       XCTAssertEqual(KeyCalibration.option(for: option.command), option, option.title)
@@ -51,10 +43,10 @@ final class KeyCalibrationTests: XCTestCase {
     }
   }
 
-  /// A test copy starts as production: with the first candidate, equal to the normal key.
+  /// A test copy starts as production: with the fifth candidate, equal to the normal key.
   func testOnlyATestCopyStartsWithTheProductionCandidate() {
-    XCTAssertEqual(KeyCalibration.initial(bundleIdentifier: testCopy), KeyCalibration.options[0])
-    XCTAssertEqual(KeyCalibration.initial(bundleIdentifier: "com.example.other"), KeyCalibration.options[0])
+    XCTAssertEqual(KeyCalibration.initial(bundleIdentifier: testCopy), KeyCalibration.options[4])
+    XCTAssertEqual(KeyCalibration.initial(bundleIdentifier: "com.example.other"), KeyCalibration.options[4])
     for identifier in [production, "IO.GITHUB.BERNALLI.TOPNV", "", nil] {
       XCTAssertNil(KeyCalibration.initial(bundleIdentifier: identifier), "\(String(describing: identifier))")
     }
@@ -69,12 +61,9 @@ final class KeyCalibrationTests: XCTestCase {
         0.5 + option.gain * option.cutoff
       ]
       XCTAssertEqual(matrix, row + row + row + [0, 0, 0, 0, 1], option.title)
-      XCTAssertEqual(matrix == LuminanceKey.normal.matrix, option.gain == 3 && option.cutoff == 0.21, option.title)
-      XCTAssertEqual(KeyCalibration.normalCurve(option), option.curve, option.title)
+      XCTAssertEqual(matrix == LuminanceKey.normal.matrix, option == KeyCalibration.options[4], option.title)
     }
-    XCTAssertEqual(KeyCalibration.normalMatrix(KeyCalibration.options[0]), LuminanceKey.normal.matrix)
-    XCTAssertEqual(KeyCalibration.normalCurve(nil), LuminanceKey.normal.curve)
-    XCTAssertNil(LuminanceKey.revealed.curve)
+    XCTAssertEqual(KeyCalibration.normalMatrix(KeyCalibration.options[4]), LuminanceKey.normal.matrix)
     XCTAssertEqual(LuminanceKey.revealed.gain, 6)
     XCTAssertEqual(LuminanceKey.revealed.cutoff, 0.2)
   }
