@@ -6,6 +6,10 @@ import XCTest
 @testable import TopNV
 
 @MainActor final class RelativeBackdropTests: XCTestCase {
+  private final class Lines {
+    var all: [String] = []
+  }
+
   func testOrdinaryKeyIsTheStartupFilterEvenAfterAValidSample() async throws {
     let key = RelativeMenuBarKey(isTestCopy: true)
     XCTAssertFalse(key.enabled)
@@ -17,15 +21,53 @@ import XCTest
     XCTAssertTrue(layer.filters?.first as? NSObject === original)
   }
 
-  func testProductionDoesNotObserveOrEnableTheExperiment() throws {
-    let key = RelativeMenuBarKey(isTestCopy: false)
+  func testProductionMakesNoSamplingCallKeepsTheOrdinaryFilterAndLogsNothing() throws {
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: false) { lines.all.append($0) }
     let layer = try makeLayer()
+    let ordinary = try XCTUnwrap(layer.filters?.first as? NSObject)
     key.observe(layer)
     key.toggle()
     XCTAssertFalse(key.available)
     XCTAssertFalse(key.enabled)
     XCTAssertNil(layer.delegate)
+    XCTAssertEqual(layer.value(forKey: "tracksLuma") as? Bool, false)
+    XCTAssertTrue(layer.filters?.first as? NSObject === ordinary)
     XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
+    XCTAssertEqual(lines.all, [])
+  }
+
+  func testATestCopyLogsAvailabilityEachVisibleSampleChangeAndTheSwitch() async throws {
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: true) { lines.all.append($0) }
+    XCTAssertEqual(lines.all, ["Relative key available=\(key.available)"])
+    guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    let layer = try makeLayer()
+    key.observe(layer)
+    let reader = try XCTUnwrap(layer.delegate as? KOSampledBackdrop)
+    // 0.121 is the same visible step as 0.12; a protected sample is not a number.
+    for luma in [0.12, 0.121, 0.5, 0.12, .nan] {
+      reader.backdropLayer(layer, didChangeLuma: luma)
+      await drainSamples()
+    }
+    XCTAssertEqual(Array(lines.all.dropFirst()), [
+      "Sample 0.120 over 100 pt, enabled=false, relative key white to 0.024, black from 0.112",
+      "Sample 0.500 over 100 pt, enabled=false, relative key white to 0.100, black from 0.465",
+      "Sample 0.120 over 100 pt, enabled=false, relative key white to 0.024, black from 0.112",
+      "Sample nan over 100 pt, enabled=false, relative key white to 0.043, black from 0.377"
+    ])
+    key.toggle()
+    key.toggle()
+    XCTAssertEqual(Array(lines.all.suffix(2)), ["Relative key enabled=true", "Relative key enabled=false"])
+  }
+
+  func testARefusedBackdropLogsWhyTheRelativeKeyIsOff() throws {
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: true) { lines.all.append($0) }
+    guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    key.observe(CALayer())
+    XCTAssertFalse(key.available)
+    XCTAssertEqual(lines.all.last, "Relative key off for this session: a backdrop refused the sampling setup")
   }
 
   func testLiveBackdropsUseTheirOwnSampleAndRestoreTheOriginalFilter() async throws {

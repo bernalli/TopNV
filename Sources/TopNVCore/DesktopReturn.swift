@@ -19,14 +19,20 @@ public struct DesktopReturn {
       return evidence
     }
     let interior = frame.insetBy(dx: 16, dy: 16)
+    let documents = Self.documents(in: windows)
     guard let surface = evidence.revealSurface else {
-      if !missedSurface, !overviewFading, returningWindow == nil, windows.contains(where: stillDisplaced) {
+      // One sample without the surface decides nothing: a reveal whose documents are still
+      // parked stays a reveal, and a return that has started is neither cancelled nor replayed.
+      let returning = returningWindow != nil || overviewFading
+      let parked = documents.contains { displaced[$0.key] == $0.value }
+      if !missedSurface, returning || parked {
         missedSurface = true
+        guard !returning else { return evidence }
         var held = evidence
         held.revealOverride = true
         return held
       }
-      rememberDesktop(windows, interior: interior)
+      rememberDesktop(documents, interior: interior)
       return evidence
     }
     missedSurface = false
@@ -42,26 +48,22 @@ public struct DesktopReturn {
     let overview = surface.layer == 19 && surface.isWindowManager
     if overview && surface.alpha == 1 { overviewWasOpaque = true }
     overviewFading = overview && overviewWasOpaque && surface.alpha < 0.99
-    for window in windows where isDocument(window) {
-      observe(window, interior: interior, showDesktop: surface.isWindowManager && surface.layer == 18)
+    // In window number order: the outcome never depends on the order of a dictionary.
+    for (number, bounds) in documents.sorted(by: { $0.key < $1.key }) {
+      observe(number, bounds, interior: interior, showDesktop: surface.isWindowManager && surface.layer == 18)
     }
     var result = evidence
     result.revealOverride = returningWindow == nil && !overviewFading
     return result
   }
 
-  private mutating func rememberDesktop(_ windows: [MenuBarEvidence.Window], interior: CGRect) {
+  private mutating func rememberDesktop(_ documents: [CGWindowID: CGRect], interior: CGRect) {
     self = Self()
-    for window in windows where isDocument(window) {
-      if let number = window.number, interior.contains(CGPoint(x: window.bounds.midX, y: window.bounds.midY)) {
-        ordinary[number] = window.bounds
-      }
-    }
+    ordinary = documents.filter { interior.contains(CGPoint(x: $0.value.midX, y: $0.value.midY)) }
   }
 
-  private mutating func observe(_ window: MenuBarEvidence.Window, interior: CGRect, showDesktop: Bool) {
-    guard let number = window.number, let home = ordinary[number] else { return }
-    let bounds = window.bounds
+  private mutating func observe(_ number: CGWindowID, _ bounds: CGRect, interior: CGRect, showDesktop: Bool) {
+    guard let home = ordinary[number] else { return }
     if !showDesktop {
       observeThumbnail(number, bounds: bounds, home: home)
       return
@@ -96,12 +98,19 @@ public struct DesktopReturn {
     }
   }
 
-  private func stillDisplaced(_ window: MenuBarEvidence.Window) -> Bool {
-    guard let number = window.number, isDocument(window) else { return false }
-    return displaced[number] == window.bounds
+  /// Bounds of the documents by window number. A number listed twice identifies no window.
+  private static func documents(in windows: [MenuBarEvidence.Window]) -> [CGWindowID: CGRect] {
+    var result: [CGWindowID: CGRect] = [:]
+    var repeated: Set<CGWindowID> = []
+    for window in windows where isDocument(window) {
+      guard let number = window.number else { continue }
+      if result.updateValue(window.bounds, forKey: number) != nil { repeated.insert(number) }
+    }
+    for number in repeated { result[number] = nil }
+    return result
   }
 
-  private func isDocument(_ window: MenuBarEvidence.Window) -> Bool {
+  private static func isDocument(_ window: MenuBarEvidence.Window) -> Bool {
     window.owner == .application && window.layer == 0 && window.alpha > 0 && !window.bounds.isEmpty
   }
 
