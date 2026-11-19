@@ -40,6 +40,12 @@ final class BarSceneTests: XCTestCase {
               reduceMotion: reduced, signalTime: now + 100)
   }
 
+  private func edgeFrame(_ scene: BarScene, on display: BarDisplay) -> CGRect? {
+    let plan = BarSurface.plan(geometry: [display.id: display], scene: scene,
+                               entrance: scene.entrances, settings: settings)
+    return plan.displays[display.id]?.edge.frame
+  }
+
   private func creation(_ scene: BarScene, _ id: UInt32 = 1) throws -> BarKeyCreation {
     BarKeyCreation(instance: scene.keyInstances[id] ?? 0, reservation: try XCTUnwrap(scene.keyDecisions[id]?.create))
   }
@@ -87,7 +93,7 @@ final class BarSceneTests: XCTestCase {
     _ = attributed.handle(sample([background(-1), background(MenuBarEvidence.fullScreenBackdropLayer, 2)],
                                  both, fullScreen: true))
     XCTAssertEqual(attributed.kinds, [1: .desktop, 2: .fullScreen])
-    XCTAssertNil(attributed.evidence(display: 1)?.menuEdgeFrame)
+    XCTAssertNil(edgeFrame(attributed, on: both[0]))
   }
 
   func testRevealHidesBandAndCornersAndTheReturnStartsTheEntrance() throws {
@@ -105,7 +111,7 @@ final class BarSceneTests: XCTestCase {
     _ = scene.handle(sample([menu(), background(19)], active: [1: [4]]))
     XCTAssertEqual(scene.visibility[1], false)
     XCTAssertEqual(scene.keyDecisions[1]?.gates, [4: false])
-    XCTAssertNil(scene.evidence(display: 1)?.menuEdgeFrame)
+    XCTAssertNil(edgeFrame(scene, on: display()))
     let start = scene.handle(sample([menu(), background(19, alpha: 0.8)], now: 2, active: [1: [4]]))
     XCTAssertEqual(scene.entrances[1]?.origin, .returnSignal)
     XCTAssertEqual(scene.entrances[1]?.elapsedMS, 0)
@@ -186,7 +192,7 @@ final class BarSceneTests: XCTestCase {
     XCTAssertEqual(scene.visibility, [1: false, 2: true])
     XCTAssertEqual(scene.cornerDisplays, [1, 2])
     XCTAssertEqual(Set(scene.bandFrames.keys), [1, 2])
-    XCTAssertNotNil(scene.evidence(display: 2)?.menuEdgeFrame)
+    XCTAssertNotNil(edgeFrame(scene, on: both[1]))
   }
 
   func testAnAdapterResetGivesTheDisplayAFullCreationBudget() throws {

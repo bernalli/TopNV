@@ -13,7 +13,8 @@ final class MenuEdgeTests: XCTestCase {
     windows += extra
     let visible = autoHide ? screen : CGRect(x: -1512, y: 100, width: 1512, height: 949)
     let result = MenuBarEvidence.evaluate(frame: screen, visibleFrame: visible, bandFrame: menu, windows: windows)
-    return result.menuEdgeFrame
+    guard BarSceneKind.classify(result, screenPresent: true) == .desktop else { return nil }
+    return BarGeometry.edge(menuBounds: result.menuBounds)
   }
 
   func testCoverStartsBelowTheVisibleMenuAndEndsAtTheFirstUnaffectedRow() throws {

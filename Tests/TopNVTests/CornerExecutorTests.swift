@@ -6,7 +6,7 @@ import XCTest
 @MainActor
 final class CornerExecutorTests: XCTestCase {
   private func parts(alpha: Double) -> [ScreenCorner: BarPartPlan] {
-    let frames = ScreenGeometry.cornerRects(frame: ExecutorPlans.screen.frame, radius: 15, topInset: 34)
+    let frames = BarGeometry.cornerRects(frame: ExecutorPlans.screen.frame, radius: 15, topInset: 34)
     return frames.mapValues { ExecutorPlans.part($0, alpha: .value(alpha)) }
   }
 

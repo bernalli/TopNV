@@ -38,13 +38,6 @@ class OverlayWindow: NSWindow {
 
 /// The opaque black strip behind the menu bar of a notched screen.
 final class BarWindow: OverlayWindow {
-  let menuEdge = MenuEdgeCover()
-
-  override func close() {
-    menuEdge.close()
-    super.close()
-  }
-
   init(frame: CGRect) {
     super.init(frame: frame, level: OverlayLevel.bar, isOpaque: true, behavior: OverlayBehavior.bar)
   }
@@ -52,13 +45,6 @@ final class BarWindow: OverlayWindow {
 
 /// One rounded screen corner: a black square with a quarter circle cut out of it.
 final class CornerWindow: OverlayWindow {
-  var desktopVisible = true { didSet { updateOpacity() } }
-  var fadeProgress: CGFloat = 1 { didSet { updateOpacity() } }
-
-  private func updateOpacity() {
-    alphaValue = desktopVisible ? fadeProgress : 0
-  }
-
   init(corner: ScreenCorner, frame: CGRect) {
     super.init(
       frame: frame, level: OverlayLevel.corner, isOpaque: false, behavior: OverlayBehavior.corner)

@@ -78,7 +78,7 @@ public struct BandState: Sendable {
   /// The measured band, or the remembered one when the display kept its screen size and the
   /// measure is lower or missing. A different size, or a display never seen, takes the measure.
   private func confirmedFrame(for screen: Screen) -> CGRect? {
-    let measured = ScreenGeometry.barRect(
+    let measured = BarGeometry.barRect(
       frame: screen.frame, visibleFrame: screen.visibleFrame, safeAreaTop: screen.safeAreaTop)
     guard let memory = memories[screen.id], memory.size == screen.frame.size else {
       return measured

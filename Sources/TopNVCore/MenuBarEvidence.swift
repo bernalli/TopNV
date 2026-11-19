@@ -40,13 +40,6 @@ public enum MenuBarEvidence {
     fileprivate var visibleMenuBounds: CGRect?
     public var menuBounds: CGRect? { visibleMenuBounds }
 
-    /// The desktop capture at 2x has four affected rows immediately below the menu.
-    public var menuEdgeFrame: CGRect? {
-      guard permitsBandEntrance, !desktopRevealed, let menu = visibleMenuBounds else { return nil }
-      let height: CGFloat = 4 / 2
-      return CGRect(x: menu.minX, y: menu.minY - height, width: menu.width, height: height)
-    }
-
     public let context: KeyedOverlayState.Context
     /// The active app is in native full screen and has a matching window on this display.
     public let nativeFullScreen: Bool

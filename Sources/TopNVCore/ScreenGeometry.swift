@@ -30,51 +30,11 @@ public enum ScreenGeometry {
     max(frame.maxY - visibleFrame.maxY, safeAreaTop, 0)
   }
 
-  /// The rectangle of the black bar for a screen, or `nil` when the screen has no notch.
-  public static func barRect(
-    frame: CGRect, visibleFrame: CGRect, safeAreaTop: CGFloat
-  ) -> CGRect? {
-    guard isNotched(safeAreaTop: safeAreaTop) else { return nil }
-    // The system surface ends above a one-point separator (rows 66 and 67 at 2x).
-    let gap = frame.maxY - visibleFrame.maxY
-    let height = min(frame.height, max(safeAreaTop, gap > 0 ? gap + 1 : 0))
-    guard height > 0 else { return nil }
-    return CGRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
-  }
-
-  /// Local frame of the opaque plate along the bottom edge of the keyed window.
-  public static func keyedBottomMask(size: CGSize, menuHeight: CGFloat, scale: CGFloat, flipped: Bool) -> CGRect {
-    let menu = menuHeight > 0 ? min(menuHeight, size.height) : size.height
-    // On a 33-pt Retina menu the last glyph pixel is row 50. The gradient can
-    // lighten row 51. Round towards the bottom so a glyph is never partly covered.
-    let top = min(size.height, ceil(max(0, menu - 7.5) * scale) / scale)
-    return CGRect(x: 0, y: flipped ? top : 0, width: size.width, height: size.height - top)
-  }
-
   /// The radius actually used for a screen: never negative and never larger than half of the
   /// shorter screen side.
   public static func effectiveRadius(_ radius: CGFloat, frame: CGRect) -> CGFloat {
     guard radius.isFinite, radius > 0 else { return 0 }
     return min(radius, frame.width / 2, frame.height / 2)
-  }
-
-  /// The four square corner rectangles (side = radius) for a screen.
-  /// Top corners start below `topInset`; negative or non-finite insets are treated as zero.
-  /// Returns an empty dictionary when the radius or remaining height is zero (no windows needed).
-  public static func cornerRects(
-    frame: CGRect, radius: CGFloat, topInset: CGFloat = 0
-  ) -> [ScreenCorner: CGRect] {
-    let inset = topInset.isFinite ? max(topInset, 0) : 0
-    var usableFrame = frame
-    usableFrame.size.height = max(0, frame.height - inset)
-    let side = effectiveRadius(radius, frame: usableFrame)
-    guard side > 0 else { return [:] }
-    return [
-      .topLeft: CGRect(x: frame.minX, y: frame.maxY - inset - side, width: side, height: side),
-      .topRight: CGRect(x: frame.maxX - side, y: frame.maxY - inset - side, width: side, height: side),
-      .bottomLeft: CGRect(x: frame.minX, y: frame.minY, width: side, height: side),
-      .bottomRight: CGRect(x: frame.maxX - side, y: frame.minY, width: side, height: side),
-    ]
   }
 
   /// Centre of the circle that is cut out of a corner square, in the square's local coordinates

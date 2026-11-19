@@ -11,7 +11,7 @@ final class KeyedBottomMaskPropertyTests: XCTestCase {
         for extra in [CGFloat(0), 1, 5] {
           for flipped in [false, true] {
             let size = CGSize(width: 1512, height: menu + extra)
-            let mask = ScreenGeometry.keyedBottomMask(size: size, menuHeight: menu, scale: scale, flipped: flipped)
+            let mask = BarGeometry.keyedBottomMask(size: size, menuHeight: menu, scale: scale, flipped: flipped)
             let top = flipped ? mask.minY : size.height - mask.maxY
             let label = "scale \(scale) menu \(menu) extra \(extra) flipped \(flipped)"
             XCTAssertEqual((top * scale).rounded(), top * scale, accuracy: 1e-9, label)
@@ -29,8 +29,8 @@ final class KeyedBottomMaskPropertyTests: XCTestCase {
   func testAMenuTallerThanTheWindowIsMeasuredFromTheWindowBottom() {
     let size = CGSize(width: 1512, height: 33)
     for flipped in [false, true] {
-      XCTAssertEqual(ScreenGeometry.keyedBottomMask(size: size, menuHeight: 40, scale: 2, flipped: flipped),
-                     ScreenGeometry.keyedBottomMask(size: size, menuHeight: 33, scale: 2, flipped: flipped))
+      XCTAssertEqual(BarGeometry.keyedBottomMask(size: size, menuHeight: 40, scale: 2, flipped: flipped),
+                     BarGeometry.keyedBottomMask(size: size, menuHeight: 33, scale: 2, flipped: flipped))
     }
   }
 
@@ -42,7 +42,7 @@ final class KeyedBottomMaskPropertyTests: XCTestCase {
       for menu in menus {
         for scale in scales {
           for flipped in [false, true] {
-            let mask = ScreenGeometry.keyedBottomMask(size: size, menuHeight: menu, scale: scale, flipped: flipped)
+            let mask = BarGeometry.keyedBottomMask(size: size, menuHeight: menu, scale: scale, flipped: flipped)
             let label = "size \(size) menu \(menu) scale \(scale)"
             XCTAssertTrue([mask.minX, mask.minY, mask.width, mask.height].allSatisfy(\.isFinite), label)
             XCTAssertGreaterThanOrEqual(mask.minY, 0, label)

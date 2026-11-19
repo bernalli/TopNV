@@ -101,7 +101,10 @@ final class BarTableCharacterizationTests: XCTestCase {
     // KeyedOverlayController.swift:260-264 withdraws it when the display is absent.
     let edge = CGRect(x: menu.bounds.minX, y: menu.bounds.minY - 2, width: menu.bounds.width, height: 2)
     for fixture in fixtures {
-      XCTAssertEqual(evidence(fixture)?.menuEdgeFrame, fixture.edge ? edge : nil, fixture.name)
+      let sample = evidence(fixture)
+      let kind = BarSceneKind.classify(sample, screenPresent: fixture.present)
+      let frame = kind == .desktop ? BarGeometry.edge(menuBounds: sample?.menuBounds) : nil
+      XCTAssertEqual(frame, fixture.edge ? edge : nil, fixture.name)
     }
   }
 
@@ -200,7 +203,7 @@ final class BarTableCharacterizationTests: XCTestCase {
     for (menuHeight, pixels) in firstPixels {
       for (scale, firstPixel) in zip([CGFloat(1), 2, 3], pixels) {
         for flipped in [false, true] {
-          let plate = ScreenGeometry.keyedBottomMask(size: size, menuHeight: menuHeight, scale: scale, flipped: flipped)
+          let plate = BarGeometry.keyedBottomMask(size: size, menuHeight: menuHeight, scale: scale, flipped: flipped)
           let top = firstPixel / scale
           XCTAssertEqual(plate, CGRect(x: 0, y: flipped ? top : 0, width: size.width, height: size.height - top))
         }
