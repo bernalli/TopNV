@@ -15,7 +15,7 @@ final class OverlayController: NSObject {
   private var bandState = BandState()
   private let keyedOverlay = KeyedOverlayController()
   private var barWindows: [UInt32: OverlayWindow] = [:]
-  private var windows: [String: OverlayWindow] = [:]
+  private var windows: [String: CornerWindow] = [:]
   /// Displays whose desktop is revealed: their base band and corners are transparent.
   private var revealedDisplays: Set<UInt32> = []
   /// Displays with rounded corners at the last rebuild.
@@ -33,9 +33,9 @@ final class OverlayController: NSObject {
     animationPreview.play(variant) { [weak self] in self?.previewTargets() ?? [] }
   }
 
-  private func corners(on id: UInt32) -> [ScreenCorner: OverlayWindow] {
+  private func corners(on id: UInt32) -> [ScreenCorner: CornerWindow] {
     guard wantsCorners(on: id) else { return [:] }
-    var result: [ScreenCorner: OverlayWindow] = [:]
+    var result: [ScreenCorner: CornerWindow] = [:]
     for corner in ScreenCorner.allCases { result[corner] = windows["\(id).\(corner.rawValue)"] }
     return result
   }
@@ -128,7 +128,7 @@ final class OverlayController: NSObject {
         let key = "\(displayID).\(corner.rawValue)"
         desiredKeys.insert(key)
         let window = prepare(key: key, frame: rect) { CornerWindow(corner: corner, frame: rect) }
-        window.alphaValue = revealedDisplays.contains(displayID) ? 0 : 1
+        window.desktopVisible = !revealedDisplays.contains(displayID)
         orderAfterSampling.append(window)
       }
     }
@@ -227,11 +227,11 @@ final class OverlayController: NSObject {
     }
     for (key, window) in windows {
       let hidden = revealedDisplays.contains { key.hasPrefix("\($0).") }
-      window.alphaValue = hidden ? 0 : 1
+      window.desktopVisible = !hidden
     }
   }
 
-  private func prepare(key: String, frame: CGRect, make: () -> OverlayWindow) -> OverlayWindow {
+  private func prepare(key: String, frame: CGRect, make: () -> CornerWindow) -> CornerWindow {
     let window = windows[key] ?? make()
     windows[key] = window
     if window.frame != frame {

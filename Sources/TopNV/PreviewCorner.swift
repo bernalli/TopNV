@@ -4,18 +4,19 @@ import TopNVCore
 /// A temporary clipping parent lets the real corner drawing move inside its original window.
 @MainActor
 final class PreviewCorner {
-  private let window: OverlayWindow
+  private let window: CornerWindow
   private let drawing: NSView?
   private let wasLayerBacked: Bool
   private let top: Bool
   private let left: Bool
 
-  init(corner: ScreenCorner, window: OverlayWindow) {
+  init(corner: ScreenCorner, window: CornerWindow, variant: BarAnimation) {
     self.window = window
     top = corner == .topLeft || corner == .topRight
     left = corner == .topLeft || corner == .bottomLeft
     drawing = window.contentView
     wasLayerBacked = drawing?.wantsLayer == true
+    guard variant != .calm else { return }
     let wrapper = NSView(frame: CGRect(origin: .zero, size: window.frame.size))
     wrapper.wantsLayer = true
     wrapper.layer?.masksToBounds = true
@@ -28,8 +29,12 @@ final class PreviewCorner {
   }
 
   func draw(_ variant: BarAnimation, at elapsed: Double) {
-    guard let layer = drawing?.layer else { return }
     let corner = variant.corner(at: elapsed, top: top)
+    if variant == .calm {
+      window.fadeProgress = corner.progress
+      return
+    }
+    guard let layer = drawing?.layer else { return }
     let amount = corner.progress
     let topAtMaxY = layer.superlayer?.isGeometryFlipped != true
     let vertexX: CGFloat = left ? 0 : 1
@@ -60,6 +65,10 @@ final class PreviewCorner {
   }
 
   func restore() {
+    if window.contentView === drawing {
+      window.fadeProgress = 1
+      return
+    }
     drawing?.layer?.setAffineTransform(.identity)
     drawing?.layer?.opacity = 1
     drawing?.removeFromSuperview()

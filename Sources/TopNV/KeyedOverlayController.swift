@@ -338,7 +338,7 @@ extension KeyedOverlayController {
 
   /// Sample only while the preview is requested. The ordinary gates continue to own window alpha.
   func previewTarget(screen: NSScreen, id: UInt32, bar: OverlayWindow,
-                     corners: [ScreenCorner: OverlayWindow]) -> PreviewBandTarget? {
+                     corners: [ScreenCorner: CornerWindow]) -> PreviewBandTarget? {
     let evidence = MenuBarEvidence.evaluate(
       frame: screen.frame, visibleFrame: screen.visibleFrame, bandFrame: bar.frame,
       windows: windowMetadata(screens: NSScreen.screens),

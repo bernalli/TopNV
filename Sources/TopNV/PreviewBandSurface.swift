@@ -16,7 +16,7 @@ struct PreviewBandTarget {
   let bar: OverlayWindow
   let keyed: OverlayWindow?
   let backdrops: [CALayer]
-  let corners: [ScreenCorner: OverlayWindow]
+  let corners: [ScreenCorner: CornerWindow]
 }
 
 @MainActor
@@ -48,7 +48,7 @@ final class PreviewBandSurface {
     originalView = bar.contentView
     originalColor = bar.backgroundColor
     originalOpaque = bar.isOpaque
-    corners = target.corners.map { PreviewCorner(corner: $0.key, window: $0.value) }
+    corners = target.corners.map { PreviewCorner(corner: $0.key, window: $0.value, variant: variant) }
     let view = NSView(frame: bounds)
     view.wantsLayer = true
     band.frame = bounds
