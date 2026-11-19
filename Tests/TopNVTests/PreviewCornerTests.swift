@@ -26,19 +26,15 @@ final class PreviewCornerTests: XCTestCase {
       defer { window.close() }
       let original = window.contentView
       let preview = PreviewCorner(corner: corner, window: window, variant: .calm)
-      let end = BarAnimation.calm.durationMS
-      // The band arrives at 72% of the duration; the corners fade in after it.
-      let arrival = end * 0.72
-      for (elapsed, opacity) in [(-1.0, CGFloat(0)), (0, 0), (arrival - 1, 0), (end, 1), (end + 5000, 1)] {
+      let arrival = 410.4
+      for (elapsed, opacity) in [(-1.0, CGFloat(0)), (0, 0), (arrival, 1), (arrival + 5000, 1)] {
         preview.draw(.calm, at: elapsed)
         XCTAssertEqual(window.alphaValue, opacity, "\(corner.rawValue) at \(elapsed)")
         XCTAssertTrue(window.contentView === original)
       }
-      preview.draw(.calm, at: (arrival + end) / 2)
+      preview.draw(.calm, at: arrival / 2)
       XCTAssertGreaterThan(window.alphaValue, 0, corner.rawValue)
       XCTAssertLessThan(window.alphaValue, 1, corner.rawValue)
-      preview.draw(.calm, at: arrival / 2)
-      XCTAssertEqual(window.alphaValue, 0, corner.rawValue)
 
       preview.restore()
       XCTAssertTrue(window.contentView === original)
@@ -58,7 +54,7 @@ final class PreviewCornerTests: XCTestCase {
     surface.draw(.calm, elapsed: 0)
     window.desktopVisible = true
     XCTAssertEqual(window.alphaValue, 0)
-    surface.draw(.calm, elapsed: 480)
+    surface.draw(.calm, elapsed: 205.2)
     XCTAssertGreaterThan(window.alphaValue, 0)
     XCTAssertLessThan(window.alphaValue, 1)
     window.desktopVisible = false
@@ -66,6 +62,34 @@ final class PreviewCornerTests: XCTestCase {
     XCTAssertEqual(window.alphaValue, 0)
     window.desktopVisible = true
     XCTAssertEqual(window.alphaValue, 1)
+  }
+
+  func testEveryCornerFadesWithTheDrawnBandFromTheFirstFrameToItsArrival() throws {
+    _ = NSApplication.shared
+    let bar = BarWindow(frame: CGRect(x: 0, y: 0, width: 1000, height: 30))
+    let rect = CGRect(x: 0, y: 0, width: 15, height: 15)
+    let corners = Dictionary(uniqueKeysWithValues: ScreenCorner.allCases.map {
+      ($0, CornerWindow(corner: $0, frame: rect))
+    })
+    defer {
+      bar.close()
+      for window in corners.values { window.close() }
+    }
+    let target = PreviewBandTarget(notchWidth: 150, bar: bar, keyed: nil, backdrops: [], corners: corners)
+    let surface = PreviewBandSurface(target: target, variant: .calm)
+    defer { surface.restore() }
+    let band = try XCTUnwrap(bar.contentView?.layer?.sublayers?.first as? CAShapeLayer)
+    for elapsed in Array(stride(from: 0.0, to: 410.4, by: 1000.0 / 60)) + [410.4, 570] {
+      surface.draw(.calm, elapsed: elapsed)
+      let width = try XCTUnwrap(band.path).boundingBoxOfPath.width
+      // The band starts at 128 points on this screen and reaches both edges at 1000.
+      let fraction = (width - 128) / (1000 - 128)
+      let alphas = ScreenCorner.allCases.compactMap { corners[$0]?.alphaValue }
+      print("cornerFrame trackMS=\(elapsed) bandWidth=\(width) alpha=\(alphas)")
+      for (corner, window) in corners {
+        XCTAssertEqual(window.alphaValue, fraction, accuracy: 0.00001, "\(corner) at \(elapsed) ms")
+      }
+    }
   }
 
   private func checkAnchors(_ variant: BarAnimation, at elapsed: Double,

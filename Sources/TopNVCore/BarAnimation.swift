@@ -41,6 +41,10 @@ public enum BarAnimation: String, CaseIterable, Sendable {
     public var glyphHalfWidth: Double
   }
 
+  private static func calmProgress(at time: Double) -> Double {
+    AnimationTiming.calm.progress(time, to: 410.4)
+  }
+
   public func frame(at time: Double, width: Double, height: Double, notch: Double) -> Frame {
     let half = width / 2
     let radius = width * 0.011
@@ -63,7 +67,7 @@ public enum BarAnimation: String, CaseIterable, Sendable {
       result.radius = min(999 * (1 - second), height / 2, result.halfWidth)
       result.glyphOpacity = AnimationTiming.linear.progress(time, from: 676.4, to: 890)
     case .calm:
-      result.halfWidth = start + (half - start) * AnimationTiming.calm.progress(time, to: 410.4)
+      result.halfWidth = start + (half - start) * Self.calmProgress(at: time)
     case .stretch:
       result.halfWidth = start + (half + 1.5 * radius - start) * AnimationTiming.settle.progress(time, to: 504)
       result.radius = min(radius, height, result.halfWidth)
@@ -94,7 +98,7 @@ public enum BarAnimation: String, CaseIterable, Sendable {
     case .arrows: Corner(style: .growFade, progress: AnimationTiming.easeOut.progress(time, from: 490, to: 620))
     case .breath: Corner(style: .fade, progress: AnimationTiming.linear.progress(
       time, from: top ? 890 : 1000, to: top ? 1000 : 1120))
-    case .calm: Corner(style: .fade, progress: AnimationTiming.easeOut.progress(time, from: 410.4, to: 570))
+    case .calm: Corner(style: .fade, progress: Self.calmProgress(at: time))
     case .stretch: Corner(style: .grow, progress: AnimationTiming.settle.progress(time, from: 324, to: 720))
     case .blind: Corner(style: .unfold, progress: AnimationTiming.out.progress(
       time, from: top ? 571.2 : 672, to: top ? 739.2 : 840))

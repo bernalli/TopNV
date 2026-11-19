@@ -33,7 +33,15 @@ final class BarAnimationTests: XCTestCase {
     XCTAssertEqual(width(.curtain, 280), 250, accuracy: 0.001)
     XCTAssertEqual(width(.calm, 205.2), 282, accuracy: 0.001)
     XCTAssertEqual(BarAnimation.curtain.corner(at: 560, top: false).progress, 0)
-    XCTAssertEqual(BarAnimation.calm.corner(at: 410.4, top: true).progress, 0)
+  }
+
+  func testAllCalmCornersReachHalfOpacityAtMidTravelAndFullOpacityAtArrival() {
+    for top in [true, false] {
+      let variant = BarAnimation.calm
+      XCTAssertGreaterThan(variant.corner(at: 1000.0 / 60, top: top).progress, 0)
+      XCTAssertEqual(variant.corner(at: 205.2, top: top).progress, 0.5, accuracy: 0.00001)
+      XCTAssertEqual(variant.corner(at: 410.4, top: top).progress, 1)
+    }
   }
 
   func testCornerTreatmentsMatchTheReferenceOrder() {
@@ -86,7 +94,7 @@ final class BarAnimationTests: XCTestCase {
   func testTheCalmEntranceOnlyGrowsFromTheNotchToTheEdgesForAnyClock() {
     let variant = BarAnimation.calm
     let end = variant.durationMS
-    // The band arrives at 72% of the reference duration, then the corners fade in.
+    // The band arrives at 72% of the reference duration, together with the corners.
     let arrival = end * 0.72
     let times = [-Double.infinity, -1000, -1, 0] + stride(from: 1.0, through: end, by: 7)
       + [end, end + 1, 5000, .infinity]
@@ -112,10 +120,10 @@ final class BarAnimationTests: XCTestCase {
         }
         if time <= 0 {
           XCTAssertEqual(frame.halfWidth, max(0, notch / 2 - width * 0.011), accuracy: 1e-9, context)
+          XCTAssertEqual(top, 0, context)
         }
-        if time <= arrival - 1 { XCTAssertEqual(top, 0, context) }
         if time >= arrival + 1 { XCTAssertEqual(frame.halfWidth, half, accuracy: 1e-9, context) }
-        if time >= end { XCTAssertEqual(top, 1, context) }
+        if time >= arrival { XCTAssertEqual(top, 1, context) }
         previous = (frame.halfWidth, top, bottom)
       }
     }
