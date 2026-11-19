@@ -14,6 +14,7 @@ final class OverlayController: NSObject {
   }
 
   private let settings: AppSettings
+  private let animationPreview: BarAnimationPreview?
   private var bandState = BandState()
   private let keyedOverlay: KeyedOverlayController
   private var barWindows: [UInt32: OverlayWindow] = [:]
@@ -29,16 +30,40 @@ final class OverlayController: NSObject {
   /// `keyCalibration` is nil in production; a test copy passes the candidate it starts with.
   init(settings: AppSettings, keyCalibration: KeyCalibration? = nil) {
     self.settings = settings
+    animationPreview = keyCalibration == nil ? nil : BarAnimationPreview()
     keyedOverlay = KeyedOverlayController(calibration: keyCalibration)
     super.init()
   }
 
   /// Test copies only; see `KeyedOverlayController.calibrate(_:)`.
   func calibrateKey(_ calibration: KeyCalibration) {
+    animationPreview?.cancel()
     keyedOverlay.calibrate(calibration)
   }
 
+  func preview(_ variant: BarAnimation) {
+    animationPreview?.play(variant) { [weak self] in self?.previewTargets() ?? [] }
+  }
+
+  private func previewTargets() -> [PreviewBandTarget] {
+    guard settings.hideNotch else { return [] }
+    return NSScreen.screens.compactMap { screen in
+      guard let id = screen.displayID, let bar = barWindows[id], bar.alphaValue > 0 else { return nil }
+      var corners: [ScreenCorner: OverlayWindow] = [:]
+      if wantsCorners(on: id) {
+        for corner in ScreenCorner.allCases { corners[corner] = windows["\(id).\(corner.rawValue)"] }
+      }
+      return keyedOverlay.previewTarget(screen: screen, id: id, bar: bar, corners: corners)
+    }
+  }
+
   func start() {
+    if animationPreview != nil {
+      keyedOverlay.onPreviewInvalidated = { [weak self] displayID in
+        guard let self, let bar = barWindows[displayID] else { return }
+        animationPreview?.cancel(ifShowing: bar)
+      }
+    }
     keyedOverlay.onCornerVisibility = { [weak self] visibility in
       self?.cornerVisibilityDidChange(visibility)
     }
@@ -69,6 +94,7 @@ final class OverlayController: NSObject {
   }
 
   @objc private func systemDidChange(_ notification: Notification) {
+    animationPreview?.cancel()
     if notification.name == NSWorkspace.activeSpaceDidChangeNotification {
       rebuild(.spaceChanged)
     } else {
@@ -100,6 +126,7 @@ final class OverlayController: NSObject {
   }
 
   private func rebuild(_ event: BandState.Event) {
+    animationPreview?.cancel()
     let screens = NSScreen.screens
     let measurements = screens.compactMap { screen -> BandState.Screen? in
       guard let id = screen.displayID else { return nil }
@@ -169,6 +196,7 @@ final class OverlayController: NSObject {
   /// While the desktop of a display is revealed its corners turn transparent, as they disappear
   /// in Mission Control. They are neither closed nor created again.
   private func cornerVisibilityDidChange(_ visibility: [UInt32: Bool]) {
+    animationPreview?.cancel()
     hiddenCornerDisplays = Set(visibility.compactMap { $0.value ? nil : $0.key })
     for (key, window) in windows {
       let hidden = hiddenCornerDisplays.contains { key.hasPrefix("\($0).") }

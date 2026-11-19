@@ -2,6 +2,15 @@ import Foundation
 
 /// What a selectable menu item does. The app target maps each command to an action.
 public enum MenuCommand: String, CaseIterable, Sendable {
+  case previewCurtain = "astra-sipario"
+  case previewInk = "astra-filo"
+  case previewArrows = "astra-frecce"
+  case previewBreath = "astra-respiro"
+  case previewCalm = "fable-scorrimento-calmo"
+  case previewStretch = "fable-notch-allungata"
+  case previewBlind = "fable-filo-tenda"
+  case previewWave = "fable-onda-lenta"
+  case replayAnimation
   case hideNotch
   case roundCorners
   case cornersOnAllDisplays
@@ -56,6 +65,7 @@ public struct MenuState: Equatable, Sendable {
   public var updates: UpdateItems
   /// The chosen candidate in a test copy; always nil in production, where the menu has no
   /// calibration.
+  public var lastAnimation: BarAnimation?
   public var keyCalibration: KeyCalibration?
 
   public init(
@@ -99,6 +109,7 @@ public enum MenuLayout {
         MenuRow(
           id: "keyCalibration", title: "Key calibration", symbol: "slider.horizontal.3",
           kind: .submenu(keyCalibration(selected: calibration), enabled: true)))
+      rows.append(animationPreview(for: state))
     }
     rows += [
       separator("separator.app"),

@@ -21,6 +21,8 @@ import TopNVCore
   private var refreshScheduled = false
   /// Test copies only: the checked candidate. Nil in production, so the menu has no calibration
   /// and the calibration commands do nothing.
+  var onAnimationPreview: ((BarAnimation) -> Void)?
+  private var lastAnimation: BarAnimation?
   private var keyCalibration: KeyCalibration?
   /// Called with the candidate chosen in the Key calibration submenu.
   var onKeyCalibration: ((KeyCalibration) -> Void)?
@@ -94,11 +96,13 @@ import TopNVCore
   }
 
   private var state: MenuState {
-    MenuState(
+    var state = MenuState(
       hideNotch: settings.hideNotch, roundCorners: settings.roundCorners,
       cornersOnAllDisplays: settings.cornersOnAllDisplays, launchAtLogin: loginItem.isEnabled,
       loginNeedsApproval: loginItem.needsApproval, loginError: loginItem.errorMessage,
       updates: updates.items, keyCalibration: keyCalibration)
+    state.lastAnimation = lastAnimation
+    return state
   }
 
   /// The login item does not publish approval changes made in System Settings; opening the menu
@@ -121,17 +125,26 @@ import TopNVCore
     case .reportIssue:
       if let url = AppLink.reportIssue.url { NSWorkspace.shared.open(url) }
     case .quit: NSApp.terminate(nil)
-    case .keyCalibration1, .keyCalibration2, .keyCalibration3, .keyCalibration4, .keyCalibration5,
-      .keyCalibration6:
-      chooseKeyCalibration(command)
+    case .previewCurtain, .previewInk, .previewArrows, .previewBreath, .previewCalm, .previewStretch,
+         .previewBlind, .previewWave, .replayAnimation, .keyCalibration1, .keyCalibration2, .keyCalibration3,
+         .keyCalibration4, .keyCalibration5, .keyCalibration6:
+      performTestCommand(command)
     }
   }
 
-  /// The choice is not saved: every launch starts again from the production key.
-  private func chooseKeyCalibration(_ command: MenuCommand) {
-    guard keyCalibration != nil, let choice = KeyCalibration.option(for: command) else { return }
-    keyCalibration = choice
-    onKeyCalibration?(choice)
+  private func performTestCommand(_ command: MenuCommand) {
+    guard keyCalibration != nil else { return }
+    if let calibration = KeyCalibration.option(for: command) {
+      keyCalibration = calibration
+      onKeyCalibration?(calibration)
+      scheduleRefresh()
+      return
+    }
+    guard settings.hideNotch,
+          let choice = command == .replayAnimation ? lastAnimation : BarAnimation(rawValue: command.rawValue)
+    else { return }
+    lastAnimation = choice
+    onAnimationPreview?(choice)
     scheduleRefresh()
   }
 }

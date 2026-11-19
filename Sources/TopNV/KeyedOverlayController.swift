@@ -46,6 +46,8 @@ final class KeyedOverlayController {
   private var cornerVisibility: [UInt32: Bool] = [:]
   /// Called with the visibility of the corners of every display in `cornerDisplays` when it changes.
   var onCornerVisibility: (([UInt32: Bool]) -> Void)?
+  /// Test copies restore preview layers before the ordinary keyed effect updates its windows.
+  var onPreviewInvalidated: ((UInt32) -> Void)?
   /// Test copies only: the chosen normal key. Nil in production, for the whole session.
   private var calibration: KeyCalibration?
   private var calibrationNeedsRebuild = false
@@ -163,6 +165,7 @@ final class KeyedOverlayController {
       now: ProcessInfo.processInfo.systemUptime, desktopRevealed: evidence.desktopRevealed,
       spaceSliding: evidence.spaceSliding, nativeFullScreen: evidence.nativeFullScreen))
     states[displayID] = state
+    invalidatePreviewIfNeeded(on: displayID, evidence: evidence, decision: decision)
     // The gate of the active window makes the trace enough to follow a Space switch.
     let gate = active.min().flatMap { state.visibility[$0] }.map { "\($0)" } ?? "none"
     let trace = "appearance=\(appearance) context=\(evidence.context) "
@@ -345,5 +348,47 @@ extension KeyedOverlayController {
     return MenuBarEvidence.windows(from: list, ownPID: ProcessInfo.processInfo.processIdentifier,
                                    frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
                                    primaryScreenHeight: primary.frame.maxY)
+  }
+}
+
+// MARK: - Test-copy preview
+
+extension KeyedOverlayController {
+  func invalidatePreviewIfNeeded(on displayID: UInt32, evidence: MenuBarEvidence.Result,
+                                 decision: KeyedOverlayState.Decision) {
+    guard let onPreviewInvalidated,
+          !Self.permitsPreview(evidence) || changesVisibleWindows(decision) else { return }
+    onPreviewInvalidated(displayID)
+  }
+
+  private func changesVisibleWindows(_ decision: KeyedOverlayState.Decision) -> Bool {
+    if !decision.close.isEmpty { return true }
+    if let change = decision.keyChange, let entry = entries[change.windowID], entry.key != change.key {
+      return true
+    }
+    return decision.gates.contains { id, shown in
+      guard let window = entries[id]?.window else { return false }
+      return window.alphaValue != (shown ? 1 : 0)
+    }
+  }
+
+  private static func permitsPreview(_ evidence: MenuBarEvidence.Result) -> Bool {
+    evidence.context == .desktop && evidence.menuVisible && !evidence.spaceSliding && !evidence.desktopRevealed
+  }
+
+  /// Sample only while the preview is requested. The ordinary gates continue to own window alpha.
+  func previewTarget(screen: NSScreen, id: UInt32, bar: OverlayWindow,
+                     corners: [ScreenCorner: OverlayWindow]) -> PreviewBandTarget? {
+    guard calibration != nil else { return nil }
+    let evidence = MenuBarEvidence.evaluate(
+      frame: screen.frame, visibleFrame: screen.visibleFrame, bandFrame: bar.frame,
+      windows: windowMetadata(screens: NSScreen.screens),
+      systemFullScreen: NSApp.currentSystemPresentationOptions.contains(.fullScreen))
+    guard Self.permitsPreview(evidence) else { return nil }
+    let entry = entries.values.first {
+      $0.displayID == id && $0.window.isOnActiveSpace && $0.window.alphaValue > 0
+    }
+    return PreviewBandTarget(notchWidth: screen.previewNotchWidth, bar: bar, keyed: entry?.window,
+                             backdrops: entry.map { [$0.normal, $0.revealed] } ?? [], corners: corners)
   }
 }

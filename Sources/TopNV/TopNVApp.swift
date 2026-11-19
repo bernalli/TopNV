@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     Application.statusMenu = statusMenu
     let controller = OverlayController(settings: settings, keyCalibration: keyCalibration)
     statusMenu.onKeyCalibration = { [weak controller] in controller?.calibrateKey($0) }
+    statusMenu.onAnimationPreview = { [weak controller] in controller?.preview($0) }
     controller.start()
     overlay = controller
     sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }
