@@ -13,16 +13,20 @@ public enum MenuBarEvidence {
 
   public struct Window {
     public let owner: Owner
+    public let number: CGWindowID?
     public let layer: Int
     public let bounds: CGRect
     /// Owned by `WindowManager`. Such a window is also a `.desktop` window, never evidence of a
     /// full-screen app; at a layer of zero or more it can reveal the desktop.
+    let isDock: Bool
     public let isWindowManager: Bool
     public let isFrontmostApp: Bool
     public let alpha: Double
 
     public init(owner: Owner, layer: Int, bounds: CGRect, isWindowManager: Bool = false,
-                alpha: Double = 1, isFrontmostApp: Bool = false) {
+                alpha: Double = 1, isFrontmostApp: Bool = false, number: CGWindowID? = nil, isDock: Bool = false) {
+      self.isDock = isDock
+      self.number = number
       self.owner = owner
       self.layer = layer
       self.bounds = bounds
@@ -38,7 +42,10 @@ public enum MenuBarEvidence {
     public let nativeFullScreen: Bool
     public let menuVisible: Bool
     /// Show Desktop or a click on the wallpaper: the backdrop under the menu bar is darker.
-    public let desktopRevealed: Bool
+    public var desktopRevealed: Bool { revealOverride ?? (revealSurface != nil) }
+    var revealOverride: Bool?
+    let revealSurface: Window?
+    public var revealLayer: Int? { revealSurface?.layer }
     /// A Space switch slides the desktop of this display sideways. Every other value then mixes
     /// the Space that leaves with the Space that arrives.
     public let spaceSliding: Bool
@@ -54,7 +61,8 @@ public enum MenuBarEvidence {
   /// incomplete evidence is never permission to create. A window without an owner name is a
   /// plain application window, which can only suppress the effect.
   public static func windows(from list: [[String: Any]], ownPID: Int32,
-                             frontmostPID: Int32? = nil, primaryScreenHeight: CGFloat) -> [Window]? {
+                             frontmostPID: Int32? = nil, primaryScreenHeight: CGFloat,
+                             dockPID: Int32? = nil) -> [Window]? {
     guard primaryScreenHeight.isFinite, primaryScreenHeight > 0 else { return nil }
     var result: [Window] = []
     result.reserveCapacity(list.count)
@@ -81,12 +89,13 @@ public enum MenuBarEvidence {
       case let value as String: name = value
       default: return nil
       }
+      let isDock = pid == dockPID || name == "Dock"
       let owner: Owner
       if pid == ownPID {
         owner = .ownApp
       } else if name == "Window Server" {
         owner = .windowServer
-      } else if name == "Dock" || name == "WindowManager" || name == "Screenshot"
+      } else if isDock || name == "WindowManager" || name == "Screenshot"
                   || (name == "Finder" && layer < 0) {
         // Show Desktop and a click on the wallpaper add a full-screen WindowManager window at
         // layer 18, and the screenshot and recording tool a full-screen Screenshot window at
@@ -99,7 +108,9 @@ public enum MenuBarEvidence {
       result.append(Window(owner: owner, layer: Int(layer),
                            bounds: CGRect(x: x, y: minY, width: width, height: height),
                            isWindowManager: pid != ownPID && name == "WindowManager", alpha: alpha,
-                           isFrontmostApp: owner == .application && pid == frontmostPID))
+                           isFrontmostApp: owner == .application && pid == frontmostPID,
+                           number: finiteNumber(info[kCGWindowNumber as String]).flatMap(CGWindowID.init(exactly:)),
+                           isDock: owner == .desktop && isDock))
     }
     return result
   }
@@ -109,7 +120,7 @@ public enum MenuBarEvidence {
                               displayFrames: [CGRect] = []) -> Result {
     guard let windows, valid(frame), valid(visibleFrame), valid(bandFrame),
           frame.contains(visibleFrame), frame.contains(bandFrame) else {
-      return Result(context: .unknown, nativeFullScreen: false, menuVisible: false, desktopRevealed: false,
+      return Result(context: .unknown, nativeFullScreen: false, menuVisible: false, revealSurface: nil,
                     spaceSliding: false, fullScreenBackdrop: false, permitsBandEntrance: false)
     }
     let tolerance: CGFloat = 2
@@ -141,15 +152,7 @@ public enum MenuBarEvidence {
         && $0.bounds.intersection(frame).width >= frame.width * 0.4
     }
     let noReservedTop = visibleFrame.maxY >= frame.maxY - tolerance
-    // Show Desktop and a click on the wallpaper add a WindowManager window from the bottom edge
-    // to the top edge. The WindowManager windows at negative layers are always there: they are
-    // the desktop itself. Small WindowManager windows at positive layers do not darken the bar.
-    let desktopRevealed = windows.contains {
-      $0.isWindowManager && $0.layer >= 0 && $0.alpha > 0 && $0.alpha <= 1 && valid($0.bounds)
-        && $0.bounds.intersection(frame).width >= frame.width * 0.9
-        && $0.bounds.minY <= frame.minY + tolerance
-        && $0.bounds.maxY >= frame.maxY - tolerance
-    }
+    let revealSurface = revealSurface(in: windows, frame: frame, tolerance: tolerance)
     // The windows bound to a Space slide with it: the desktop window of WindowManager (negative
     // layer, as large as the display) and our keyed windows. One of them displaced sideways and
     // still over the display is a Space switch in progress. The menu bar slides too.
@@ -165,12 +168,28 @@ public enum MenuBarEvidence {
     let backdrop = fullScreenBackdrop(frame: frame, windows: windows, tolerance)
     let fullScreenApp = nativeFullScreen || coveringApp
     let autoHiddenMenu = noReservedTop && autoHiddenDesktop(frame, windows, displayFrames, systemFullScreen, tolerance)
-    let reservedMenu = !noReservedTop && (menuVisible || (desktopRevealed && !systemFullScreen))
+    let reservedMenu = !noReservedTop && (menuVisible || (revealSurface != nil && !systemFullScreen))
     let permitsBandEntrance = !fullScreenApp && !backdrop && !spaceSliding && (reservedMenu || autoHiddenMenu)
     return Result(context: fullScreenApp || noReservedTop ? .fullScreen : .desktop,
                   nativeFullScreen: nativeFullScreen,
-                  menuVisible: menuVisible, desktopRevealed: desktopRevealed,
+                  menuVisible: menuVisible, revealSurface: revealSurface,
                   spaceSliding: spaceSliding, fullScreenBackdrop: backdrop, permitsBandEntrance: permitsBandEntrance)
+  }
+
+  private static func revealSurface(in windows: [Window], frame: CGRect, tolerance: CGFloat) -> Window? {
+    func coversDisplay(_ window: Window) -> Bool {
+      valid(window.bounds) && window.alpha > 0 && window.alpha <= 1
+        && window.bounds.intersection(frame).width >= frame.width * 0.9
+        && window.bounds.minY <= frame.minY + tolerance && window.bounds.maxY >= frame.maxY - tolerance
+    }
+    if let surface = windows.first(where: { $0.isWindowManager && $0.layer >= 0 && coversDisplay($0) }) {
+      return surface
+    }
+    // On older systems Dock hosts the overview. A lone layer-20 Dock is ordinary;
+    // App Exposé has no excess of layer-20 surfaces over layer-18 surfaces.
+    guard let overview = windows.first(where: { $0.isDock && $0.layer == 18 && coversDisplay($0) }) else { return nil }
+    let dock = windows.filter { $0.isDock && $0.alpha > 0 && $0.bounds.intersects(frame) }
+    return dock.filter { $0.layer == 20 }.count > dock.filter { $0.layer == 18 }.count ? overview : nil
   }
 
   private static func isSpaceBackground(_ window: Window, frame: CGRect, tolerance: CGFloat) -> Bool {

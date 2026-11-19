@@ -27,6 +27,8 @@ final class KeyedOverlayController {
   private var traces: [UInt32: String] = [:]
   private var monitor: MenuBarConditionsMonitor?
   private var timer: Timer?
+  private var dock: NSRunningApplication?
+  private var desktopReturns: [UInt32: DesktopReturn] = [:]
   /// Displays with a base band or corners, even if the optional keyed effect fails.
   private var sampledDisplays: Set<UInt32> = []
   private var desktopOverlayVisibility: [UInt32: Bool] = [:]
@@ -51,14 +53,7 @@ final class KeyedOverlayController {
       monitor = MenuBarConditionsMonitor()
       monitor?.onChange = { [weak self] in self?.reconcile() }
     }
-    if needsSamples && timer == nil {
-      let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-        MainActor.assumeIsolated { self?.reconcile() }
-      }
-      timer.tolerance = 0.02
-      self.timer = timer
-      RunLoop.main.add(timer, forMode: .common)
-    }
+    desktopReturns.removeAll()
     reconcile()
     if !keyedActive { stopMonitoring() }
   }
@@ -75,21 +70,24 @@ final class KeyedOverlayController {
     }, uniquingKeysWith: { first, _ in first })
     // One copy of the window list per sample serves all overlays.
     let metadata = needsSamples ? windowMetadata(screens: screens) : nil
-    updateDesktopOverlayVisibility(byID: byID, metadata: metadata)
-    if !failed { reconcileKeyed(byID: byID, metadata: metadata) }
+    let fullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
+    let evidence = updateDesktopOverlayVisibility(byID: byID, metadata: metadata, systemFullScreen: fullScreen)
+    if !failed {
+      reconcileKeyed(byID: byID, evidence: evidence, listAvailable: metadata != nil, systemFullScreen: fullScreen)
+    }
   }
 
-  private func reconcileKeyed(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?) {
+  private func reconcileKeyed(byID: [UInt32: NSScreen], evidence: [UInt32: MenuBarEvidence.Result],
+                              listAvailable: Bool, systemFullScreen: Bool) {
     closeChangedWindows(byID: byID)
     guard !failed else { return }
     guard enabled, !frames.isEmpty else {
       states.removeAll()
       return
     }
-    let systemFullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
-    for (displayID, frame) in frames.sorted(by: { $0.key < $1.key }) {
-      guard let screen = byID[displayID] else { continue }
-      reconcile(displayID: displayID, frame: frame, screen: screen, metadata: metadata,
+    for displayID in frames.keys.sorted() {
+      guard let screen = byID[displayID], let sample = evidence[displayID] else { continue }
+      reconcile(displayID: displayID, screen: screen, evidence: sample, listAvailable: listAvailable,
                 systemFullScreen: systemFullScreen)
       guard !failed else { return }
     }
@@ -112,10 +110,8 @@ final class KeyedOverlayController {
     for id in states.keys where frames[id] == nil { states[id] = nil }
   }
 
-  private func reconcile(displayID: UInt32, frame: CGRect, screen: NSScreen,
-                         metadata: [MenuBarEvidence.Window]?, systemFullScreen: Bool) {
-    let evidence = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame,
-                                            bandFrame: frame, windows: metadata, systemFullScreen: systemFullScreen)
+  private func reconcile(displayID: UInt32, screen: NSScreen,
+                         evidence: MenuBarEvidence.Result, listAvailable: Bool, systemFullScreen: Bool) {
     var state = states[displayID] ?? KeyedOverlayState()
     let active = entries.compactMap { id, entry in
       entry.displayID == displayID && entry.window.isOnActiveSpace ? id : nil
@@ -131,11 +127,11 @@ final class KeyedOverlayController {
     // The gate of the active window makes the trace enough to follow a Space switch.
     let gate = active.min().flatMap { state.visibility[$0] }.map { "\($0)" } ?? "none"
     let trace = "appearance=\(appearance) context=\(evidence.context) "
-      + "menu=\(evidence.menuVisible) revealed=\(evidence.desktopRevealed) "
+      + "menu=\(evidence.menuVisible) revealed=\(evidence.desktopRevealed) surface=\(evidence.revealLayer ?? -1) "
       + "systemFullScreen=\(systemFullScreen) nativeFullScreen=\(evidence.nativeFullScreen) "
       + "backdrop=\(evidence.fullScreenBackdrop) "
       + "sliding=\(evidence.spaceSliding) gate=\(gate) "
-      + "list=\(metadata != nil) active=\(active.count) "
+      + "list=\(listAvailable) active=\(active.count) "
       + "windows=\(entries.count) close=\(decision.close.count) create=\(decision.create != nil)"
     if traces[displayID] != trace {
       traces[displayID] = trace
@@ -148,7 +144,7 @@ final class KeyedOverlayController {
       if shown && entry.window.alphaValue == 0 { onKeyWillShow?(displayID, entry.window, entry.backdrop) }
       entry.window.alphaValue = shown ? 1 : 0
     }
-    if let reservation = decision.create {
+    if let reservation = decision.create, let frame = frames[displayID] {
       create(displayID: displayID, frame: frame, screen: screen, reservation: reservation)
     }
   }
@@ -250,21 +246,25 @@ extension KeyedOverlayController {
 
 extension KeyedOverlayController {
   /// Missing or unknown evidence keeps the overlays visible; a screen missing for a moment keeps its state.
-  private func updateDesktopOverlayVisibility(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?) {
+  private func updateDesktopOverlayVisibility(byID: [UInt32: NSScreen], metadata: [MenuBarEvidence.Window]?,
+                                              systemFullScreen: Bool) -> [UInt32: MenuBarEvidence.Result] {
+    var results: [UInt32: MenuBarEvidence.Result] = [:]
     var visibility: [UInt32: Bool] = [:]
     var samples: [UInt32: BandEntrance.Sample] = [:]
-    let fullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
     let displayFrames = byID.values.map(\.frame)
     for id in sampledDisplays {
       guard let screen = byID[id] else {
+        desktopReturns[id] = nil
         visibility[id] = desktopOverlayVisibility[id] ?? true
         continue
       }
       let band = frames[id] ?? CGRect(x: screen.frame.minX, y: screen.frame.maxY - 1,
                                       width: screen.frame.width, height: 1)
-      let evidence = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame,
-                                             bandFrame: band, windows: metadata, systemFullScreen: fullScreen,
-                                             displayFrames: displayFrames)
+      let raw = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame, bandFrame: band,
+                                         windows: metadata, systemFullScreen: systemFullScreen,
+                                         displayFrames: displayFrames)
+      let evidence = desktopReturns[id, default: DesktopReturn()].resolve(raw, on: screen.frame, windows: metadata)
+      results[id] = evidence
       visibility[id] = CornerVisibility.visible(evidence)
       if frames[id] != nil {
         samples[id] = BandEntrance.Sample(evidence)
@@ -276,6 +276,20 @@ extension KeyedOverlayController {
     }
     desktopOverlayVisibility = visibility
     onDesktopSample?(visibility, samples)
+    scheduleSamples(duringReveal: results.values.contains { $0.revealLayer != nil || $0.desktopRevealed })
+    return results
+  }
+
+  private func scheduleSamples(duringReveal: Bool) {
+    let interval = duringReveal ? 1.0 / 30 : 0.1
+    guard needsSamples, timer?.timeInterval != interval else { return }
+    timer?.invalidate()
+    let timer = Timer(fire: Date(timeIntervalSinceNow: interval), interval: interval, repeats: true) { [weak self] _ in
+      MainActor.assumeIsolated { self?.reconcile() }
+    }
+    timer.tolerance = duringReveal ? 0.002 : 0.02
+    self.timer = timer
+    RunLoop.main.add(timer, forMode: .common)
   }
 
   /// Copying metadata neither captures pixels nor requests Screen Recording. Window titles
@@ -284,9 +298,12 @@ extension KeyedOverlayController {
     guard let primary = screens.first,
           let list = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID)
             as? [[String: Any]] else { return nil }
+    if dock == nil || dock?.isTerminated == true {
+      dock = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first
+    }
     return MenuBarEvidence.windows(from: list, ownPID: ProcessInfo.processInfo.processIdentifier,
                                    frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
-                                   primaryScreenHeight: primary.frame.maxY)
+                                   primaryScreenHeight: primary.frame.maxY, dockPID: dock?.processIdentifier)
   }
 }
 
