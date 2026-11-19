@@ -38,6 +38,8 @@ public enum MenuBarEvidence {
 
   public struct Result {
     fileprivate var visibleMenuBounds: CGRect?
+    public var menuBounds: CGRect? { visibleMenuBounds }
+
     /// The desktop capture at 2x has four affected rows immediately below the menu.
     public var menuEdgeFrame: CGRect? {
       guard permitsBandEntrance, !desktopRevealed, let menu = visibleMenuBounds else { return nil }
