@@ -137,7 +137,8 @@ public enum MenuBarEvidence {
     // layer, as large as the display) and our keyed windows. One of them displaced sideways and
     // still over the display is a Space switch in progress. The menu bar slides too.
     let spaceSliding = windows.contains {
-      let bound = ($0.isWindowManager && $0.layer < 0 && sameSize($0.bounds, frame, tolerance))
+      let bound = ($0.isWindowManager && $0.layer < 0 && $0.alpha > 0
+                     && sameSize($0.bounds, frame, tolerance))
         || ($0.owner == .ownApp && $0.layer == overlayLevel
               && sameSize($0.bounds, bandFrame, tolerance))
       return bound && valid($0.bounds)

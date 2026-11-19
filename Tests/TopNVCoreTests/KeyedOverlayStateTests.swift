@@ -296,7 +296,14 @@ final class KeyedOverlayStateTests: XCTestCase {
         XCTAssertEqual(result.close, Array(distinct.dropFirst()))
         XCTAssertTrue(result.gates.keys.allSatisfy { $0 == distinct.first })
         for (_, shown) in result.gates where shown { XCTAssertTrue(allPositive) }
-        if now < settleUntil { XCTAssertTrue(result.gates.isEmpty) }
+        if now < settleUntil {
+          // Turning the option off is certain while the evidence settles: it hides at once.
+          if !enabled, let keeper = distinct.first {
+            XCTAssertEqual(result.gates, [keeper: false])
+          } else {
+            XCTAssertTrue(result.gates.isEmpty)
+          }
+        }
         if let request = result.create {
           XCTAssertTrue(distinct.isEmpty)
           XCTAssertTrue(allPositive)

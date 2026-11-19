@@ -446,6 +446,21 @@ final class SpaceSlidingTests: XCTestCase {
   /// second after a sliding sample nothing is gated or created while the slide is younger than
   /// three seconds, a gate never names a window that is not the keeper, a window is shown and
   /// created only on full positive evidence, and the visit budget holds.
+  func testTurningTheOptionOffDuringASlideHidesAtOnce() {
+    var state = State()
+    _ = state.update(input(active: [1], time: 10))
+    XCTAssertEqual(state.visibility, [1: true])
+    _ = state.update(input(active: [1], menu: false, time: 20, sliding: true))
+    let result = state.update(input(active: [1], menu: false, enabled: false, time: 20.1,
+                                    sliding: true))
+    XCTAssertEqual(result.gates, [1: false])
+    XCTAssertEqual(state.visibility, [1: false])
+  }
+
+  func testATransparentDisplacedDesktopIsNotASlide() {
+    XCTAssertFalse(evaluate([desktop(0), desktop(40, alpha: 0), bar(0)]).spaceSliding)
+  }
+
   func testRandomSlidesKeepTheInvariants() {
     var seed: UInt64 = 0xD1B5_4A32_D192_ED03
     func next(_ bound: Int) -> Int {
@@ -492,7 +507,12 @@ final class SpaceSlidingTests: XCTestCase {
         XCTAssertEqual(result.close, Array(distinct.dropFirst()))
         XCTAssertTrue(result.gates.keys.allSatisfy { $0 == distinct.first })
         for (_, shown) in result.gates where shown { XCTAssertTrue(allPositive) }
-        if now < frozenUntil {
+        if now < frozenUntil, !enabled, let keeper = distinct.first {
+          // Turning the option off is certain even while two Spaces mix.
+          XCTAssertEqual(result.gates, [keeper: false])
+          XCTAssertNil(result.create)
+          XCTAssertNil(result.keyChange)
+        } else if now < frozenUntil {
           XCTAssertTrue(result.gates.isEmpty)
           XCTAssertNil(result.create)
           XCTAssertNil(result.keyChange)

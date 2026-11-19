@@ -120,7 +120,7 @@ public struct KeyedOverlayState {
     if let keeper {
       // While the evidence settles after a Space change the window keeps the gate it had
       // when its Space was last active. Hiding it here turns the bar grey after every switch.
-      if settled {
+      if settled || !input.enabled {
         visibility[keeper] = show
         result.gates[keeper] = show
         if show {
