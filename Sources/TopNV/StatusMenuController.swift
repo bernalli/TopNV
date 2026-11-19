@@ -52,8 +52,7 @@ import TopNVCore
     statusItem.menu = menu
     refresh()
     // A removal by the user is written back like the Hide Menu Bar Icon setting.
-    visibilityObservation = statusItem.observe(\.isVisible, options: [.new]) {
-      [weak self] _, change in
+    visibilityObservation = statusItem.observe(\.isVisible, options: [.new]) { [weak self] _, change in
       guard let visible = change.newValue else { return }
       MainActor.assumeIsolated {
         guard let self, visible != self.visibility.isVisible else { return }
@@ -65,7 +64,7 @@ import TopNVCore
       settings.objectWillChange.eraseToAnyPublisher(),
       loginItem.objectWillChange.eraseToAnyPublisher(),
       updates.objectWillChange.eraseToAnyPublisher(),
-      visibility.objectWillChange.eraseToAnyPublisher(),
+      visibility.objectWillChange.eraseToAnyPublisher()
     ] {
       publisher.sink { [weak self] _ in
         MainActor.assumeIsolated { self?.scheduleRefresh() }
@@ -112,12 +111,8 @@ import TopNVCore
 
   func perform(_ command: MenuCommand) {
     switch command {
-    case .hideNotch: settings.hideNotch.toggle()
-    case .roundCorners: settings.roundCorners.toggle()
-    case .cornersOnAllDisplays: settings.cornersOnAllDisplays.toggle()
-    case .launchAtLogin: loginItem.setEnabled(!loginItem.isEnabled)
-    case .automaticUpdates: updates.setAutomaticallyChecks(!updates.automaticallyChecksForUpdates)
-    case .hideMenuBarIcon: visibility.setMenuVisible(false)
+    case .hideNotch, .roundCorners, .cornersOnAllDisplays, .launchAtLogin, .automaticUpdates, .hideMenuBarIcon:
+      performSetting(command)
     case .checkForUpdates: updates.checkForUpdates()
     case .about: AboutWindowController.shared.show()
     case .reportIssue:
@@ -130,6 +125,18 @@ import TopNVCore
       guard isTestCopy else { return }
       relativeKey.toggle()
       refresh()
+    }
+  }
+
+  private func performSetting(_ command: MenuCommand) {
+    switch command {
+    case .hideNotch: settings.hideNotch.toggle()
+    case .roundCorners: settings.roundCorners.toggle()
+    case .cornersOnAllDisplays: settings.cornersOnAllDisplays.toggle()
+    case .launchAtLogin: loginItem.setEnabled(!loginItem.isEnabled)
+    case .automaticUpdates: updates.setAutomaticallyChecks(!updates.automaticallyChecksForUpdates)
+    case .hideMenuBarIcon: visibility.setMenuVisible(false)
+    default: assertionFailure("Expected a settings command")
     }
   }
 }

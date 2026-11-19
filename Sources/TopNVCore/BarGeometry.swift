@@ -67,7 +67,7 @@ public enum BarGeometry {
       .topLeft: CGRect(x: frame.minX, y: frame.maxY - inset - side, width: side, height: side),
       .topRight: CGRect(x: frame.maxX - side, y: frame.maxY - inset - side, width: side, height: side),
       .bottomLeft: CGRect(x: frame.minX, y: frame.minY, width: side, height: side),
-      .bottomRight: CGRect(x: frame.maxX - side, y: frame.minY, width: side, height: side),
+      .bottomRight: CGRect(x: frame.maxX - side, y: frame.minY, width: side, height: side)
     ]
   }
 

@@ -159,7 +159,8 @@ private final class Fixture {
   var delayed: [(Double, DispatchWorkItem)] = []
   let settings: AppSettings
   lazy var controller: OverlayController = {
-    let controller = OverlayController(settings: settings, displays: { [unowned self] in self.samples.screens }, sampler: samples,
+    let controller = OverlayController(
+      settings: settings, displays: { [unowned self] in self.samples.screens }, sampler: samples,
       bands: bands, edges: edges, corners: corners, keys: keys,
       makeClock: { [unowned self] _ in
         let clock = Clock()
@@ -204,166 +205,177 @@ private final class Fixture {
 @MainActor
 final class OverlayCoordinatorTests: XCTestCase {
   func testARebuildAppliesOnePlanAndOrdersBandAndCornersFront() throws {
-    let f = Fixture()
-    f.controller.start()
-    XCTAssertEqual(f.samples.events, ["list", "closeChanged", "active 1", "keys"])
-    XCTAssertEqual(f.bands.plans.count, 1)
-    XCTAssertEqual(f.edges.plans, f.bands.plans)
-    XCTAssertEqual(f.corners.plans, f.bands.plans)
-    XCTAssertEqual(f.keys.plans, f.bands.plans)
-    let desktop = try XCTUnwrap(f.bands.plans.last?.displays[1])
+    let fixture = Fixture()
+    fixture.controller.start()
+    XCTAssertEqual(fixture.samples.events, ["list", "closeChanged", "active 1", "keys"])
+    XCTAssertEqual(fixture.bands.plans.count, 1)
+    XCTAssertEqual(fixture.edges.plans, fixture.bands.plans)
+    XCTAssertEqual(fixture.corners.plans, fixture.bands.plans)
+    XCTAssertEqual(fixture.keys.plans, fixture.bands.plans)
+    let desktop = try XCTUnwrap(fixture.bands.plans.last?.displays[1])
     XCTAssertEqual(desktop.kind, .desktop)
     XCTAssertEqual(desktop.band.alpha, .value(1))
     XCTAssertEqual(desktop.edge.alpha, .value(1))
     XCTAssertEqual(desktop.corners.values.filter { $0.alpha == .value(1) }.count, 4)
-    XCTAssertEqual(Set(f.ordered), [11, 13, 14, 15, 16])
-    XCTAssertEqual(f.keys.creations.count, 1)
-    let lines = f.lines.filter { !$0.contains("part=summary") }
+    XCTAssertEqual(Set(fixture.ordered), [11, 13, 14, 15, 16])
+    XCTAssertEqual(fixture.keys.creations.count, 1)
+    let lines = fixture.lines.filter { !$0.contains("part=summary") }
     XCTAssertEqual(lines.count, 8)
     XCTAssertTrue(lines.contains { $0.contains("part=key ") && $0.contains("alpha=0 level=26 window=101") })
     let old = try XCTUnwrap(desktop.key.create)
     for _ in 0..<4 {
-      f.controller.systemChanged(.space, uptime: f.samples.now)
-      f.deliver([f.menu()])
+      fixture.controller.systemChanged(.space, uptime: fixture.samples.now)
+      fixture.deliver([fixture.menu()])
     }
-    XCTAssertEqual(f.keys.creations.count, 3)
-    f.keys.active[1] = [101]
-    f.keys.closed = [1]
-    f.samples.screens = [f.display(scale: 1)]
-    f.samples.events.removeAll()
-    f.deliver([f.menu()])
-    XCTAssertEqual(f.samples.events, ["list", "closeChanged", "active 1", "keys"])
-    XCTAssertEqual(f.keys.creations.count, 4)
-    XCTAssertFalse(f.controller.keyCommitted(old, window: 9, display: 1))
+    XCTAssertEqual(fixture.keys.creations.count, 3)
+    fixture.keys.active[1] = [101]
+    fixture.keys.closed = [1]
+    fixture.samples.screens = [fixture.display(scale: 1)]
+    fixture.samples.events.removeAll()
+    fixture.deliver([fixture.menu()])
+    XCTAssertEqual(fixture.samples.events, ["list", "closeChanged", "active 1", "keys"])
+    XCTAssertEqual(fixture.keys.creations.count, 4)
+    XCTAssertFalse(fixture.controller.keyCommitted(old, window: 9, display: 1))
     for ids in [[104, 101, 104], [101, 104, 101]] {
-      f.keys.active[1] = ids
-      f.deliver([f.menu()])
-      XCTAssertEqual(f.keys.plans.last?.displays[1]?.key.close, [104])
-      XCTAssertEqual(f.keys.plans.last?.displays[1]?.key.gates, [101: .value(1)])
+      fixture.keys.active[1] = ids
+      fixture.deliver([fixture.menu()])
+      XCTAssertEqual(fixture.keys.plans.last?.displays[1]?.key.close, [104])
+      XCTAssertEqual(fixture.keys.plans.last?.displays[1]?.key.gates, [101: .value(1)])
     }
-    f.settings.hideNotch = false
-    f.keys.closed = [1]
-    f.controller.settingsChanged()
-    XCTAssertFalse(try XCTUnwrap(f.bands.plans.last?.displays[1]).band.exists)
-    f.settings.hideNotch = true
-    f.controller.settingsChanged()
-    XCTAssertEqual(f.keys.creations.count, 5)
-    XCTAssertFalse(f.controller.keyCommitted(old, window: 10, display: 1))
+    fixture.settings.hideNotch = false
+    fixture.keys.closed = [1]
+    fixture.controller.settingsChanged()
+    XCTAssertFalse(try XCTUnwrap(fixture.bands.plans.last?.displays[1]).band.exists)
+    fixture.settings.hideNotch = true
+    fixture.controller.settingsChanged()
+    XCTAssertEqual(fixture.keys.creations.count, 5)
+    XCTAssertFalse(fixture.controller.keyCommitted(old, window: 10, display: 1))
   }
 
   func testASampleAppliesThePlanAndWritesTheRegistry() throws {
-    let f = Fixture()
-    f.samples.screens += [f.display(2), f.display(scale: 1)]
-    f.samples.windows = [f.menu(), f.menu(2)]
-    f.controller.start()
-    XCTAssertTrue(f.lines.contains { $0.contains("display=1 scene=desktop part=summary") && $0.hasSuffix("blackBottom=70") })
-    f.keys.active = [1: [101], 2: [102]]
-    for (surfaces, kind) in [([f.surface(18), f.surface(19)], BarSceneKind.revealed),
-                             ([f.surface(19), f.surface(18)], .overview)] {
-      f.deliver([f.menu(), f.menu(2)] + surfaces)
-      let display = try XCTUnwrap(f.bands.plans.last?.displays[1])
+    let fixture = Fixture()
+    fixture.samples.screens += [fixture.display(2), fixture.display(scale: 1)]
+    fixture.samples.windows = [fixture.menu(), fixture.menu(2)]
+    fixture.controller.start()
+    XCTAssertTrue(fixture.lines.contains {
+      $0.contains("display=1 scene=desktop part=summary") && $0.hasSuffix("blackBottom=70")
+    })
+    fixture.keys.active = [1: [101], 2: [102]]
+    for (surfaces, kind) in [([fixture.surface(18), fixture.surface(19)], BarSceneKind.revealed),
+                             ([fixture.surface(19), fixture.surface(18)], .overview)] {
+      fixture.deliver([fixture.menu(), fixture.menu(2)] + surfaces)
+      let display = try XCTUnwrap(fixture.bands.plans.last?.displays[1])
       XCTAssertEqual(display.kind, kind)
       XCTAssertEqual(display.band.alpha, .value(0))
       XCTAssertEqual(display.edge.alpha, .value(0))
       XCTAssertEqual(display.key.gates[101], .value(0))
-      XCTAssertEqual(f.bands.plans.last?.displays[2]?.band.alpha, .value(1))
-      XCTAssertTrue(f.samples.fast)
+      XCTAssertEqual(fixture.bands.plans.last?.displays[2]?.band.alpha, .value(1))
+      XCTAssertTrue(fixture.samples.fast)
     }
-    // Quartz rows include an unnumbered menu and two different bounds for one document number.
-    func row(_ owner: String, layer: Int, x: Int, y: Int, width: Int, height: Int,
-             number: Int? = nil) -> [String: Any] {
-      var value: [String: Any] = [kCGWindowOwnerPID as String: 2, kCGWindowOwnerName as String: owner,
-        kCGWindowLayer as String: layer, kCGWindowAlpha as String: 1,
-        kCGWindowBounds as String: ["X": x, "Y": y, "Width": width, "Height": height]]
-      if let number { value[kCGWindowNumber as String] = number }
-      return value
-    }
-    let menu = row("Window Server", layer: 24, x: 0, y: 0, width: 1512, height: 33)
-    let reveal = row("WindowManager", layer: 18, x: 0, y: 0, width: 1512, height: 982, number: 99)
-    let home = row("Editor", layer: 0, x: 264, y: 118, width: 832, height: 769, number: 80)
-    let parked = row("Editor", layer: 0, x: -820, y: 47, width: 832, height: 769, number: 80)
-    for duplicate in [false, true] {
-      let rows = [[menu, home], [menu, parked, reveal] + (duplicate ? [home] : []), [menu, parked]]
-      for list in rows {
-        let windows = try XCTUnwrap(MenuBarEvidence.windows(from: list, ownPID: 1, primaryScreenHeight: 982))
-        f.deliver(windows)
-      }
-      XCTAssertEqual(f.bands.plans.last?.displays[1]?.kind, duplicate ? .desktop : .revealed)
-    }
-    f.samples.fullScreen = true
-    let native = MenuBarEvidence.Window(owner: .application, layer: 0, bounds: f.display(2).visibleFrame,
+    try checkDuplicateDocumentRows(in: fixture)
+    fixture.samples.fullScreen = true
+    let native = MenuBarEvidence.Window(owner: .application, layer: 0, bounds: fixture.display(2).visibleFrame,
                                         isFrontmostApp: true)
-    f.deliver([f.menu(), f.menu(2), native])
-    XCTAssertEqual(f.bands.plans.last?.displays[1]?.kind, .desktop)
-    XCTAssertEqual(f.keys.plans.last?.displays[2]?.key.close, [102])
-    f.samples.fullScreen = false
-    f.deliver(nil)
-    XCTAssertEqual(f.bands.plans.last?.displays[1]?.kind, .unknown)
-    f.samples.screens = [f.display(2)]
-    f.deliver([f.menu(2)])
-    XCTAssertEqual(f.bands.plans.last?.displays[1]?.band.alpha, .hold)
-    XCTAssertEqual(f.bands.plans.last?.displays[1]?.edge.alpha, .value(0))
-    f.samples.screens = [f.display(), f.display(2)]
-    f.keys.active = [1: [101], 2: [103]]
-    f.deliver([f.menu(), f.menu(2)])
-    XCTAssertEqual(f.keys.plans.last?.displays[1]?.key.gates[101], .value(1))
-    XCTAssertEqual(f.keys.plans.last?.displays[2]?.key.gates[103], .value(1))
-    f.controller.keyDidFail()
-    f.deliver([f.menu(), f.menu(2)])
-    XCTAssertFalse(f.samples.monitoring)
-    for display in try XCTUnwrap(f.keys.plans.last).displays.values {
+    fixture.deliver([fixture.menu(), fixture.menu(2), native])
+    XCTAssertEqual(fixture.bands.plans.last?.displays[1]?.kind, .desktop)
+    XCTAssertEqual(fixture.keys.plans.last?.displays[2]?.key.close, [102])
+    fixture.samples.fullScreen = false
+    fixture.deliver(nil)
+    XCTAssertEqual(fixture.bands.plans.last?.displays[1]?.kind, .unknown)
+    fixture.samples.screens = [fixture.display(2)]
+    fixture.deliver([fixture.menu(2)])
+    XCTAssertEqual(fixture.bands.plans.last?.displays[1]?.band.alpha, .hold)
+    XCTAssertEqual(fixture.bands.plans.last?.displays[1]?.edge.alpha, .value(0))
+    fixture.samples.screens = [fixture.display(), fixture.display(2)]
+    fixture.keys.active = [1: [101], 2: [103]]
+    fixture.deliver([fixture.menu(), fixture.menu(2)])
+    XCTAssertEqual(fixture.keys.plans.last?.displays[1]?.key.gates[101], .value(1))
+    XCTAssertEqual(fixture.keys.plans.last?.displays[2]?.key.gates[103], .value(1))
+    fixture.controller.keyDidFail()
+    fixture.deliver([fixture.menu(), fixture.menu(2)])
+    XCTAssertFalse(fixture.samples.monitoring)
+    for display in try XCTUnwrap(fixture.keys.plans.last).displays.values {
       XCTAssertFalse(display.key.exists)
       XCTAssertTrue(display.band.exists)
     }
   }
 
+  private func row(_ owner: String, layer: Int, origin: (left: Int, top: Int),
+                   size: (width: Int, height: Int), number: Int? = nil) -> [String: Any] {
+    var value: [String: Any] = [
+      kCGWindowOwnerPID as String: 2, kCGWindowOwnerName as String: owner,
+      kCGWindowLayer as String: layer, kCGWindowAlpha as String: 1,
+      kCGWindowBounds as String: ["X": origin.left, "Y": origin.top, "Width": size.width, "Height": size.height]
+    ]
+    if let number { value[kCGWindowNumber as String] = number }
+    return value
+  }
+
+  private func checkDuplicateDocumentRows(in fixture: Fixture) throws {
+    // Quartz rows include an unnumbered menu and two different bounds for one document number.
+    let menu = row("Window Server", layer: 24, origin: (0, 0), size: (1512, 33))
+    let reveal = row("WindowManager", layer: 18, origin: (0, 0), size: (1512, 982), number: 99)
+    let home = row("Editor", layer: 0, origin: (264, 118), size: (832, 769), number: 80)
+    let parked = row("Editor", layer: 0, origin: (-820, 47), size: (832, 769), number: 80)
+    for duplicate in [false, true] {
+      let rows = [[menu, home], [menu, parked, reveal] + (duplicate ? [home] : []), [menu, parked]]
+      for list in rows {
+        let windows = try XCTUnwrap(MenuBarEvidence.windows(from: list, ownPID: 1, primaryScreenHeight: 982))
+        fixture.deliver(windows)
+      }
+      XCTAssertEqual(fixture.bands.plans.last?.displays[1]?.kind, duplicate ? .desktop : .revealed)
+    }
+  }
+
   func testASpaceChangeRebuildsAtOnceAndAScreenChangeWaits250ms() throws {
     for notificationFirst in [false, true] {
-      let f = Fixture()
-      f.samples.reduced = false
-      f.controller.start()
-      f.deliver([f.menu(), f.surface(19)])
-      f.samples.windows = [f.menu()]
-      if notificationFirst { f.controller.systemChanged(.space, uptime: f.samples.now) }
-      let before = f.clocks.count
-      f.controller.sample()
-      XCTAssertEqual(f.clocks.count, before + (notificationFirst ? 0 : 1))
-      if !notificationFirst { f.controller.systemChanged(.space, uptime: f.samples.now) }
-      XCTAssertEqual(f.bands.plans.last?.displays[1]?.band.mask, BarMask.none)
+      let fixture = Fixture()
+      fixture.samples.reduced = false
+      fixture.controller.start()
+      fixture.deliver([fixture.menu(), fixture.surface(19)])
+      fixture.samples.windows = [fixture.menu()]
+      if notificationFirst { fixture.controller.systemChanged(.space, uptime: fixture.samples.now) }
+      let before = fixture.clocks.count
+      fixture.controller.sample()
+      XCTAssertEqual(fixture.clocks.count, before + (notificationFirst ? 0 : 1))
+      if !notificationFirst { fixture.controller.systemChanged(.space, uptime: fixture.samples.now) }
+      XCTAssertEqual(fixture.bands.plans.last?.displays[1]?.band.mask, BarMask.none)
 
-      f.deliver([f.menu(), f.surface(19)])
-      f.deliver([f.menu(), f.surface(19, alpha: 0.8)])
-      let clock = try XCTUnwrap(f.clocks.last)
-      XCTAssertNotEqual(f.keys.plans.last?.displays[1]?.key.mask, BarMask.none)
+      fixture.deliver([fixture.menu(), fixture.surface(19)])
+      fixture.deliver([fixture.menu(), fixture.surface(19, alpha: 0.8)])
+      let clock = try XCTUnwrap(fixture.clocks.last)
+      XCTAssertNotEqual(fixture.keys.plans.last?.displays[1]?.key.mask, BarMask.none)
       clock.finish?()
-      f.deliver([f.menu()])
-      let signal = f.samples.now
-      f.deliver([f.menu()])
+      fixture.deliver([fixture.menu()])
+      let signal = fixture.samples.now
+      fixture.deliver([fixture.menu()])
       XCTAssertEqual(clock.ends.count, 1)
       XCTAssertEqual(try XCTUnwrap(clock.ends.first), signal, accuracy: 0.000_001)
 
-      f.controller.replayEntrance()
-      let preview = try XCTUnwrap(f.clocks.last)
-      XCTAssertEqual(f.bands.plans.last?.displays[1]?.band.mask, .rect(.zero))
-      XCTAssertTrue(f.lines.contains { $0.contains("part=band ") && $0.contains("mask=empty listed=unavailable") })
-      let reads = f.samples.events.filter { $0 == "list" }.count
-      f.bands.duringApply = {
-        f.controller.sample()
-        f.controller.systemChanged(.screen, uptime: f.samples.now)
+      fixture.controller.replayEntrance()
+      let preview = try XCTUnwrap(fixture.clocks.last)
+      XCTAssertEqual(fixture.bands.plans.last?.displays[1]?.band.mask, .rect(.zero))
+      XCTAssertTrue(fixture.lines.contains {
+        $0.contains("part=band ") && $0.contains("mask=empty listed=unavailable")
+      })
+      let reads = fixture.samples.events.filter { $0 == "list" }.count
+      fixture.bands.duringApply = {
+        fixture.controller.sample()
+        fixture.controller.systemChanged(.screen, uptime: fixture.samples.now)
         preview.frame?(200)
       }
       preview.frame?(100)
       XCTAssertTrue(preview.cancelled)
-      XCTAssertEqual(f.bands.plans.last?.displays[1]?.band.mask, BarMask.none)
-      XCTAssertEqual(f.samples.events.filter { $0 == "list" }.count, reads)
-      XCTAssertEqual(f.delayed.count, 1)
-      XCTAssertEqual(try XCTUnwrap(f.delayed.first?.0), 0.25, accuracy: 0.000_001)
-      f.deliver([f.menu(), f.surface(19)])
-      f.deliver([f.menu()])
-      XCTAssertEqual(f.bands.plans.last?.displays[1]?.band.mask, BarMask.none)
-      f.samples.screens = []
-      f.delayed.first?.1.perform()
-      XCTAssertTrue(try XCTUnwrap(f.bands.plans.last).displays.isEmpty)
+      XCTAssertEqual(fixture.bands.plans.last?.displays[1]?.band.mask, BarMask.none)
+      XCTAssertEqual(fixture.samples.events.filter { $0 == "list" }.count, reads)
+      XCTAssertEqual(fixture.delayed.count, 1)
+      XCTAssertEqual(try XCTUnwrap(fixture.delayed.first?.0), 0.25, accuracy: 0.000_001)
+      fixture.deliver([fixture.menu(), fixture.surface(19)])
+      fixture.deliver([fixture.menu()])
+      XCTAssertEqual(fixture.bands.plans.last?.displays[1]?.band.mask, BarMask.none)
+      fixture.samples.screens = []
+      fixture.delayed.first?.1.perform()
+      XCTAssertTrue(try XCTUnwrap(fixture.bands.plans.last).displays.isEmpty)
     }
   }
 }

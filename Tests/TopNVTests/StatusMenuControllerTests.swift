@@ -23,9 +23,13 @@ final class StatusMenuControllerTests: XCTestCase {
     defaults = nil
   }
 
-  private func makeController(updates: UpdateMenuModel? = nil, isTestCopy: Bool = false)
-    -> (StatusMenuController, MenuVisibility, AppSettings)
-  {
+  private struct Fixture {
+    let controller: StatusMenuController
+    let visibility: MenuVisibility
+    let settings: AppSettings
+  }
+
+  private func makeController(updates: UpdateMenuModel? = nil, isTestCopy: Bool = false) -> Fixture {
     let settings = AppSettings(defaults: defaults)
     let visibility = MenuVisibility(
       defaults: defaults, key: AppSettings.showMenuBarIconKey, schedule: { $0() })
@@ -33,35 +37,35 @@ final class StatusMenuControllerTests: XCTestCase {
       settings: settings, loginItem: LoginItem(), updates: updates ?? UpdateMenuModel(updater: nil),
       visibility: visibility, isTestCopy: isTestCopy)
     self.controller = controller
-    return (controller, visibility, settings)
+    return Fixture(controller: controller, visibility: visibility, settings: settings)
   }
 
   /// The production menu has no animation preview, and a preview command that reaches it does nothing.
   func testOnlyATestCopyHasAndPerformsTheAnimationPreview() {
     var previews = 0
 
-    let (production, _, productionSettings) = makeController()
-    production.onEntrancePreview = { previews += 1 }
-    XCTAssertTrue(productionSettings.hideNotch)
-    XCTAssertFalse(production.menu.items.contains { $0.title == "Animation preview" })
-    production.perform(.previewCalm)
+    let production = makeController()
+    production.controller.onEntrancePreview = { previews += 1 }
+    XCTAssertTrue(production.settings.hideNotch)
+    XCTAssertFalse(production.controller.menu.items.contains { $0.title == "Animation preview" })
+    production.controller.perform(.previewCalm)
     XCTAssertEqual(previews, 0)
-    NSStatusBar.system.removeStatusItem(production.statusItem)
+    NSStatusBar.system.removeStatusItem(production.controller.statusItem)
 
-    let (testCopy, _, settings) = makeController(isTestCopy: true)
-    testCopy.onEntrancePreview = { previews += 1 }
-    XCTAssertTrue(testCopy.menu.items.contains { $0.title == "Animation preview" })
-    testCopy.perform(.previewCalm)
+    let testCopy = makeController(isTestCopy: true)
+    testCopy.controller.onEntrancePreview = { previews += 1 }
+    XCTAssertTrue(testCopy.controller.menu.items.contains { $0.title == "Animation preview" })
+    testCopy.controller.perform(.previewCalm)
     XCTAssertEqual(previews, 1)
-    testCopy.perform(.previewCalm)
+    testCopy.controller.perform(.previewCalm)
     XCTAssertEqual(previews, 2)
-    settings.hideNotch = false
-    testCopy.perform(.previewCalm)
+    testCopy.settings.hideNotch = false
+    testCopy.controller.perform(.previewCalm)
     XCTAssertEqual(previews, 2)
   }
 
   func testTheStatusItemCanBeRemovedByTheUserAndShowsTheMenu() {
-    let (controller, _, _) = makeController()
+    let controller = makeController().controller
     XCTAssertEqual(controller.statusItem.behavior, .removalAllowed)
     XCTAssertTrue(controller.statusItem.menu === controller.menu)
     XCTAssertEqual(controller.statusItem.button?.accessibilityTitle(), "TopNV")
@@ -74,7 +78,9 @@ final class StatusMenuControllerTests: XCTestCase {
 
   /// Command-dragging the icon out of the menu bar is saved like the Hide Menu Bar Icon switch.
   func testRemovingTheIconSavesTheHiddenSetting() {
-    let (controller, visibility, _) = makeController()
+    let fixture = makeController()
+    let controller = fixture.controller
+    let visibility = fixture.visibility
     XCTAssertTrue(controller.statusItem.isVisible)
 
     controller.statusItem.isVisible = false
@@ -85,7 +91,9 @@ final class StatusMenuControllerTests: XCTestCase {
 
   /// Reopening the app turns the setting back on, and the next refresh shows the icon.
   func testReopeningShowsTheIconAgain() {
-    let (controller, visibility, _) = makeController()
+    let fixture = makeController()
+    let controller = fixture.controller
+    let visibility = fixture.visibility
     controller.statusItem.isVisible = false
     XCTAssertFalse(visibility.isVisible)
 
@@ -98,7 +106,9 @@ final class StatusMenuControllerTests: XCTestCase {
 
   /// Hide Menu Bar Icon is a command: it hides the icon and never shows it again.
   func testTheHideCommandOnlyHidesTheIcon() throws {
-    let (controller, visibility, _) = makeController()
+    let fixture = makeController()
+    let controller = fixture.controller
+    let visibility = fixture.visibility
     let options = try XCTUnwrap(controller.menu.items.first { $0.title == "Options" }?.submenu)
     let hide = try XCTUnwrap(options.items.first { $0.title == "Hide Menu Bar Icon" })
     XCTAssertEqual(hide.state, .off)
@@ -113,7 +123,9 @@ final class StatusMenuControllerTests: XCTestCase {
   }
 
   func testSwitchCommandsChangeTheSettings() {
-    let (controller, _, settings) = makeController()
+    let fixture = makeController()
+    let controller = fixture.controller
+    let settings = fixture.settings
     XCTAssertTrue(settings.hideNotch)
     controller.perform(.hideNotch)
     XCTAssertFalse(settings.hideNotch)
@@ -125,7 +137,9 @@ final class StatusMenuControllerTests: XCTestCase {
 
   /// A change made while the menu is open reaches its items on the next turn of the run loop.
   func testASettingChangeRefreshesTheMenu() throws {
-    let (controller, _, settings) = makeController()
+    let fixture = makeController()
+    let controller = fixture.controller
+    let settings = fixture.settings
     let toggle = try XCTUnwrap(controller.menu.items.first { $0.title == "Hide Notch" })
     XCTAssertEqual(toggle.state, .on)
     settings.hideNotch = false
@@ -136,14 +150,14 @@ final class StatusMenuControllerTests: XCTestCase {
 
   /// Without an updater, MonoPods shows no update items.
   func testNoUpdateItemsWithoutAnUpdater() {
-    let (controller, _, _) = makeController()
+    let controller = makeController().controller
     XCTAssertFalse(controller.menu.items.contains { $0.title == "Check for Updates…" })
   }
 
   /// Before the first-launch answer the update items are shown and dimmed.
   func testUpdateItemsAreDimmedUntilTheUpdaterStarts() throws {
     let updates = UpdateMenuModel(updater: StartableUpdater(), schedule: { $0() })
-    let (controller, _, _) = makeController(updates: updates)
+    let controller = makeController(updates: updates).controller
     let check = try XCTUnwrap(controller.menu.items.first { $0.title == "Check for Updates…" })
     let options = try XCTUnwrap(controller.menu.items.first { $0.title == "Options" }?.submenu)
     let automatic = try XCTUnwrap(
@@ -160,7 +174,7 @@ final class StatusMenuControllerTests: XCTestCase {
   /// An updater that cannot start leaves no update items.
   func testAFailedUpdaterHidesTheUpdateItems() throws {
     let updates = UpdateMenuModel(updater: StartableUpdater(), schedule: { $0() })
-    let (controller, _, _) = makeController(updates: updates)
+    let controller = makeController(updates: updates).controller
     XCTAssertTrue(controller.menu.items.contains { $0.title == "Check for Updates…" })
     updates.updaterDidFail()
     controller.refresh()
