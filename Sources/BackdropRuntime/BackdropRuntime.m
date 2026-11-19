@@ -1,4 +1,16 @@
 #import "BackdropRuntime.h"
+#import <math.h>
+#import <objc/runtime.h>
+
+static char ExpectedFiltersKey;
+
+static BOOL SameFilterChain(NSArray *actual, NSArray *expected) {
+    if (!expected || actual.count != expected.count) return NO;
+    for (NSUInteger i = 0; i < expected.count; ++i) {
+        if (actual[i] != expected[i]) return NO;
+    }
+    return YES;
+}
 
 static void Require(BOOL condition, NSString *message) {
     if (!condition) {
@@ -12,11 +24,23 @@ static void Report(NSException *exception, NSString **reason) {
 
 // `filterWithType:` returns an object for any name: only `filterTypes` tells a known filter.
 static id MakeFilter(Class filterType, NSString *kind) {
-    SEL types = NSSelectorFromString(@"filterTypes");
-    Require([filterType respondsToSelector:types], @"CAFilter.filterTypes unavailable");
-    id known = ((id (*)(id, SEL))[filterType methodForSelector:types])(filterType, types);
-    Require([known isKindOfClass:[NSArray class]] && [known containsObject:kind],
-            [@"CAFilter does not know " stringByAppendingString:kind]);
+    if ([kind isEqualToString:@"luminanceCurveMap"]) {
+        SEL types = NSSelectorFromString(@"filterTypes");
+        Require([filterType respondsToSelector:types], @"CAFilter.filterTypes unavailable");
+        NSMethodSignature *signature = [filterType methodSignatureForSelector:types];
+        Require(signature && signature.numberOfArguments == 2 &&
+                signature.methodReturnType[0] == '@', @"CAFilter.filterTypes signature changed");
+
+        NSInvocation *query = [NSInvocation invocationWithMethodSignature:signature];
+        query.target = filterType;
+        query.selector = types;
+        [query invoke];
+        __unsafe_unretained id returnedTypes = nil;
+        [query getReturnValue:&returnedTypes];
+        id known = returnedTypes;
+        Require([known isKindOfClass:[NSArray class]] && [known containsObject:kind],
+                @"CAFilter does not know luminanceCurveMap");
+    }
     SEL factory = NSSelectorFromString(@"filterWithType:");
     Require([filterType respondsToSelector:factory], @"CAFilter.filterWithType: unavailable");
     NSMethodSignature *signature = [filterType methodSignatureForSelector:factory];
@@ -40,11 +64,16 @@ CALayer *KOCreateBackdrop(const float *values, size_t count, const double *curve
     @try {
         Require([NSThread isMainThread], @"Backdrop setup requires the main thread");
         Require(values != NULL && count == 20, @"A color matrix must have 20 floats");
+        Require(curve ? curveCount == 4 : curveCount == 0,
+                @"A luminance curve requires four controls, or NULL and zero");
+        for (size_t i = 0; i < curveCount; ++i) {
+            Require(isfinite(curve[i]) && curve[i] >= 0.0 && curve[i] <= 1.0,
+                    @"Luminance curve controls must be finite and in 0...1");
+        }
         Class backdropType = NSClassFromString(@"CABackdropLayer");
         Class filterType = NSClassFromString(@"CAFilter");
         Require(backdropType && [backdropType isSubclassOfClass:[CALayer class]], @"CABackdropLayer unavailable");
         Require(filterType != Nil, @"CAFilter unavailable");
-        Require(curve == NULL || curveCount == 4, @"A luminance curve must have 4 control values");
         id filter = MakeFilter(filterType, @"colorMatrix");
         NSValue *matrix = [NSValue valueWithBytes:values objCType:"{CAColorMatrix=ffffffffffffffffffff}"];
         [filter setValue:matrix forKey:@"inputColorMatrix"];
@@ -80,8 +109,10 @@ CALayer *KOCreateBackdrop(const float *values, size_t count, const double *curve
         layer.frame = bounds;
         layer.contentsScale = contentsScale;
         layer.masksToBounds = YES;
-        layer.filters = filters;
-        Require([layer.filters isEqual:filters], @"Backdrop did not retain its filters");
+        NSArray *expected = [filters copy];
+        layer.filters = expected;
+        Require(SameFilterChain(layer.filters, expected), @"Backdrop did not retain its filters");
+        objc_setAssociatedObject(layer, &ExpectedFiltersKey, expected, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return layer;
     } @catch (NSException *exception) {
         Report(exception, reason);
@@ -113,11 +144,10 @@ BOOL KOFlushBackdrop(NSString **reason) {
 
 BOOL KORecommitBackdrop(CALayer *backdrop, NSString **reason) {
     @try {
-        // A fresh array makes the assignment a real change, so the flush carries it to the render server.
-        NSUInteger count = backdrop.filters.count;
-        Require(count == 1 || count == 2, @"Backdrop lost its filters");
-        backdrop.filters = [NSArray arrayWithArray:backdrop.filters];
-        Require(backdrop.filters.count == count, @"Backdrop rejected its filters");
+        NSArray *expected = objc_getAssociatedObject(backdrop, &ExpectedFiltersKey);
+        Require(SameFilterChain(backdrop.filters, expected), @"Backdrop lost or reordered its filters");
+        backdrop.filters = [expected mutableCopy];
+        Require(SameFilterChain(backdrop.filters, expected), @"Backdrop rejected its filters");
         [CATransaction flush];
         return YES;
     } @catch (NSException *exception) {

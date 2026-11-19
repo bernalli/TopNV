@@ -24,13 +24,13 @@ public struct KeyCurve: Equatable, Sendable {
     self.values = values
   }
 
-  /// The arithmetic of the filter: the Bezier in Horner form, clamped to 0...1. The input is
-  /// not clamped, because the render server may pass on the unclamped output of the matrix.
+  /// The shader saturates luma before evaluating the cubic and saturates the result.
   public func output(_ input: Double) -> Double {
+    let t = min(max(input, 0), 1)
     let cubic = values[3] - 3 * values[2] + 3 * values[1] - values[0]
     let square = 3 * (values[0] - 2 * values[1] + values[2])
     let linear = 3 * (values[1] - values[0])
-    return min(max(((cubic * input + square) * input + linear) * input + values[0], 0), 1)
+    return min(max(((cubic * t + square) * t + linear) * t + values[0], 0), 1)
   }
 }
 
