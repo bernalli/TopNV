@@ -115,6 +115,21 @@ public enum MenuBarEvidence {
     return result
   }
 
+  /// A Window Server window along the top edge, as wide as the band.
+  /// The system layer can vary between macOS versions.
+  public static func menuSurface(in windows: [Window], bandFrame: CGRect, preferredLayer: Int? = nil) -> Window? {
+    let tolerance: CGFloat = 2
+    let matches = windows.lazy.filter {
+      $0.owner == .windowServer && $0.layer >= 0 && valid($0.bounds)
+        && $0.bounds.minX <= bandFrame.minX + tolerance
+        && $0.bounds.maxX >= bandFrame.maxX - tolerance
+        && abs($0.bounds.maxY - bandFrame.maxY) <= tolerance
+        && $0.bounds.height <= bandFrame.height * 2
+    }
+    guard let preferredLayer else { return matches.first }
+    return matches.first { $0.layer == preferredLayer } ?? matches.first
+  }
+
   public static func evaluate(frame: CGRect, visibleFrame: CGRect, bandFrame: CGRect,
                               windows: [Window]?, systemFullScreen: Bool = false,
                               displayFrames: [CGRect] = []) -> Result {
@@ -124,15 +139,7 @@ public enum MenuBarEvidence {
                     spaceSliding: false, fullScreenBackdrop: false, permitsBandEntrance: false)
     }
     let tolerance: CGFloat = 2
-    // The menu bar surface: a Window Server window along the top edge, as wide as the band.
-    // Its exact layer and height differ between macOS versions and are not required.
-    let menuVisible = windows.contains {
-      $0.owner == .windowServer && $0.layer >= 0 && valid($0.bounds)
-        && $0.bounds.minX <= bandFrame.minX + tolerance
-        && $0.bounds.maxX >= bandFrame.maxX - tolerance
-        && abs($0.bounds.maxY - bandFrame.maxY) <= tolerance
-        && $0.bounds.height <= bandFrame.height * 2
-    }
+    let menuVisible = menuSurface(in: windows, bandFrame: bandFrame) != nil
     // A window from the bottom edge to the top edge lies under the keyed strip: a full-screen
     // app that uses the camera-housing area, or a borderless full-screen window on a desktop.
     // Partial-width windows cover Split View. Our own band and corners, the desktop, the Dock

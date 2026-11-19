@@ -319,10 +319,8 @@ extension KeyedOverlayController {
   private func logGeometry(byID: [UInt32: NSScreen], windows: [MenuBarEvidence.Window]?) {
     for id in frames.keys where geometryPhases[id] != "steady" {
       guard let screen = byID[id], let bar = actualBarFrame?(id) else { continue }
-      let menu = windows?.first {
-        $0.owner == .windowServer && $0.layer == Int(CGWindowLevelForKey(.mainMenuWindow))
-          && abs($0.bounds.maxY - screen.frame.maxY) <= 2 && abs($0.bounds.minX - screen.frame.minX) <= 2
-          && abs($0.bounds.width - bar.width) <= 2
+      let menu = windows.flatMap {
+        MenuBarEvidence.menuSurface(in: $0, bandFrame: bar, preferredLayer: Int(CGWindowLevelForKey(.mainMenuWindow)))
       }
       let entry = entries.values.first { $0.displayID == id && $0.window.isOnActiveSpace }
       let root = entry?.window.contentView?.layer
