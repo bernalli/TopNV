@@ -81,14 +81,14 @@ final class StatusMenuControllerTests: XCTestCase {
     let index = try XCTUnwrap(titles.firstIndex(of: "Relative key (test)"))
     XCTAssertEqual(titles.dropFirst(index + 1).first, "Lamp under key (test)")
     let lamp = try XCTUnwrap(testCopy.menu.item(withTitle: "Lamp under key (test)"))
-    XCTAssertEqual(lamp.state, .off)
-    testCopy.perform(.lampUnderKey)
-    XCTAssertTrue(key.lampEnabled)
-    XCTAssertFalse(key.enabled)
     XCTAssertEqual(lamp.state, .on)
     testCopy.perform(.lampUnderKey)
     XCTAssertFalse(key.lampEnabled)
+    XCTAssertFalse(key.enabled)
     XCTAssertEqual(lamp.state, .off)
+    testCopy.perform(.lampUnderKey)
+    XCTAssertTrue(key.lampEnabled)
+    XCTAssertEqual(lamp.state, .on)
     XCTAssertEqual(changes, 2)
   }
 
@@ -101,7 +101,7 @@ final class StatusMenuControllerTests: XCTestCase {
     let menu = makeController(isTestCopy: true, relativeKey: RelativeMenuBarKey(isTestCopy: true)).controller
     let only = try XCTUnwrap(menu.menu.item(withTitle: "Lamp only (test)"))
     let under = try XCTUnwrap(menu.menu.item(withTitle: "Lamp under key (test)"))
-    XCTAssertEqual([only.state, under.state], [.off, .off])
+    XCTAssertEqual([only.state, under.state], [.off, .on])
     for (command, states): (MenuCommand, [NSControl.StateValue]) in [
       (.lampOnly, [.on, .off]), (.lampUnderKey, [.off, .on]), (.lampOnly, [.on, .off]), (.lampOnly, [.off, .off])
     ] {
@@ -115,7 +115,7 @@ final class StatusMenuControllerTests: XCTestCase {
     let production = makeController(relativeKey: key).controller
     XCTAssertNil(production.menu.item(withTitle: "Lamp key (test)"))
     production.perform(.lampKey5)
-    XCTAssertEqual(key.lampKey.command, .lampKey2)
+    XCTAssertEqual(key.lampKey.command, .lampKey4)
     NSStatusBar.system.removeStatusItem(production.statusItem)
 
     let menu = makeController(isTestCopy: true, relativeKey: key).controller.menu
@@ -124,7 +124,7 @@ final class StatusMenuControllerTests: XCTestCase {
       "1  black from 0.94, white to 0.15", "2  black from 0.94, white to 0.30",
       "3  black from 0.94, white to 0.45", "4  black from 0.94, white to 0.60", "5  black from 0.95, white to 0.45"
     ])
-    XCTAssertEqual(submenu.items.map(\.state), [.off, .on, .off, .off, .off])
+    XCTAssertEqual(submenu.items.map(\.state), [.off, .off, .off, .on, .off])
     for index in submenu.items.indices {
       submenu.performActionForItem(at: index)
       XCTAssertEqual(submenu.items.map(\.state), submenu.items.indices.map { $0 == index ? .on : .off })
@@ -135,8 +135,8 @@ final class StatusMenuControllerTests: XCTestCase {
     let key = RelativeMenuBarKey(isTestCopy: true)
     let production = makeController(relativeKey: key).controller
     XCTAssertNil(production.menu.item(withTitle: "Lamp plate (test)"))
-    production.perform(.lampPlate5)
-    XCTAssertEqual(key.lampPlate.command, .lampPlate1)
+    production.perform(.lampPlate1)
+    XCTAssertEqual(key.lampPlate.command, .lampPlate5)
     NSStatusBar.system.removeStatusItem(production.statusItem)
 
     let menu = makeController(isTestCopy: true, relativeKey: key).controller
@@ -144,14 +144,16 @@ final class StatusMenuControllerTests: XCTestCase {
     menu.onLampChanged = { changes += 1 }
     let submenu = try XCTUnwrap(menu.menu.item(withTitle: "Lamp plate (test)")?.submenu)
     XCTAssertEqual(submenu.items.map(\.title), ["1  7.5 pt", "2  5 pt", "3  3 pt", "4  1 pt", "5  No plate"])
-    XCTAssertEqual(submenu.items.map(\.state), [.on, .off, .off, .off, .off])
-    submenu.performActionForItem(at: 4)
-    XCTAssertEqual(changes, 0)
+    XCTAssertEqual(submenu.items.map(\.state), [.off, .off, .off, .off, .on])
+    menu.perform(.lampUnderKey)
+    submenu.performActionForItem(at: 3)
+    XCTAssertEqual(key.lampPlate.command, .lampPlate4)
+    XCTAssertEqual(changes, 1)
     menu.perform(.lampUnderKey)
     for index in submenu.items.indices {
       submenu.performActionForItem(at: index)
       XCTAssertEqual(submenu.items.map(\.state), submenu.items.indices.map { $0 == index ? .on : .off })
-      XCTAssertEqual(changes, index + 2)
+      XCTAssertEqual(changes, index + 3)
     }
   }
 

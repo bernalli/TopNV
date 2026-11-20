@@ -31,10 +31,10 @@ import os
 
   private let entries = NSMapTable<CALayer, Entry>.weakToStrongObjects()
   private let isTestCopy: Bool
-  private(set) var lampMode = LampMode.off
+  private(set) var lampMode: LampMode
   var lampEnabled: Bool { lampMode == .underKey }
-  private(set) var lampPlate = LampPlatePreset.standard
-  private(set) var lampKey = LampKeyPreset.standard
+  private(set) var lampPlate: LampPlatePreset
+  private(set) var lampKey: LampKeyPreset
   private let clock: ProbeClock
   private let isLampLit: (UInt32) -> Bool
   private let lampState: (Set<UInt32>) -> Void
@@ -52,9 +52,17 @@ import os
     self.clock = clock
     self.lampState = lampState
     self.isTestCopy = isTestCopy
+    lampMode = isTestCopy ? .underKey : .off
+    lampKey = isTestCopy ? .measuring : .standard
+    lampPlate = isTestCopy ? .measuring : .standard
     available = isTestCopy && Self.probe()
     self.sink = sink
-    if isTestCopy { log("Relative key available=\(available)") }
+    if isTestCopy {
+      log("Relative key available=\(available)")
+      log("LampDefaults lamp=under key=\(lampKey.number) black=\(lampKey.blackText) "
+          + "white=\(lampKey.whiteText) plate=\(lampPlate.number)")
+      scheduleProbes()
+    }
   }
 
   deinit { timer?.invalidate() }
@@ -98,7 +106,6 @@ import os
   func selectLampKey(_ preset: LampKeyPreset) {
     guard isTestCopy, preset.command != lampKey.command else { return }
     lampKey = preset
-    log("LampKey voce=\(preset.number) black=\(preset.blackText) white=\(preset.whiteText)")
     if lampEnabled { updateFilters() }
   }
 
@@ -170,15 +177,21 @@ import os
   }
 
   private func apply(_ entry: Entry) -> Bool {
-    let key = usesLampKey(entry) ? lampKey.key
+    let fixed = usesLampKey(entry)
+    let key = fixed ? lampKey.key
       : LuminanceKey.forBackdrop(backgroundLuma: entry.background, relativeEnabled: enabled)
     let matrix = key.matrix
     guard entry.applied.matrix != matrix else { return true }
     let applied = matrix == LuminanceKey.normal.matrix
       ? entry.source.applyMatrix(nil, count: 0)
       : matrix.withUnsafeBufferPointer { entry.source.applyMatrix($0.baseAddress, count: $0.count) }
-    if applied { entry.applied = key }
-    return applied
+    guard applied else { return false }
+    entry.applied = key
+    if fixed {
+      log("LampKey display=\(entry.probe.display) voce=\(lampKey.number) "
+          + "black=\(lampKey.blackText) white=\(lampKey.whiteText)")
+    }
+    return true
   }
 
   private func fallBack(_ reason: String) {

@@ -11,7 +11,7 @@ import XCTest
   }
 
   func testOrdinaryKeyIsTheStartupFilterEvenAfterAValidSample() async throws {
-    let key = RelativeMenuBarKey(isTestCopy: true)
+    let key = RelativeMenuBarKey(isTestCopy: true, isLampLit: { _ in false })
     XCTAssertFalse(key.enabled)
     let layer = try makeLayer()
     let original = try XCTUnwrap(layer.filters?.first as? NSObject)
@@ -24,6 +24,7 @@ import XCTest
   func testProductionMakesNoSamplingCallKeepsTheOrdinaryFilterAndLogsNothing() throws {
     let lines = Lines()
     let key = RelativeMenuBarKey(isTestCopy: false, log: { lines.all.append($0) })
+    XCTAssertEqual(key.lampMode, .off)
     let layer = try makeLayer()
     let ordinary = try XCTUnwrap(layer.filters?.first as? NSObject)
     key.observe(layer, display: 1)
@@ -45,8 +46,8 @@ import XCTest
 
   func testATestCopyLogsAvailabilityEachVisibleSampleChangeAndTheSwitch() async throws {
     let lines = Lines()
-    let key = RelativeMenuBarKey(isTestCopy: true, log: { lines.all.append($0) })
-    XCTAssertEqual(lines.all, ["Relative key available=\(key.available)"])
+    let key = RelativeMenuBarKey(isTestCopy: true, isLampLit: { _ in false }, log: { lines.all.append($0) })
+    XCTAssertTrue(lines.all.contains("Relative key available=\(key.available)"))
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
     let layer = try makeLayer()
     key.observe(layer, display: 1)
@@ -56,7 +57,7 @@ import XCTest
       reader.backdropLayer(layer, didChangeLuma: luma)
       await drainSamples()
     }
-    XCTAssertEqual(Array(lines.all.dropFirst()), [
+    XCTAssertEqual(lines.all.filter { $0.hasPrefix("Sample ") }, [
       "Sample 0.120 over 100 pt, enabled=false, relative key white to 0.024, black from 0.112",
       "Sample 0.500 over 100 pt, enabled=false, relative key white to 0.100, black from 0.465",
       "Sample 0.120 over 100 pt, enabled=false, relative key white to 0.024, black from 0.112",
@@ -77,7 +78,7 @@ import XCTest
   }
 
   func testLiveBackdropsUseTheirOwnSampleAndRestoreTheOriginalFilter() async throws {
-    let key = RelativeMenuBarKey(isTestCopy: true)
+    let key = RelativeMenuBarKey(isTestCopy: true, isLampLit: { _ in false })
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
     key.toggle()
     let left = try makeLayer()
@@ -107,13 +108,14 @@ import XCTest
   func testFixedLampKeySurvivesQueuedAndProtectedSamplesAndRestoresRelativeKey() async throws {
     let key = RelativeMenuBarKey(isTestCopy: true)
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    key.toggleLamp()
     let layer = try makeLayer()
     key.observe(layer, display: 1)
     let reader = try XCTUnwrap(layer.delegate as? KOSampledBackdrop)
     key.toggle()
     reader.backdropLayer(layer, didChangeLuma: 0.75)
     key.toggleLamp()
-    let fixed = LampKeyPreset.choices[1].key.matrix
+    let fixed = LampKeyPreset.measuring.key.matrix
     XCTAssertEqual(matrix(layer), fixed)
     await drainSamples()
     XCTAssertEqual(matrix(layer), fixed)
@@ -135,16 +137,18 @@ import XCTest
     let right = try makeLayer()
     key.observe(left, display: 1)
     key.observe(right, display: 2)
-    key.toggleLamp()
-    XCTAssertEqual(matrix(left), LampKeyPreset.choices[1].key.matrix)
+    XCTAssertEqual(matrix(left), LampKeyPreset.measuring.key.matrix)
     let fifth = LampKeyPreset.choices[4]
     key.selectLampKey(fifth)
     XCTAssertEqual(matrix(left), fifth.key.matrix)
     XCTAssertEqual(matrix(right), fifth.key.matrix)
-    XCTAssertEqual(lines.all.filter { $0.hasPrefix("LampKey ") }, ["LampKey voce=5 black=0.95 white=0.45"])
     let next = try makeLayer()
     key.observe(next, display: 1)
     XCTAssertEqual(matrix(next), fifth.key.matrix)
+    let leftLine = "LampKey display=1 voce=5 black=0.95 white=0.45"
+    let rightLine = "LampKey display=2 voce=5 black=0.95 white=0.45"
+    XCTAssertEqual(lines.all.filter { $0.hasPrefix("LampKey ") && $0.contains("voce=5") }.sorted(),
+                   [leftLine, leftLine, rightLine])
     key.toggleLamp()
     for layer in [left, right, next] { XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix) }
   }
@@ -153,6 +157,7 @@ import XCTest
     var lit: Set<UInt32> = [2]
     let key = RelativeMenuBarKey(isTestCopy: true, isLampLit: { lit.contains($0) })
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    key.toggleLamp()
     let left = try makeLayer()
     let right = try makeLayer()
     key.observe(left, display: 1)
@@ -187,10 +192,12 @@ import XCTest
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
     let layer = try makeLayer()
     key.observe(layer, display: 9)
-    XCTAssertTrue(timers.isEmpty)
+    XCTAssertEqual(timers.count, 1)
     key.toggleLampOnly()
     let timer = try XCTUnwrap(timers.first)
     XCTAssertEqual(timer.timeInterval, 1)
+    timer.fire()
+    lines.all.removeAll()
     for _ in 0..<2 {
       key.sample(0.5, for: layer, at: now + 0.25)
       now += 1
@@ -208,7 +215,7 @@ import XCTest
     XCTAssertEqual(timers.count, 1)
     now += 1
     timer.fire()
-    let fixed = prefix + "none forced=true lastCallbackAge=2.750 key=fixed white=0.300 black=0.940"
+    let fixed = prefix + "none forced=true lastCallbackAge=2.750 key=fixed white=0.600 black=0.940"
     XCTAssertEqual(lines.all.last, fixed)
     key.toggleLamp()
     XCTAssertFalse(timer.isValid)
@@ -255,5 +262,45 @@ import XCTest
     await withCheckedContinuation { continuation in
       DispatchQueue.main.async { continuation.resume() }
     }
+  }
+}
+
+extension RelativeBackdropTests {
+  func testTrialCopyStartsInMeasuringModeAndLogsItsDefaultsOnce() {
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: true, log: { lines.all.append($0) })
+    XCTAssertEqual(key.lampMode, .underKey)
+    XCTAssertEqual(key.lampKey.command, LampKeyPreset.measuring.command)
+    XCTAssertEqual(key.lampKey.command, .lampKey4)
+    XCTAssertEqual(key.lampPlate.command, LampPlatePreset.measuring.command)
+    XCTAssertEqual(key.lampPlate.command, .lampPlate5)
+    XCTAssertNil(key.lampPlate.margin)
+    key.toggleLamp()
+    key.toggleLamp()
+    XCTAssertEqual(lines.all.filter { $0.hasPrefix("LampDefaults ") },
+                   ["LampDefaults lamp=under key=4 black=0.94 white=0.60 plate=5"])
+  }
+
+  func testLampKeyLogFollowsSuccessfulApplicationsOnTheLitDisplay() throws {
+    let lines = Lines()
+    var lit = false
+    let key = RelativeMenuBarKey(isTestCopy: true, isLampLit: { _ in lit }, log: { lines.all.append($0) })
+    guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    let layer = try makeLayer()
+    key.observe(layer, display: 7)
+    key.selectLampKey(.standard)
+    key.selectLampKey(.measuring)
+    XCTAssertFalse(lines.all.contains { $0.hasPrefix("LampKey ") })
+    lit = true
+    key.lampChanged(on: 7)
+    XCTAssertEqual(matrix(layer), LampKeyPreset.measuring.key.matrix)
+    key.lampChanged(on: 7)
+    lit = false
+    key.lampChanged(on: 7)
+    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
+    lit = true
+    key.lampChanged(on: 7)
+    let applied = "LampKey display=7 voce=4 black=0.94 white=0.60"
+    XCTAssertEqual(lines.all.filter { $0.hasPrefix("LampKey ") }, [applied, applied])
   }
 }
