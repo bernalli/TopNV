@@ -39,7 +39,7 @@ public struct BarRegistryID: Hashable, Comparable, Sendable {
   public init(display: UInt32, part: BarPart, keyWindow: Int? = nil) {
     self.display = display
     self.part = part
-    self.keyWindow = part == .key || part == .plate ? keyWindow : nil
+    self.keyWindow = part == .key || part == .plate || part == .lamp ? keyWindow : nil
   }
 
   public static func < (lhs: Self, rhs: Self) -> Bool {

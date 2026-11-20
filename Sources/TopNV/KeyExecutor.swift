@@ -3,6 +3,9 @@ import QuartzCore
 import TopNVCore
 import os
 
+/// Applies the key gates of the plan in every scene. Space changes freeze the last gate, so both
+/// Spaces keep drawing their own key during a slide. Each two-layer key has its own lamp, created
+/// with it on the same Space, and the lamp takes the key's alpha and mask in the same transaction.
 @MainActor
 final class KeyExecutor: BarKeyExecuting {
   typealias Schedule = @MainActor (Double, @escaping @MainActor () -> Void) -> Void
@@ -82,38 +85,23 @@ final class KeyExecutor: BarKeyExecuting {
     let key = part.key
     for id in key.close where entries[id]?.display == display { close(id) }
     guard !failed else { return }
-    if let creation = key.create { try create(creation, on: display, plan: part) }
-    guard !failed else { return }
-
-    let owner = part.kind == .desktop && part.appearance == .light ? activeWindowIDs(display: display).first : nil
-    var restored: Entry?
+    var restored: [Entry] = []
     applyBarPresentation {
       for (number, entry) in entries where entry.display == display {
         present(key, on: entry)
-        if case let .value(value)? = key.gates[number] { entry.gate = value }
-        entry.window.applyAlpha(.value(number == owner ? entry.gate : 0))
-      }
-      guard let owner, let entry = entries[owner], entry.pair != nil else {
-        lamp.close(display)
-        return
-      }
-      do {
-        try lamp.apply(part, display: display, owner: owner, alpha: entry.window.alphaValue)
-      } catch {
-        lamp.close(display)
-        restoreOrdinaryKey(entry, reason: error)
-        restored = entry
+        if let gate = key.gates[number] { entry.window.applyAlpha(gate) }
+        guard entry.pair != nil else { continue }
+        do {
+          try lamp.apply(part, key: number, alpha: entry.window.alphaValue)
+        } catch {
+          lamp.close(for: number)
+          restoreOrdinaryKey(entry, reason: error)
+          restored.append(entry)
+        }
       }
     }
-    if let restored { try runtime.recommit(restored.backdrop) }
-  }
-
-  /// Removing the sibling restores the original normal matrix on the glyph layer.
-  private func restoreOrdinaryKey(_ entry: Entry, reason: Error) {
-    entry.pair?.remove()
-    entry.pair = nil
-    entry.plate.apply(calibrated: false)
-    Self.logger.error("Ordinary menu key on display \(entry.display): \(reason.localizedDescription, privacy: .public)")
+    for entry in restored { try runtime.recommit(entry.backdrop) }
+    if let creation = key.create { try create(creation, on: display, plan: part) }
   }
 
   private func present(_ key: BarKeyPlan, on entry: Entry) {
@@ -164,52 +152,15 @@ final class KeyExecutor: BarKeyExecuting {
     }
     try runtime.attach(root: root, backdrop: backdrop, display: display)
     guard keyCommitted(creation, id, display) else { close(id); return }
-    do {
-      entry.pair = try runtime.installPair(on: backdrop)
-      applyBarPresentation { entry.plate.apply(calibrated: true) }
-    } catch {
-      applyBarPresentation { restoreOrdinaryKey(entry, reason: error) }
-      try runtime.recommit(backdrop)
-    }
+    try installTwoLayers(on: entry, number: id, frame: frame, mask: key.mask)
     window.orderFrontRegardless()
     window.displayIfNeeded()
     try runtime.flush()
-    for delay in [0.25, 1.0] {
-      schedule(delay) { [weak self, weak window] in
-        guard let self, !self.failed, let window, let current = self.entries[id],
-              current.window === window else { return }
-        do {
-          try self.recommit(current, number: id)
-        } catch {
-          self.disable(error)
-        }
-      }
-    }
-  }
-
-  private func recommit(_ entry: Entry, number: Int) throws {
-    if let pair = entry.pair {
-      do {
-        try lamp.verify(on: entry.display, owner: number)
-        try pair.verifyCommit()
-        return
-      } catch {
-        applyBarPresentation {
-          lamp.close(entry.display, owner: number)
-          restoreOrdinaryKey(entry, reason: error)
-        }
-      }
-    }
-    try runtime.recommit(entry.backdrop)
+    scheduleRecommits(number: id, window: window)
   }
 
   private func registry(_ plan: BarPlan) -> BarEntries {
     var result: BarEntries = [:]
-    for (id, display) in plan.displays {
-      if let window = lamp.window(on: id) {
-        result[.init(display: id, part: .lamp)] = window.registryEntry(on: display.geometry, mask: display.key.mask)
-      }
-    }
     for (id, entry) in entries {
       guard let display = plan.displays[entry.display] else { continue }
       let window = entry.window
@@ -219,6 +170,10 @@ final class KeyExecutor: BarKeyExecuting {
                                        flipped: entry.root.isGeometryFlipped)
       result[.init(display: entry.display, part: .plate, keyWindow: id)] =
         window.registryEntry(on: display.geometry, frame: frame)
+      if let light = lamp.window(for: id) {
+        result[.init(display: entry.display, part: .lamp, keyWindow: id)] =
+          light.registryEntry(on: display.geometry, mask: display.key.mask)
+      }
     }
     return result
   }
@@ -231,7 +186,8 @@ final class KeyExecutor: BarKeyExecuting {
     guard let entry = entries.removeValue(forKey: id) else { return }
     applyBarPresentation {
       entry.window.alphaValue = 0
-      lamp.close(entry.display, owner: id)
+      lamp.close(for: id)
+      // In the same transaction as alpha 0 and the closed lamp: see restoreOrdinaryKey.
       entry.pair?.remove()
     }
     func finishClose() {
@@ -258,6 +214,69 @@ final class KeyExecutor: BarKeyExecuting {
   }
 }
 
+/// The two backdrop layers and the lamp of each key.
+private extension KeyExecutor {
+  func scheduleRecommits(number id: Int, window: OverlayWindow) {
+    for delay in [0.25, 1.0] {
+      schedule(delay) { [weak self, weak window] in
+        guard let self, !self.failed, let window, let current = self.entries[id],
+              current.window === window else { return }
+        do {
+          try self.recommit(current, number: id)
+        } catch {
+          self.disable(error)
+        }
+      }
+    }
+  }
+
+  /// The pair and its lamp exist together or not at all. Either failure leaves the ordinary key.
+  func installTwoLayers(on entry: Entry, number: Int, frame: CGRect, mask: BarMask) throws {
+    do {
+      entry.pair = try runtime.installPair(on: entry.backdrop)
+      try applyBarPresentation {
+        try lamp.create(for: number, display: entry.display, frame: frame, mask: mask)
+        entry.plate.apply(calibrated: true)
+      }
+      lamp.orderFront(for: number)
+      try lamp.verify(for: number)
+    } catch {
+      applyBarPresentation {
+        lamp.close(for: number)
+        restoreOrdinaryKey(entry, reason: error)
+      }
+      try runtime.recommit(entry.backdrop)
+    }
+  }
+
+  func recommit(_ entry: Entry, number: Int) throws {
+    if let pair = entry.pair {
+      do {
+        try lamp.verify(for: number)
+        try pair.verifyCommit()
+        return
+      } catch {
+        applyBarPresentation {
+          lamp.close(for: number)
+          restoreOrdinaryKey(entry, reason: error)
+        }
+      }
+    }
+    try runtime.recommit(entry.backdrop)
+  }
+
+  /// Removing the sibling restores the original normal matrix on the glyph layer. Callers run
+  /// this in the presentation transaction that also closes the lamp, so the ordinary key and the
+  /// missing lamp appear in the same frame: no frame shows the two-layer key without its lamp,
+  /// or the ordinary key over the white lamp.
+  func restoreOrdinaryKey(_ entry: Entry, reason: Error) {
+    entry.pair?.remove()
+    entry.pair = nil
+    entry.plate.apply(calibrated: false)
+    Self.logger.error("Ordinary menu key on display \(entry.display): \(reason.localizedDescription, privacy: .public)")
+  }
+}
+
 private extension KeyExecutor {
   @MainActor final class Entry {
     let display: UInt32
@@ -267,7 +286,6 @@ private extension KeyExecutor {
     let plate: KeyBottomPlate
     let clip: CAShapeLayer
     let scale: CGFloat
-    var gate: CGFloat = 0
     var pair: KeyBackdropPair?
 
     init(display: UInt32, window: OverlayWindow, root: CALayer, backdrop: CALayer,

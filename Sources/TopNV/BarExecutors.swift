@@ -17,11 +17,11 @@ protocol BarKeyExecuting: BarPartExecuting {
 }
 
 @MainActor
-func applyBarPresentation(_ changes: () -> Void) {
+func applyBarPresentation(_ changes: () throws -> Void) rethrows {
   CATransaction.begin()
+  defer { CATransaction.commit() }
   CATransaction.setDisableActions(true)
-  changes()
-  CATransaction.commit()
+  try changes()
 }
 
 extension OverlayWindow {

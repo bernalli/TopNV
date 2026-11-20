@@ -10,8 +10,23 @@ static void Check(BOOL valid, NSString *reason) {
     if (!valid) @throw [NSException exceptionWithName:@"TwoLayerUnavailable" reason:reason userInfo:nil];
 }
 
+static Class<KOTypedFilters> Catalog(void) {
+    Class catalog = NSClassFromString(@"CAFilter");
+    for (NSString *name in @[@"filterTypes", @"filterWithType:"]) {
+        SEL selector = NSSelectorFromString(name);
+        NSMethodSignature *signature = [catalog respondsToSelector:selector]
+            ? [catalog methodSignatureForSelector:selector] : nil;
+        BOOL takesKind = [name hasSuffix:@":"];
+        Check(signature && signature.methodReturnType[0] == '@' &&
+              signature.numberOfArguments == (takesKind ? 3 : 2) &&
+              (!takesKind || [signature getArgumentTypeAtIndex:2][0] == '@'),
+              [@"CAFilter signature changed: " stringByAppendingString:name]);
+    }
+    return (Class<KOTypedFilters>)catalog;
+}
+
 static id Filter(NSString *kind) {
-    Class<KOTypedFilters> catalog = NSClassFromString(@"CAFilter");
+    Class<KOTypedFilters> catalog = Catalog();
     Check([[catalog filterTypes] containsObject:kind], [@"Unknown filter: " stringByAppendingString:kind]);
     id filter = [catalog filterWithType:kind];
     Check([[filter valueForKey:@"type"] isEqual:kind], [@"Filter type differs: " stringByAppendingString:kind]);
@@ -24,7 +39,7 @@ static id LightenBlend(void) {
     CFStringRef const *symbol = dlsym(RTLD_DEFAULT, "kCAFilterLightenBlendMode");
     NSString *name = symbol ? (__bridge NSString *)*symbol : nil;
     Check([name isEqual:@"lightenBlendMode"], @"Lighten blend unavailable");
-    id blend = [(Class<KOTypedFilters>)NSClassFromString(@"CAFilter") filterWithType:name];
+    id blend = [Catalog() filterWithType:name];
     Check([[blend valueForKey:@"type"] isEqual:name], @"Lighten blend type differs");
     return blend;
 }

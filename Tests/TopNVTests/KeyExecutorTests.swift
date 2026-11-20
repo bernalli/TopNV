@@ -36,12 +36,19 @@ final class RecordingRuntime: KeyBackdropRuntime {
   var rejectPair = false
   var rejectPairReadback = false
   var pressedLayers: [CALayer] = []
+  private var pairs: [RecordingPair] = []
 
   func installPair(on glyph: CALayer) throws -> KeyBackdropPair {
     if rejectPair { throw BackdropFailure(reason: "pair unavailable") }
     let pair = RecordingPair(glyph: glyph, runtime: self)
     pressedLayers.append(pair.pressed)
+    pairs.append(pair)
     return pair
+  }
+
+  /// The pair object still installed on a key's root layer, compared by identity.
+  func pair(on root: CALayer) -> AnyObject? {
+    pairs.first { $0.pressed.superlayer === root }
   }
 
   private final class RecordingPair: KeyBackdropPair {
@@ -78,7 +85,7 @@ final class RecordingRuntime: KeyBackdropRuntime {
 }
 
 @MainActor
-private final class RecordingWindow: OverlayWindow {
+final class RecordingWindow: OverlayWindow {
   var active = true
   override var isOnActiveSpace: Bool { active }
   var record: ((String) -> Void)?
@@ -104,8 +111,15 @@ final class KeyHarness {
   var monitorStops = 0
   var rejectLamp = false
   var lampLines: [String] = []
+  var ids: [Int] = []
+  var lampWindows: [OverlayWindow] = []
+  /// Same level and Space behavior as `KeyLamp.makeWindow`, which its own test checks.
   lazy var lamp = KeyLamp(makeWindow: { [unowned self] frame in
-    rejectLamp ? nil : KeyLamp.makeWindow(frame)
+    guard !rejectLamp else { return nil }
+    let window = RecordingWindow(frame: frame, level: KeyLamp.level, isOpaque: true, behavior: KeyLamp.behavior)
+    window.record = { [weak runtime = self.runtime] in runtime?.calls.append("lamp " + $0) }
+    lampWindows.append(window)
+    return window
   }, log: { [unowned self] line in
     XCTAssertTrue(CATransaction.disableActions())
     lampLines.append(line)
@@ -120,6 +134,7 @@ final class KeyHarness {
                                  behavior: OverlayBehavior.keyed)
     window.record = { [weak runtime = self.runtime] in runtime?.calls.append($0) }
     windows.append(window)
+    ids.append(nextID)
     defer { nextID += 1 }
     return (nextID, window)
   }, keyCommitted: { [unowned self] creation, number, display in
@@ -134,7 +149,14 @@ final class KeyHarness {
 
   init() { _ = NSApplication.shared }
 
-  func leaveSpace(_ index: Int) { (windows[index] as? RecordingWindow)?.active = false }
+  /// A key and its lamp were ordered in together, so they leave and return with the same Space.
+  func leaveSpace(_ index: Int) { setSpace(index, active: false) }
+  func enterSpace(_ index: Int) { setSpace(index, active: true) }
+
+  private func setSpace(_ index: Int, active: Bool) {
+    (windows[index] as? RecordingWindow)?.active = active
+    (lamp.window(for: ids[index]) as? RecordingWindow)?.active = active
+  }
 
   func creation() throws -> BarKeyCreation {
     var state = KeyedOverlayState()

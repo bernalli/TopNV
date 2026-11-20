@@ -44,8 +44,7 @@ final class BarTableTests: XCTestCase {
     let visible: [BarCell] = [.visible, .hidden, .hidden, .visible, .visible, .visible, .hold]
     let gated: [BarCell] = [.gate, .gate, .gate, .gate, .gate, .gate, .hold]
     let measured: [BarCell] = [.visible, .hidden, .hidden, .hidden, .hidden, .hidden, .hidden]
-    let lamp: [BarCell] = [.gate, .hidden, .hidden, .hidden, .hidden, .hidden, .hidden]
-    let rows = [Row(part: .lamp, normal: lamp, entering: .path), Row(part: .band, normal: visible, entering: .path),
+    let rows = [Row(part: .lamp, normal: gated, entering: .path), Row(part: .band, normal: visible, entering: .path),
                 Row(part: .key, normal: gated, entering: .path),
                 Row(part: .plate, normal: gated, entering: .path), Row(part: .edge, normal: measured, entering: .path)]
       + ScreenCorner.allCases.map { Row(part: .corner($0), normal: visible, entering: .fade) }
