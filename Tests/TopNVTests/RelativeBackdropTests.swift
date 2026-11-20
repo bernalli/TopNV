@@ -23,21 +23,28 @@ import XCTest
 
   func testProductionMakesNoSamplingCallKeepsTheOrdinaryFilterAndLogsNothing() throws {
     let lines = Lines()
-    let key = RelativeMenuBarKey(isTestCopy: false, log: { lines.all.append($0) })
+    let key = RelativeMenuBarKey(isTestCopy: false, launchPreference: {
+      XCTFail("Production read the lamp preference")
+      return "only"
+    }, log: { lines.all.append($0) })
     XCTAssertEqual(key.lampMode, .off)
     let layer = try makeLayer()
+    let root = CALayer()
+    root.addSublayer(layer)
     let ordinary = try XCTUnwrap(layer.filters?.first as? NSObject)
     key.observe(layer, display: 1)
     key.toggle()
     key.toggleLamp()
-    key.selectLampKey(LampKeyPreset.choices[4])
-    key.selectLampPlate(LampPlatePreset.choices[4], present: { XCTFail("Production presented a plate") })
+    key.selectLampKey(.colorimeter)
+    key.selectLampPlate(.colorimeter, present: { XCTFail("Production presented a plate") })
     XCTAssertEqual(key.lampPlate.command, .lampPlate1)
     XCTAssertEqual(key.lampKey.command, .lampKey2)
     XCTAssertFalse(key.lampEnabled)
     XCTAssertFalse(key.available)
     XCTAssertFalse(key.enabled)
+    XCTAssertEqual(root.sublayers, [layer])
     XCTAssertNil(layer.delegate)
+    XCTAssertEqual(layer.filters?.count, 1)
     XCTAssertEqual(layer.value(forKey: "tracksLuma") as? Bool, false)
     XCTAssertTrue(layer.filters?.first as? NSObject === ordinary)
     XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
@@ -114,6 +121,7 @@ import XCTest
     let reader = try XCTUnwrap(layer.delegate as? KOSampledBackdrop)
     key.toggle()
     reader.backdropLayer(layer, didChangeLuma: 0.75)
+    key.selectLampKey(.measuring)
     key.toggleLamp()
     let fixed = LampKeyPreset.measuring.key.matrix
     XCTAssertEqual(matrix(layer), fixed)
@@ -135,6 +143,7 @@ import XCTest
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
     let left = try makeLayer()
     let right = try makeLayer()
+    key.selectLampKey(.measuring)
     key.observe(left, display: 1)
     key.observe(right, display: 2)
     XCTAssertEqual(matrix(left), LampKeyPreset.measuring.key.matrix)
@@ -191,6 +200,7 @@ import XCTest
     let key = RelativeMenuBarKey(isTestCopy: true, clock: clock, log: { lines.all.append($0) })
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
     let layer = try makeLayer()
+    key.selectLampKey(.measuring)
     key.observe(layer, display: 9)
     XCTAssertEqual(timers.count, 1)
     key.toggleLampOnly()
@@ -266,19 +276,65 @@ import XCTest
 }
 
 extension RelativeBackdropTests {
-  func testTrialCopyStartsInMeasuringModeAndLogsItsDefaultsOnce() {
+  func testTrialCopyStartsWithTheCalibratedLampAndLogsItsDefaultsOnce() {
     let lines = Lines()
-    let key = RelativeMenuBarKey(isTestCopy: true, log: { lines.all.append($0) })
+    let key = RelativeMenuBarKey(isTestCopy: true, launchPreference: { nil }, log: { lines.all.append($0) })
     XCTAssertEqual(key.lampMode, .underKey)
-    XCTAssertEqual(key.lampKey.command, LampKeyPreset.measuring.command)
-    XCTAssertEqual(key.lampKey.command, .lampKey4)
-    XCTAssertEqual(key.lampPlate.command, LampPlatePreset.measuring.command)
-    XCTAssertEqual(key.lampPlate.command, .lampPlate5)
-    XCTAssertNil(key.lampPlate.margin)
+    XCTAssertEqual(key.lampKey.command, .lampKey6)
+    XCTAssertEqual(key.lampPlate.command, .lampPlate6)
+    XCTAssertEqual(key.lampPlate.margin, 4)
     key.toggleLamp()
     key.toggleLamp()
     XCTAssertEqual(lines.all.filter { $0.hasPrefix("LampDefaults ") },
-                   ["LampDefaults lamp=under key=4 black=0.94 white=0.60 plate=5"])
+                   ["LampDefaults lamp=under key=6 two-layer colorimeter plate=6"])
+  }
+
+  func testOnlyLaunchPreferenceSuppressesTheCalibratedKey() throws {
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: true, launchPreference: { "only" }, log: { lines.all.append($0) })
+    let layer = try makeLayer()
+    key.observe(layer, display: 1)
+    XCTAssertEqual(key.lampMode, .only)
+    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
+    XCTAssertTrue(lines.all.contains("LampDefaults lamp=only key=6 two-layer colorimeter plate=6"))
+  }
+
+  func testSecondLayerCreationFailureSelectsFourAndRestoresAllWindows() throws {
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: true, log: { lines.all.append($0) })
+    let root = CALayer()
+    let first = try makeLayer()
+    root.addSublayer(first)
+    key.observe(first, display: 1)
+    let detached = try makeLayer() // No shared parent for the second backdrop.
+    key.observe(detached, display: 2)
+    XCTAssertEqual(key.lampKey.command, .lampKey4)
+    XCTAssertEqual(root.sublayers, [first])
+    XCTAssertEqual(first.filters?.count, 1)
+    XCTAssertEqual(matrix(first), LampKeyPreset.measuring.key.matrix)
+    XCTAssertEqual(matrix(detached), LampKeyPreset.measuring.key.matrix)
+    XCTAssertEqual(lines.all.filter { $0.hasPrefix("TwoLayer unavailable reason=") }.count, 1)
+  }
+
+  func testRecommitRejectsLostBlendAndKeepsTheMeasuringKeyAttached() throws {
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: true, launchPreference: { nil }, log: { lines.all.append($0) })
+    let root = CALayer()
+    let glyph = try makeLayer()
+    root.addSublayer(glyph)
+    key.observe(glyph, display: 1)
+    guard key.lampKey.command == .lampKey6 else { throw XCTSkip("Grouped backdrops unavailable") }
+    let upper = try XCTUnwrap(root.sublayers?.last)
+    XCTAssertTrue(key.recommitPair(on: glyph))
+    glyph.frame = CGRect(x: 3, y: 2, width: 40, height: 20)
+    key.resizePressed(on: glyph)
+    XCTAssertEqual(upper.frame, glyph.frame)
+    upper.compositingFilter = nil
+    XCTAssertFalse(key.recommitPair(on: glyph))
+    XCTAssertEqual(key.lampKey.command, .lampKey4)
+    XCTAssertEqual(root.sublayers, [glyph])
+    XCTAssertEqual(matrix(glyph), LampKeyPreset.measuring.key.matrix)
+    XCTAssertTrue(lines.all.contains("TwoLayer unavailable reason=Lighten blend differs"))
   }
 
   func testLampKeyLogFollowsSuccessfulApplicationsOnTheLitDisplay() throws {

@@ -28,7 +28,7 @@ final class RecordingRuntime: KeyBackdropRuntime {
     return layer
   }
 
-  func attach(root: CALayer, backdrop: CALayer) throws {
+  func attach(root: CALayer, backdrop: CALayer, display: UInt32) throws {
     root.addSublayer(backdrop)
     try record(.attach) // Includes failures after a partial attach.
   }

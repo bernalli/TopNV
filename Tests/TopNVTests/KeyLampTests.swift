@@ -60,8 +60,8 @@ final class KeyLampTests: XCTestCase {
     let original = plate.frame
     XCTAssertEqual(original.height, 8.5)
     harness.lampEnabled = true
-    let rows: [Int?] = [51, 56, 60, 64, nil]
-    let margins = ["7.5", "5", "3", "1", "none"]
+    let rows: [Int?] = [51, 56, 60, 64, nil, 58]
+    let margins = ["7.5", "5", "3", "1", "none", "4"]
     XCTAssertEqual(LampPlatePreset.choices.count, rows.count)
     for (index, preset) in LampPlatePreset.choices.enumerated() {
       harness.lampPlate = preset
@@ -77,7 +77,7 @@ final class KeyLampTests: XCTestCase {
     XCTAssertEqual(plate.frame, original)
     harness.lampOnly = false
     harness.apply(live)
-    XCTAssertEqual(plate.frame.height, 0)
+    XCTAssertEqual(plate.frame.height, 5)
     harness.lampEnabled = false
     harness.apply(ExecutorPlans.key(gap: 20))
     XCTAssertEqual(plate.frame, original)

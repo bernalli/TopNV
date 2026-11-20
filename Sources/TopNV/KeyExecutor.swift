@@ -153,7 +153,7 @@ final class KeyExecutor: BarKeyExecuting {
         extent = rect
       }
     }
-    if entry.backdrop.frame != extent { entry.backdrop.frame = extent }
+    if entry.backdrop.frame != extent { runtime.resize(entry.backdrop, to: extent) }
   }
 
   private func create(_ creation: BarKeyCreation, on display: UInt32, plan: BarDisplayPlan) throws {
@@ -183,7 +183,7 @@ final class KeyExecutor: BarKeyExecuting {
       entry.plate.install(in: root, scale: scale)
       present(key, on: entry)
     }
-    try runtime.attach(root: root, backdrop: backdrop)
+    try runtime.attach(root: root, backdrop: backdrop, display: display)
     guard keyCommitted(creation, id, display) else { close(id); return }
     window.orderFrontRegardless()
     window.displayIfNeeded()

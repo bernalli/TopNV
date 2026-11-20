@@ -10,12 +10,26 @@ final class RelativeLuminanceKeyTests: XCTestCase {
 
   func testFiveLampKeysMapTheirBlackAndWhiteEndpoints() {
     let points: [(Float, Float)] = [(0.94, 0.15), (0.94, 0.30), (0.94, 0.45), (0.94, 0.60), (0.95, 0.45)]
-    XCTAssertEqual(LampKeyPreset.choices.count, points.count)
+    XCTAssertEqual(LampKeyPreset.choices.count, points.count + 1)
     for (preset, points) in zip(LampKeyPreset.choices, points) {
       XCTAssertEqual(preset.key.blackPoint, points.0, accuracy: 1e-6)
       XCTAssertEqual(preset.key.whitePoint, points.1, accuracy: 1e-6)
       XCTAssertEqual(output(preset.key, points.0), 0, accuracy: 1e-6)
       XCTAssertEqual(output(preset.key, points.1), 1, accuracy: 1e-6)
+    }
+  }
+
+  func testColorimeterGlyphPressedAndLightenOutputs() {
+    let pixels: [Float] = [35, 60, 100, 150, 200, 213, 220, 223, 228, 229, 230, 232, 240, 255]
+    let glyphs: [Double] = [229.9, 200.2, 158.7, 108.7, 49.2, 30.7, 20, 15.3, 7.2, 5.5, 3.9, 0.5, 0, 0]
+    let composite: [Double] = [229.9, 200.2, 158.7, 108.7, 49.2, 38, 38, 38, 38, 38, 3.9, 0.5, 0, 0]
+    for (index, pixel) in pixels.enumerated() {
+      let input = pixel / 255
+      let glyph = ColorimeterKey.curve.output(Double(output(LampKeyPreset.colorimeter.key, input))) * 255
+      let pressed = Double(output(ColorimeterKey.threshold, input) * ColorimeterKey.pressedLevel * 255)
+      XCTAssertEqual(glyph, glyphs[index], accuracy: 1)
+      XCTAssertEqual(pressed, pixel <= 229 ? 38 : 0, accuracy: 0.01)
+      XCTAssertEqual(max(glyph, pressed), composite[index], accuracy: 1)
     }
   }
 

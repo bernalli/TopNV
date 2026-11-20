@@ -17,13 +17,16 @@ import os
   private static let loggedStepsPerUnit: Float = 50
 
   private final class Entry {
+    weak var layer: CALayer?
+    var pair: KOTwoLayerBackdrop?
     let source: KOSampledBackdrop
     var background: Float?
     var logged: Float?
     var applied = LuminanceKey.normal
     var probe: BackdropProbe
 
-    init(_ source: KOSampledBackdrop, display: UInt32) {
+    init(_ layer: CALayer, source: KOSampledBackdrop, display: UInt32) {
+      self.layer = layer
       self.source = source
       probe = BackdropProbe(display: display)
     }
@@ -46,21 +49,24 @@ import os
   /// - Parameter sink: receives the lines of the log in place of the system log.
   init(isTestCopy: Bool, clock: ProbeClock = ProbeClock(), isLampLit: @escaping (UInt32) -> Bool = { _ in true },
        lampState: @escaping (Set<UInt32>) -> Void = { _ in },
+       launchPreference: () -> String? = { UserDefaults.standard.string(forKey: "LampModeAtLaunch") },
        log sink: ((String) -> Void)? = nil) {
     // Production makes none of the sampling calls, keeps the ordinary key and logs nothing.
     self.isLampLit = isLampLit
     self.clock = clock
     self.lampState = lampState
     self.isTestCopy = isTestCopy
-    lampMode = isTestCopy ? .underKey : .off
-    lampKey = isTestCopy ? .measuring : .standard
-    lampPlate = isTestCopy ? .measuring : .standard
+    // A measuring run of the test copy can start with the lamp alone (set by the trial script).
+    let launchOnly = isTestCopy && launchPreference() == "only"
+    lampMode = isTestCopy ? (launchOnly ? .only : .underKey) : .off
+    lampKey = isTestCopy ? .colorimeter : .standard
+    lampPlate = isTestCopy ? .colorimeter : .standard
     available = isTestCopy && Self.probe()
     self.sink = sink
     if isTestCopy {
       log("Relative key available=\(available)")
-      log("LampDefaults lamp=under key=\(lampKey.number) black=\(lampKey.blackText) "
-          + "white=\(lampKey.whiteText) plate=\(lampPlate.number)")
+      let mode = lampMode == .only ? "only" : "under"
+      log("LampDefaults lamp=\(mode) key=\(lampKey.number) two-layer colorimeter plate=\(lampPlate.number)")
       scheduleProbes()
     }
   }
@@ -68,16 +74,44 @@ import os
   deinit { timer?.invalidate() }
 
   func observe(_ layer: CALayer, display: UInt32) {
-    guard available else { return }
-    guard let source = KOSampledBackdrop.observe(layer, sample: { [weak self] layer, luma, received in
-      MainActor.assumeIsolated { self?.sample(Float(luma), for: layer, at: received) }
-    }) else {
-      fallBack("a backdrop refused the sampling setup")
-      return
+    guard isTestCopy else { return }
+    var source: KOSampledBackdrop?
+    if available {
+      source = KOSampledBackdrop.observe(layer, sample: { [weak self] layer, luma, received in
+        MainActor.assumeIsolated { self?.sample(Float(luma), for: layer, at: received) }
+      })
+      if source == nil {
+        fallBack("a backdrop refused the sampling setup")
+        // Fixed lamp keys can still use the untracked matrix path on every display.
+        if lampEnabled { updateFilters() }
+      }
     }
-    let entry = Entry(source, display: display)
+    guard let source = source ?? KOSampledBackdrop.untracked(layer) else { return }
+    let entry = Entry(layer, source: source, display: display)
     entries.setObject(entry, forKey: layer)
     if !apply(entry) { fallBack("a backdrop rejected its filter") }
+  }
+
+  func resizePressed(on layer: CALayer) {
+    entries.object(forKey: layer)?.pair?.pressed.frame = layer.frame
+  }
+
+  func forget(_ layer: CALayer) {
+    entries.object(forKey: layer)?.pair?.remove()
+    entries.removeObject(forKey: layer)
+  }
+
+  func recommitPair(on layer: CALayer) -> Bool {
+    guard let pair = entries.object(forKey: layer)?.pair else { return false }
+    var reason: NSString?
+    if pair.recommit(&reason) { return true }
+    useMeasuringKey(reason)
+    return false
+  }
+
+  private func useMeasuringKey(_ reason: NSString?) {
+    log("TwoLayer unavailable reason=\(reason as String? ?? "unknown")", failure: true)
+    selectLampKey(.measuring)
   }
 
   private var liveEntries: [Entry] {
@@ -148,7 +182,7 @@ import os
     let time = clock.now()
     lampState(Set(entries.map { $0.probe.display }))
     for entry in entries {
-      log(entry.probe.line(at: time, key: entry.applied, fixed: usesLampKey(entry)))
+      log(entry.probe.line(at: time, key: entry.pair == nil ? entry.applied : lampKey.key, fixed: usesLampKey(entry)))
       beginProbe(entry)
     }
   }
@@ -178,6 +212,22 @@ import os
 
   private func apply(_ entry: Entry) -> Bool {
     let fixed = usesLampKey(entry)
+    if fixed && lampKey.command == .lampKey6 {
+      guard entry.pair == nil, let layer = entry.layer else { return true }
+      var reason: NSString?
+      let controls = ColorimeterKey.curve.values.map { NSNumber(value: $0) }
+      entry.pair = KOInstallTwoLayer(layer, lampKey.key.matrix, controls, ColorimeterKey.threshold.matrix,
+                                     ColorimeterKey.pressedLevel, &reason)
+      guard entry.pair != nil else {
+        useMeasuringKey(reason)
+        return true
+      }
+      // remove() restores the filters that preceded this pair.
+      log("LampKey display=\(entry.probe.display) voce=6 two-layer colorimeter")
+      return true
+    }
+    entry.pair?.remove()
+    entry.pair = nil
     let key = fixed ? lampKey.key
       : LuminanceKey.forBackdrop(backgroundLuma: entry.background, relativeEnabled: enabled)
     let matrix = key.matrix
@@ -198,10 +248,15 @@ import os
     available = false
     enabled = false
     log("Relative key off for this session: \(reason)", failure: true)
-    for entry in liveEntries where !entry.source.stopTracking() {
-      log("Could not restore the ordinary key", failure: true)
+    for entry in liveEntries {
+      entry.pair?.remove()
+      entry.pair = nil
+      if entry.source.stopTracking() {
+        entry.applied = .normal
+      } else {
+        log("Could not restore the ordinary key", failure: true)
+      }
     }
-    entries.removeAllObjects()
     scheduleProbes()
   }
 

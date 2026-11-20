@@ -3,6 +3,8 @@
 NS_ASSUME_NONNULL_BEGIN
 /// Owns the ordinary filter while the render server supplies unfiltered luma changes.
 @interface KOSampledBackdrop : NSObject <CALayerDelegate>
+/// Fixed lamp filters still work when luma callbacks are unavailable.
++ (nullable instancetype)untracked:(CALayer *)layer;
 + (nullable instancetype)observe:(CALayer *)layer
                           sample:(void (^)(CALayer *, double, CFTimeInterval))sample;
 // Render-server delegate messages. Protected content invalidates the last usable sample.

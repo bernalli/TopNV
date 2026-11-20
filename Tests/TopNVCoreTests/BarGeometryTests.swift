@@ -91,7 +91,7 @@ final class BarGeometryTests: XCTestCase {
   func testLampPlateChoicesOnTheRecordedDisplayInBothLayerOrientations() {
     let screen = display()
     let key = menu(on: screen, depth: 34)
-    let rows: [Int?] = [51, 56, 60, 64, nil]
+    let rows: [Int?] = [51, 56, 60, 64, nil, 58]
     XCTAssertEqual(LampPlatePreset.choices.count, rows.count)
     for (preset, row) in zip(LampPlatePreset.choices, rows) {
       let plate = BarGeometry.plate(keySize: key.size, menuHeight: 33, scale: screen.scale, margin: preset.margin)

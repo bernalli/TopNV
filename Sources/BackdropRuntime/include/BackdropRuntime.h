@@ -11,3 +11,4 @@ BOOL KORecommitBackdrop(CALayer *backdrop, NSString * _Nullable * _Nullable reas
 BOOL KODetachBackdrop(CALayer *backdrop, NSString * _Nullable * _Nullable reason);
 NS_ASSUME_NONNULL_END
 #import "SampledBackdrop.h"
+#import "TwoLayerBackdrop.h"

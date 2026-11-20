@@ -115,16 +115,17 @@ final class StatusMenuControllerTests: XCTestCase {
     let production = makeController(relativeKey: key).controller
     XCTAssertNil(production.menu.item(withTitle: "Lamp key (test)"))
     production.perform(.lampKey5)
-    XCTAssertEqual(key.lampKey.command, .lampKey4)
+    XCTAssertEqual(key.lampKey.command, .lampKey6)
     NSStatusBar.system.removeStatusItem(production.statusItem)
 
     let menu = makeController(isTestCopy: true, relativeKey: key).controller.menu
     let submenu = try XCTUnwrap(menu.item(withTitle: "Lamp key (test)")?.submenu)
     XCTAssertEqual(submenu.items.map(\.title), [
       "1  black from 0.94, white to 0.15", "2  black from 0.94, white to 0.30",
-      "3  black from 0.94, white to 0.45", "4  black from 0.94, white to 0.60", "5  black from 0.95, white to 0.45"
+      "3  black from 0.94, white to 0.45", "4  black from 0.94, white to 0.60", "5  black from 0.95, white to 0.45",
+      "6  two-layer colorimeter"
     ])
-    XCTAssertEqual(submenu.items.map(\.state), [.off, .off, .off, .on, .off])
+    XCTAssertEqual(submenu.items.map(\.state), [.off, .off, .off, .off, .off, .on])
     for index in submenu.items.indices {
       submenu.performActionForItem(at: index)
       XCTAssertEqual(submenu.items.map(\.state), submenu.items.indices.map { $0 == index ? .on : .off })
@@ -136,15 +137,15 @@ final class StatusMenuControllerTests: XCTestCase {
     let production = makeController(relativeKey: key).controller
     XCTAssertNil(production.menu.item(withTitle: "Lamp plate (test)"))
     production.perform(.lampPlate1)
-    XCTAssertEqual(key.lampPlate.command, .lampPlate5)
+    XCTAssertEqual(key.lampPlate.command, .lampPlate6)
     NSStatusBar.system.removeStatusItem(production.statusItem)
 
     let menu = makeController(isTestCopy: true, relativeKey: key).controller
     var changes = 0
     menu.onLampChanged = { changes += 1 }
     let submenu = try XCTUnwrap(menu.menu.item(withTitle: "Lamp plate (test)")?.submenu)
-    XCTAssertEqual(submenu.items.map(\.title), ["1  7.5 pt", "2  5 pt", "3  3 pt", "4  1 pt", "5  No plate"])
-    XCTAssertEqual(submenu.items.map(\.state), [.off, .off, .off, .off, .on])
+    XCTAssertEqual(submenu.items.map(\.title), ["1  7.5 pt", "2  5 pt", "3  3 pt", "4  1 pt", "5  No plate", "6  4 pt"])
+    XCTAssertEqual(submenu.items.map(\.state), [.off, .off, .off, .off, .off, .on])
     menu.perform(.lampUnderKey)
     submenu.performActionForItem(at: 3)
     XCTAssertEqual(key.lampPlate.command, .lampPlate4)

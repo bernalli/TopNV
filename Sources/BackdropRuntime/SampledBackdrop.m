@@ -27,6 +27,19 @@ static BOOL DelegateMatches(Class cls, SEL selector) {
     return YES;
 }
 
++ (instancetype)untracked:(CALayer *)layer {
+    @try {
+        if (layer.filters.count != 1 ||
+            ![[layer.filters.firstObject valueForKey:@"type"] isEqual:@"colorMatrix"]) return nil;
+        KOSampledBackdrop *source = [self new];
+        source->_layer = layer;
+        source->_ordinaryFilters = layer.filters;
+        return source;
+    } @catch (NSException *exception) {
+        return nil;
+    }
+}
+
 + (instancetype)observe:(CALayer *)layer sample:(void (^)(CALayer *, double, CFTimeInterval))sample {
     @try {
         Class<KOFilterCatalog> catalog = NSClassFromString(@"CAFilter");
@@ -43,9 +56,8 @@ static BOOL DelegateMatches(Class cls, SEL selector) {
             layer.delegate || layer.filters.count != 1 ||
             ![[layer.filters.firstObject valueForKey:@"type"] isEqual:@"colorMatrix"]) return nil;
 
-        KOSampledBackdrop *source = [self new];
-        source->_layer = layer;
-        source->_ordinaryFilters = layer.filters;
+        KOSampledBackdrop *source = [self untracked:layer];
+        if (!source) return nil;
         source->_sample = [sample copy];
         // Sample the input of this bar. Including our own keyed output would create feedback.
         // A layer stores any key it is given: only the selectors above prove these properties.

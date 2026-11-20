@@ -136,11 +136,11 @@ import TopNVCore
         relativeKey.toggleLamp(present: present)
       }
       refresh()
-    case .lampKey1, .lampKey2, .lampKey3, .lampKey4, .lampKey5:
+    case .lampKey1, .lampKey2, .lampKey3, .lampKey4, .lampKey5, .lampKey6:
       guard isTestCopy, let preset = LampKeyPreset.choices.first(where: { $0.command == command }) else { return }
       relativeKey.selectLampKey(preset)
       refresh()
-    case .lampPlate1, .lampPlate2, .lampPlate3, .lampPlate4, .lampPlate5:
+    case .lampPlate1, .lampPlate2, .lampPlate3, .lampPlate4, .lampPlate5, .lampPlate6:
       guard isTestCopy, let preset = LampPlatePreset.choices.first(where: { $0.command == command }) else { return }
       relativeKey.selectLampPlate(preset, present: onLampChanged ?? {})
       refresh()
