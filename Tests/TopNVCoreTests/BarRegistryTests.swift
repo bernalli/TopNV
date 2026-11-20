@@ -30,7 +30,7 @@ final class BarRegistryTests: XCTestCase {
 
   func testLineFormatMatchesTheGrammar() {
     let parts: [(BarPart, String)] = [
-      (.band, "band"), (.key, "key"), (.plate, "plate"), (.edge, "edge"),
+      (.band, "band"), (.lamp, "lamp"), (.key, "key"), (.plate, "plate"), (.edge, "edge"),
       (.corner(.topLeft), "corner.topLeft"), (.corner(.topRight), "corner.topRight"),
       (.corner(.bottomLeft), "corner.bottomLeft"), (.corner(.bottomRight), "corner.bottomRight")
     ]
@@ -158,7 +158,7 @@ final class BarRegistryTests: XCTestCase {
     let decimal = integer + #"(?:\.[0-9]{0,2}[1-9])?"#
     let rect = Array(repeating: integer, count: 4).joined(separator: ",")
     let prefix = #"^display=[0-9]+ scene=(?:desktop|revealed|overview|fullScreen|sliding|unknown|absent) part="#
-    let part = #"(?:band|key|plate|edge|corner\.(?:topLeft|topRight|bottomLeft|bottomRight))"#
+    let part = #"(?:band|lamp|key|plate|edge|corner\.(?:topLeft|topRight|bottomLeft|bottomRight))"#
     let summary = #"summary band=(?:on|off) screenPx=[0-9]+x[0-9]+"# + " scale=\(decimal) blackBottom=\(integer)"
     let listed = "(?:\(rect)/\(decimal)|none|offspace|ambiguous|unavailable|n/a)"
     let fields = "\(part) px=(?:\(rect)|none) alpha=\(decimal) level=\(integer) window=(?:\(integer)|none)"

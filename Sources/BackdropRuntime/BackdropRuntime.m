@@ -88,13 +88,19 @@ BOOL KOFlushBackdrop(NSString **reason) {
     }
 }
 
-BOOL KORecommitBackdrop(CALayer *backdrop, NSString **reason) {
+BOOL KORecommitBackdrop(CALayer *backdrop, const float expectedMatrix[20], NSString **reason) {
     @try {
         // A fresh array makes the assignment a real change, so the flush carries it to the render server.
-        Require(backdrop.filters.count == 1, @"Backdrop lost its filter");
+        Require(backdrop.superlayer != nil && backdrop.filters.count == 1, @"Ordinary backdrop unavailable");
+        for (CALayer *sibling in backdrop.superlayer.sublayers) {
+            Require(sibling == backdrop || ![sibling isKindOfClass:backdrop.class], @"Second backdrop still attached");
+        }
         backdrop.filters = [NSArray arrayWithArray:backdrop.filters];
-        Require(backdrop.filters.count == 1, @"Backdrop rejected its filter");
         [CATransaction flush];
+        NSValue *matrix = [NSValue valueWithBytes:expectedMatrix objCType:"{CAColorMatrix=ffffffffffffffffffff}"];
+        Require(backdrop.filters.count == 1 &&
+                [[backdrop.filters.firstObject valueForKey:@"inputColorMatrix"] isEqual:matrix],
+                @"Ordinary color matrix readback differs");
         return YES;
     } @catch (NSException *exception) {
         Report(exception, reason);

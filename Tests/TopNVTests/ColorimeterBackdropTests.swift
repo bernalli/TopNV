@@ -34,15 +34,24 @@ import XCTest
     var reason: NSString?
     let glyph = try XCTUnwrap(KOCreateBackdrop(LuminanceKey.normal.matrix, 20, root.bounds, 1, &reason))
     root.addSublayer(glyph)
-    let key = RelativeMenuBarKey(isTestCopy: true, launchPreference: { nil })
-    key.observe(glyph, display: 1)
-    guard key.lampKey.command == .lampKey6 else { throw XCTSkip("Grouped backdrops unavailable") }
+    let original = try XCTUnwrap(glyph.filters?.first as? NSObject)
+    let pair: KeyBackdropPair
+    do {
+      pair = try PrivateBackdropRuntime().installPair(on: glyph)
+    } catch {
+      throw XCTSkip("Grouped backdrops unavailable: \(error)")
+    }
+    try pair.verifyCommit()
     let upper = try XCTUnwrap(root.sublayers?.last)
     XCTAssertFalse(upper === glyph)
     XCTAssertEqual(upper.value(forKey: "groupName") as? String, glyph.value(forKey: "groupName") as? String)
     XCTAssertEqual((upper.compositingFilter as? NSObject)?.value(forKey: "type") as? String, "lightenBlendMode")
     try await verifyInputs(upper, swatch: swatch) { window.orderFrontRegardless() }
-    key.toggleLampOnly()
+    upper.compositingFilter = nil
+    XCTAssertThrowsError(try pair.verifyCommit())
+    pair.remove()
+    try PrivateBackdropRuntime().recommit(glyph)
+    XCTAssertTrue((glyph.filters?.first as? NSObject) === original)
     XCTAssertEqual(root.sublayers, [swatch, glyph])
     XCTAssertEqual(glyph.filters?.count, 1)
   }

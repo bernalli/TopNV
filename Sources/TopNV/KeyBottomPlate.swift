@@ -5,12 +5,13 @@ import TopNVCore
 final class KeyBottomPlate {
   let layer = CALayer()
   private let original: BarPlate
-  private let menuHeight: CGFloat
-  private var applied: MenuCommand?
+  private let calibrated: BarPlate
 
-  init(original: BarPlate, display: BarDisplay) {
+  init(original: BarPlate, display: BarDisplay, keySize: CGSize) {
     self.original = original
-    menuHeight = display.frame.maxY - display.visibleFrame.maxY
+    let menuHeight = display.frame.maxY - display.visibleFrame.maxY
+    calibrated = BarGeometry.plate(keySize: keySize, menuHeight: menuHeight, scale: display.scale,
+                                   margin: BarGeometry.calibratedPlateMargin)
   }
 
   func install(in root: CALayer, scale: CGFloat) {
@@ -23,17 +24,9 @@ final class KeyBottomPlate {
     root.addSublayer(layer)
   }
 
-  func apply(_ preset: LampPlatePreset?, log: (String) -> Void) {
-    guard applied != preset?.command, let root = layer.superlayer else { return }
-    applied = preset?.command
-    let geometry = preset.map {
-      BarGeometry.plate(keySize: root.bounds.size, menuHeight: menuHeight,
-                        scale: layer.contentsScale, margin: $0.margin)
-    } ?? original
+  func apply(calibrated enabled: Bool) {
+    guard let root = layer.superlayer else { return }
+    let geometry = enabled ? calibrated : original
     layer.frame = root.isGeometryFlipped ? geometry.flipped : geometry.unflipped
-    if let preset {
-      let row = preset.margin == nil ? "none" : String(Int((geometry.flipped.minY * layer.contentsScale).rounded()))
-      log("LampPlate voce=\(preset.number) margin=\(preset.marginText) px=\(row)")
-    }
   }
 }

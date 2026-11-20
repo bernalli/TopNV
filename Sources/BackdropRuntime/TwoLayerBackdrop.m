@@ -82,6 +82,7 @@ static void CheckGroupingAPI(CALayer *layer) {
         Check([[layer valueForKey:@"allowsGroupBlending"] boolValue] &&
               ![[layer valueForKey:@"allowsInPlaceFiltering"] boolValue], @"Backdrop grouping differs");
     }
+    Check(CGRectEqualToRect(glyph.frame, _pressed.frame), @"Sibling backdrop frames differ");
     Check([glyph.filters isEqual:_glyphFilters] && [_pressed.filters isEqual:_pressedFilters], @"Filter chain differs");
     Check([[self filterInputs] isEqual:_expectedInputs], @"Filter inputs differ");
     Check([_pressed.compositingFilter isEqual:_blend], @"Lighten blend differs");
@@ -173,8 +174,10 @@ KOTwoLayerBackdrop *KOInstallTwoLayer(CALayer *glyph, const float glyphMatrix[20
             @try { [glyph setValue:_originalBlending forKey:@"allowsGroupBlending"]; }
             @catch (NSException *unused) {}
         }
-        _glyph = nil;
+    } @catch (NSException *exception) {
+        // The caller verifies the detached sibling and original matrix before using the ordinary key.
     } @finally {
+        _glyph = nil;
         [CATransaction commit];
     }
 }

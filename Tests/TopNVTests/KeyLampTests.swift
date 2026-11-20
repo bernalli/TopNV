@@ -5,17 +5,15 @@ import XCTest
 
 @MainActor
 final class KeyLampTests: XCTestCase {
-  func testLampFollowsAppliedAlphaAndEntranceMaskUntilSwitchedOff() throws {
+  func testLampFollowsAppliedAlphaAndEntranceMask() throws {
     let harness = KeyHarness()
     defer { harness.executor.closeAll() }
     harness.apply(ExecutorPlans.key(create: try harness.creation()))
-    XCTAssertNil(harness.lamp.window(on: 1))
-    XCTAssertTrue(harness.lampLines.isEmpty)
-    harness.lampEnabled = true
-    harness.apply(ExecutorPlans.key())
     let lamp = try XCTUnwrap(harness.lamp.window(on: 1))
     let key = try XCTUnwrap(harness.windows.first)
     XCTAssertEqual(lamp.alphaValue, 0)
+    let pressed = try XCTUnwrap(harness.runtime.pressedLayers.first)
+    XCTAssertTrue(pressed.superlayer === key.contentView?.layer)
     XCTAssertEqual(lamp.frame, ExecutorPlans.frame)
     XCTAssertTrue(lamp.isOpaque && lamp.ignoresMouseEvents)
     XCTAssertEqual(lamp.backgroundColor, .white)
@@ -28,88 +26,62 @@ final class KeyLampTests: XCTestCase {
     }
 
     let mask = BarMask.rect(CGRect(x: 20, y: 0, width: 80, height: 17))
-    harness.apply(ExecutorPlans.key(gates: [10: .value(1)], mask: mask))
+    let entries = harness.apply(ExecutorPlans.key(gates: [10: .value(1)], mask: mask))
+    let registered = try XCTUnwrap(entries[.init(display: 1, part: .lamp)])
+    XCTAssertEqual(registered.window, lamp.windowNumber)
+    XCTAssertEqual(registered.mask, entries[.init(display: 1, part: .key, keyWindow: 10)]?.mask)
     XCTAssertEqual(lamp.alphaValue, key.alphaValue)
     let lampShape = try XCTUnwrap(lamp.contentView?.layer?.sublayers?.first as? CAShapeLayer)
     let keyShape = try XCTUnwrap(key.contentView?.layer?.mask as? CAShapeLayer)
     XCTAssertEqual(lampShape.path?.boundingBoxOfPath.size, keyShape.path?.boundingBoxOfPath.size)
+    XCTAssertEqual(pressed.frame, harness.runtime.layers.first?.frame)
     XCTAssertEqual(lampShape.fillColor, NSColor.white.cgColor)
     XCTAssertEqual(lamp.backgroundColor, .clear)
     let logged = harness.lampLines
     harness.apply(ExecutorPlans.key(mask: mask))
     XCTAssertEqual(harness.lampLines, logged)
     XCTAssertTrue(logged.last { $0.hasPrefix("Lamp ") }?.contains("px=0,0,400,68") == true)
-    harness.lampEnabled = false
-    harness.apply(ExecutorPlans.key())
+    harness.executor.closeAll()
     XCTAssertNil(harness.lamp.window(on: 1))
     XCTAssertEqual(lamp.alphaValue, 0)
     XCTAssertFalse(lamp.isVisible)
-    XCTAssertEqual(key.alphaValue, 1)
+    XCTAssertEqual(key.alphaValue, 0)
   }
 
-  func testLitPlatesChangeOnLiveKeysAndRestoreTheirCreationFrames() throws {
-    let harness = KeyHarness()
-    defer { harness.executor.closeAll() }
-    let create = ExecutorPlans.key(create: try harness.creation())
-    let live = ExecutorPlans.key(gates: [10: .value(1)])
-    harness.lampPlate = LampPlatePreset.choices[4]
-    harness.apply(create)
-    harness.apply(live)
-    let root = try XCTUnwrap(harness.windows.first?.contentView?.layer)
-    let plate = try XCTUnwrap(root.sublayers?.first { $0.name == "Bottom plate" })
-    let original = plate.frame
-    XCTAssertEqual(original.height, 8.5)
-    harness.lampEnabled = true
-    let rows: [Int?] = [51, 56, 60, 64, nil, 58]
-    let margins = ["7.5", "5", "3", "1", "none", "4"]
-    XCTAssertEqual(LampPlatePreset.choices.count, rows.count)
-    for (index, preset) in LampPlatePreset.choices.enumerated() {
-      harness.lampPlate = preset
-      harness.apply(live)
-      let row = rows[index]
-      XCTAssertEqual(plate.frame.height, row.map { CGFloat(68 - $0) / 2 } ?? 0)
-      XCTAssertEqual(plate.frame.minY, root.isGeometryFlipped ? 34 - plate.frame.height : 0)
-      let line = "LampPlate voce=\(index + 1) margin=\(margins[index]) px=\(row.map(String.init) ?? "none")"
-      XCTAssertTrue(harness.lampLines.contains(line))
+  func testPairAndLampFailuresRestoreTheOrdinaryKeyAndCreationPlate() throws {
+    for failure in ["lamp creation", "lamp readback", "pair creation", "pair readback"] {
+      let harness = KeyHarness()
+      defer { harness.executor.closeAll() }
+      harness.rejectLamp = failure == "lamp creation"
+      harness.runtime.rejectPair = failure == "pair creation"
+      harness.apply(ExecutorPlans.key(create: try harness.creation()))
+      harness.apply(ExecutorPlans.key(gates: [10: .value(1)]))
+      let key = try XCTUnwrap(harness.windows.first)
+      let plate = try XCTUnwrap(key.contentView?.layer?.sublayers?.first { $0.name == "Bottom plate" })
+      if failure.hasSuffix("readback") {
+        XCTAssertEqual(plate.frame.height, 5)
+        if failure == "lamp readback" {
+          let lamp = try XCTUnwrap(harness.lamp.window(on: 1))
+          lamp.contentView = NSView()
+          harness.jobs[0].run()
+        } else {
+          harness.runtime.rejectPairReadback = true
+          harness.jobs[0].run()
+        }
+      }
+      harness.apply(ExecutorPlans.key())
+      XCTAssertNil(harness.lamp.window(on: 1), failure)
+      XCTAssertEqual(key.alphaValue, 1, failure)
+      XCTAssertEqual(plate.frame.height, 8.5, failure)
+      XCTAssertTrue(harness.runtime.pressedLayers.allSatisfy { $0.superlayer == nil }, failure)
+      XCTAssertTrue(harness.runtime.recommitted.contains { $0 === harness.runtime.layers.first }, failure)
+      XCTAssertFalse(harness.executor.failed, failure)
     }
-    harness.lampOnly = true
-    harness.apply(live)
-    XCTAssertEqual(plate.frame, original)
-    harness.lampOnly = false
-    harness.apply(live)
-    XCTAssertEqual(plate.frame.height, 5)
-    harness.lampEnabled = false
-    harness.apply(ExecutorPlans.key(gap: 20))
-    XCTAssertEqual(plate.frame, original)
-    XCTAssertTrue(plate.superlayer === root)
-    XCTAssertEqual(harness.windows.count, 1)
-  }
-
-  func testLampOnlyClosesTheKeyAndRestoresTheLatestHeldGate() throws {
-    let harness = KeyHarness()
-    defer { harness.executor.closeAll() }
-    harness.lampEnabled = true
-    harness.apply(ExecutorPlans.key(create: try harness.creation()))
-    harness.apply(ExecutorPlans.key(gates: [10: .value(1)]))
-    let lamp = try XCTUnwrap(harness.lamp.window(on: 1))
-    let key = try XCTUnwrap(harness.windows.first)
-    harness.lampOnly = true
-    harness.apply(ExecutorPlans.key())
-    XCTAssertTrue(harness.lamp.window(on: 1) === lamp)
-    XCTAssertEqual(lamp.alphaValue, 1)
-    XCTAssertEqual(key.alphaValue, 0)
-    harness.apply(ExecutorPlans.key(gates: [10: .value(0.5)]))
-    XCTAssertEqual(lamp.alphaValue, 0.5)
-    XCTAssertEqual(key.alphaValue, 0)
-    harness.lampOnly = false
-    harness.apply(ExecutorPlans.key(gates: [10: .hold]))
-    XCTAssertEqual(key.alphaValue, 0.5)
   }
 
   func testHeldKeysCannotLightOtherScenesDarkMenusOrAnotherSpace() throws {
     let harness = KeyHarness()
     defer { harness.executor.closeAll() }
-    harness.lampEnabled = true
     harness.apply(ExecutorPlans.key(create: try harness.creation()))
     for kind: BarSceneKind in [.revealed, .overview, .sliding, .fullScreen, .absent, .unknown, .desktop] {
       harness.apply(ExecutorPlans.key(gates: [10: .value(1)]))
@@ -119,17 +91,17 @@ final class KeyLampTests: XCTestCase {
       harness.executor.apply(BarPlan(displays: [1: plan]))
       XCTAssertNil(harness.lamp.window(on: 1))
       XCTAssertEqual(lamp.alphaValue, 0)
+      XCTAssertEqual(harness.windows.first?.alphaValue, 0)
     }
     harness.leaveSpace(0)
     harness.apply(ExecutorPlans.key())
-    XCTAssertEqual(harness.windows.first?.alphaValue, 1)
-    XCTAssertEqual(harness.lamp.window(on: 1)?.alphaValue, 0)
+    XCTAssertEqual(harness.windows.first?.alphaValue, 0)
+    XCTAssertNil(harness.lamp.window(on: 1))
   }
 
   func testClosingAnInactiveKeyPreservesTheLampUntilItsOwnerCloses() throws {
     let harness = KeyHarness()
     defer { harness.executor.closeAll() }
-    harness.lampEnabled = true
     let create = ExecutorPlans.key(create: try harness.creation())
     harness.apply(create)
     harness.apply(ExecutorPlans.key(gates: [10: .value(1)]))
@@ -149,7 +121,6 @@ final class KeyLampTests: XCTestCase {
 
   func testDelayedFailureClosesLitLampsOnBothDisplaysImmediately() throws {
     let harness = KeyHarness()
-    harness.lampEnabled = true
     let create = ExecutorPlans.key(create: try harness.creation())
     harness.apply(create, second: create)
     harness.apply(ExecutorPlans.key(gates: [10: .value(1)]), second: ExecutorPlans.key(gates: [11: .value(0.5)]))
@@ -160,6 +131,7 @@ final class KeyLampTests: XCTestCase {
     harness.runtime.fail = .recommit
     harness.jobs[0].run()
     XCTAssertTrue(harness.executor.failed)
+    XCTAssertTrue(harness.runtime.pressedLayers.allSatisfy { $0.superlayer == nil })
     for lamp in [first, second] {
       XCTAssertFalse(lamp.isVisible)
       XCTAssertEqual(lamp.alphaValue, 0)

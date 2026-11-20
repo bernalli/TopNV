@@ -90,7 +90,7 @@ public enum BarCheck {
   }
 
   private static func parsePart(_ fields: Substring) -> Bool? {
-    let part = #/(band|key|plate|edge|corner\.(?:topLeft|topRight|bottomLeft|bottomRight)) (.+)/#
+    let part = #/(band|lamp|key|plate|edge|corner\.(?:topLeft|topRight|bottomLeft|bottomRight)) (.+)/#
     let format = #/px=(\S+) alpha=(\S+) level=(\S+) window=(\S+) mask=(\S+)(?: listed=(\S+)(?: MISMATCH)?)?/#
     guard let entry = fields.wholeMatch(of: part), let match = entry.2.wholeMatch(of: format),
           match.1 == "none" || rectangle(match.1), decimal(match.2) != nil, integer(match.3),

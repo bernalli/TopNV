@@ -88,21 +88,14 @@ final class BarGeometryTests: XCTestCase {
     }
   }
 
-  func testLampPlateChoicesOnTheRecordedDisplayInBothLayerOrientations() {
+  func testCalibratedPlateStartsAtRow58InBothLayerOrientations() {
     let screen = display()
     let key = menu(on: screen, depth: 34)
-    let rows: [Int?] = [51, 56, 60, 64, nil, 58]
-    XCTAssertEqual(LampPlatePreset.choices.count, rows.count)
-    for (preset, row) in zip(LampPlatePreset.choices, rows) {
-      let plate = BarGeometry.plate(keySize: key.size, menuHeight: 33, scale: screen.scale, margin: preset.margin)
-      for (rect, flipped) in [(plate.flipped, true), (plate.unflipped, false)] {
-        if let row {
-          let frame = BarPixels.windowRect(layerFrame: rect, window: key, flipped: flipped)
-          XCTAssertEqual(BarGeometry.pixels(frame, on: screen), PixelRect(x: 0, y: row, width: 3024, height: 68 - row))
-        } else {
-          XCTAssertEqual(rect.height, 0)
-        }
-      }
+    let plate = BarGeometry.plate(keySize: key.size, menuHeight: 33, scale: screen.scale,
+                                  margin: BarGeometry.calibratedPlateMargin)
+    for (rect, flipped) in [(plate.flipped, true), (plate.unflipped, false)] {
+      let frame = BarPixels.windowRect(layerFrame: rect, window: key, flipped: flipped)
+      XCTAssertEqual(BarGeometry.pixels(frame, on: screen), PixelRect(x: 0, y: 58, width: 3024, height: 10))
     }
   }
 

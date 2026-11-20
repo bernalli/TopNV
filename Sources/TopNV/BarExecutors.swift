@@ -58,6 +58,15 @@ final class BarStripView: NSView {
   @available(*, unavailable)
   required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+  func matches(_ mask: BarMask, in window: OverlayWindow) -> Bool {
+    guard let root = layer, shape.superlayer === root else { return false }
+    let bounds = CGRect(origin: .zero, size: window.frame.size)
+    let path = BarEntranceMask.path(mask, height: bounds.height, flipped: root.isGeometryFlipped)
+    let opaque = mask == .none
+    return window.isOpaque == opaque && window.backgroundColor == (opaque ? color : .clear)
+      && shape.frame == bounds && shape.path == path && shape.fillColor == color.cgColor
+  }
+
   func apply(_ mask: BarMask, to window: OverlayWindow) {
     let opaque = mask == .none
     if window.isOpaque != opaque {

@@ -29,6 +29,8 @@ public struct BarPlate: Equatable, Sendable {
 public enum BarGeometry {
   public static let separator: CGFloat = 1
   public static let edgeDepth: CGFloat = 2
+  // Cover the illuminated bottom rim while leaving the two-tone glyph edges visible.
+  public static let calibratedPlateMargin: CGFloat = 4
   public static let plateGlyphMargin: CGFloat = 7.5
 
   /// The rectangle of the black bar for a screen, or `nil` when the screen has no notch.
@@ -45,11 +47,11 @@ public enum BarGeometry {
 
   /// Local frame of the opaque plate along the bottom edge of the keyed window.
   static func keyedBottomMask(size: CGSize, menuHeight: CGFloat, scale: CGFloat, flipped: Bool,
-                              margin: CGFloat? = plateGlyphMargin) -> CGRect {
+                              margin: CGFloat = plateGlyphMargin) -> CGRect {
     let menu = menuHeight > 0 ? min(menuHeight, size.height) : size.height
     // On a 33-pt Retina menu the last glyph pixel is row 50. The gradient can
     // lighten row 51. Round towards the bottom so a glyph is never partly covered.
-    let top = margin.map { min(size.height, ceil(max(0, menu - $0) * scale) / scale) } ?? size.height
+    let top = min(size.height, ceil(max(0, menu - margin) * scale) / scale)
     return CGRect(x: 0, y: flipped ? top : 0, width: size.width, height: size.height - top)
   }
 
@@ -85,7 +87,7 @@ public enum BarGeometry {
   }
 
   public static func plate(keySize: CGSize, menuHeight: CGFloat, scale: CGFloat,
-                           margin: CGFloat? = plateGlyphMargin) -> BarPlate {
+                           margin: CGFloat = plateGlyphMargin) -> BarPlate {
     BarPlate(
       flipped: keyedBottomMask(size: keySize, menuHeight: menuHeight, scale: scale, flipped: true, margin: margin),
       unflipped: keyedBottomMask(size: keySize, menuHeight: menuHeight, scale: scale, flipped: false, margin: margin)

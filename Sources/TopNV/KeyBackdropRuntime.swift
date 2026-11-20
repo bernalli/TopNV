@@ -7,14 +7,24 @@ import TopNVCore
 protocol KeyBackdropRuntime {
   func create(matrix: [Float], bounds: CGRect, scale: CGFloat, display: UInt32) throws -> CALayer
   func attach(root: CALayer, backdrop: CALayer, display: UInt32) throws
-  func resize(_ backdrop: CALayer, to frame: CGRect)
+  func installPair(on glyph: CALayer) throws -> KeyBackdropPair
   func flush() throws
   func recommit(_ backdrop: CALayer) throws
   func detach(_ backdrop: CALayer) throws
 }
 
-extension KeyBackdropRuntime {
-  func resize(_ backdrop: CALayer, to frame: CGRect) { backdrop.frame = frame }
+@MainActor
+protocol KeyBackdropPair {
+  var pressed: CALayer { get }
+  func verifyCommit() throws
+  func remove()
+}
+
+extension KOTwoLayerBackdrop: KeyBackdropPair {
+  func verifyCommit() throws {
+    var reason: NSString?
+    guard recommit(&reason) else { throw BackdropFailure(reason: reason as String? ?? "pair readback differs") }
+  }
 }
 
 struct BackdropFailure: LocalizedError {
@@ -37,23 +47,25 @@ extension PrivateBackdropRuntime: KeyBackdropRuntime {
 
   func attach(root: CALayer, backdrop: CALayer, display: UInt32) throws {
     try checked { KOAttachBackdrop(root, backdrop, &$0) }
-    RelativeMenuBarKey.shared.observe(backdrop, display: display)
   }
 
-  func resize(_ backdrop: CALayer, to frame: CGRect) {
-    backdrop.frame = frame
-    RelativeMenuBarKey.shared.resizePressed(on: backdrop)
+  func installPair(on glyph: CALayer) throws -> KeyBackdropPair {
+    var reason: NSString?
+    let curve = ColorimeterKey.curve.values.map { NSNumber(value: $0) }
+    guard let pair = KOInstallTwoLayer(glyph, ColorimeterKey.glyph.matrix, curve, ColorimeterKey.threshold.matrix,
+                                       ColorimeterKey.pressedLevel, &reason) else {
+      throw BackdropFailure(reason: reason as String? ?? "second layer unavailable")
+    }
+    return pair
   }
 
   func flush() throws { try checked { KOFlushBackdrop(&$0) } }
 
   func recommit(_ backdrop: CALayer) throws {
-    guard !RelativeMenuBarKey.shared.recommitPair(on: backdrop) else { return }
-    try checked { KORecommitBackdrop(backdrop, &$0) }
+    try checked { KORecommitBackdrop(backdrop, LuminanceKey.normal.matrix, &$0) }
   }
 
   func detach(_ backdrop: CALayer) throws {
-    RelativeMenuBarKey.shared.forget(backdrop)
     try checked { KODetachBackdrop(backdrop, &$0) }
   }
 

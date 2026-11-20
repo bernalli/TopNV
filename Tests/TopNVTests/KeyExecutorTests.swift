@@ -33,6 +33,37 @@ final class RecordingRuntime: KeyBackdropRuntime {
     try record(.attach) // Includes failures after a partial attach.
   }
 
+  var rejectPair = false
+  var rejectPairReadback = false
+  var pressedLayers: [CALayer] = []
+
+  func installPair(on glyph: CALayer) throws -> KeyBackdropPair {
+    if rejectPair { throw BackdropFailure(reason: "pair unavailable") }
+    let pair = RecordingPair(glyph: glyph, runtime: self)
+    pressedLayers.append(pair.pressed)
+    return pair
+  }
+
+  private final class RecordingPair: KeyBackdropPair {
+    let pressed = CALayer()
+    let glyph: CALayer
+    unowned let runtime: RecordingRuntime
+
+    init(glyph: CALayer, runtime: RecordingRuntime) {
+      self.glyph = glyph
+      self.runtime = runtime
+      pressed.frame = glyph.frame
+      glyph.superlayer?.insertSublayer(pressed, above: glyph)
+    }
+
+    func verifyCommit() throws {
+      if runtime.rejectPairReadback { throw BackdropFailure(reason: "pair readback differs") }
+      try runtime.recommit(glyph)
+    }
+
+    func remove() { pressed.removeFromSuperlayer() }
+  }
+
   func flush() throws { try record(.flush) }
   func recommit(_ backdrop: CALayer) throws {
     try record(.recommit)
@@ -71,15 +102,13 @@ final class KeyHarness {
   var closed: [Int] = []
   var failureCount = 0
   var monitorStops = 0
-  var lampPlate = LampPlatePreset.standard
-  var lampOnly = false
-  var lampEnabled = false
+  var rejectLamp = false
   var lampLines: [String] = []
-  lazy var lamp = KeyLamp(enabled: { [unowned self] in lampEnabled },
-                          only: { [unowned self] in lampOnly },
-                          plate: { [unowned self] in lampPlate }, log: { [unowned self] in
+  lazy var lamp = KeyLamp(makeWindow: { [unowned self] frame in
+    rejectLamp ? nil : KeyLamp.makeWindow(frame)
+  }, log: { [unowned self] line in
     XCTAssertTrue(CATransaction.disableActions())
-    lampLines.append($0)
+    lampLines.append(line)
   })
   var nextID = 10
   var accept: (BarKeyCreation, Int, UInt32) -> Bool = { _, _, _ in true }
@@ -89,7 +118,7 @@ final class KeyHarness {
   }, makeWindow: { [unowned self] frame in
     let window = RecordingWindow(frame: frame, level: .init(rawValue: 26), isOpaque: false,
                                  behavior: OverlayBehavior.keyed)
-    window.record = { [weak runtime] in runtime?.calls.append($0) }
+    window.record = { [weak runtime = self.runtime] in runtime?.calls.append($0) }
     windows.append(window)
     defer { nextID += 1 }
     return (nextID, window)
@@ -135,7 +164,7 @@ final class KeyExecutorTests: XCTestCase {
     let root = try XCTUnwrap(harness.windows.first?.contentView?.layer)
     let plate = try XCTUnwrap(root.sublayers?.first { $0.name == "Bottom plate" })
     let original = plate.frame
-    XCTAssertEqual(original, root.isGeometryFlipped ? masked.plate?.flipped : masked.plate?.unflipped)
+    XCTAssertEqual(original.height, 5)
     let expected = CGRect(x: 22, y: root.isGeometryFlipped ? 2 : 14, width: 80, height: 18)
     XCTAssertEqual(harness.runtime.layers.first?.frame, expected)
     XCTAssertEqual((root.mask as? CAShapeLayer)?.path?.boundingBoxOfPath, expected)

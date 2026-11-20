@@ -8,16 +8,6 @@ final class KeyExecutor: BarKeyExecuting {
   typealias Schedule = @MainActor (Double, @escaping @MainActor () -> Void) -> Void
   typealias MakeWindow = @MainActor (CGRect) -> (number: Int, window: OverlayWindow)
 
-  private struct Entry {
-    let display: UInt32
-    let window: OverlayWindow
-    let root: CALayer
-    let backdrop: CALayer
-    let plate: KeyBottomPlate
-    let clip: CAShapeLayer
-    let scale: CGFloat
-  }
-
   private static let logger = Logger(subsystem: "TopNV", category: "KeyedOverlay")
   private let lamp: KeyLamp
   private let runtime: KeyBackdropRuntime
@@ -27,7 +17,6 @@ final class KeyExecutor: BarKeyExecuting {
   private let keyClosed: (Int, UInt32) -> Void
   private let keyDidFail: () -> Void
   private let stopAppearanceMonitor: () -> Void
-  private var suppressedGates: [Int: CGFloat] = [:]
   private var entries: [Int: Entry] = [:]
   private(set) var failed = false
 
@@ -42,7 +31,7 @@ final class KeyExecutor: BarKeyExecuting {
        },
        keyCommitted: @escaping (BarKeyCreation, Int, UInt32) -> Bool, keyClosed: @escaping (Int, UInt32) -> Void,
        keyDidFail: @escaping () -> Void, stopAppearanceMonitor: @escaping () -> Void) {
-    self.lamp = lamp ?? KeyLamp.shared
+    self.lamp = lamp ?? KeyLamp()
     self.runtime = runtime
     self.schedule = schedule
     self.makeWindow = makeWindow
@@ -93,49 +82,38 @@ final class KeyExecutor: BarKeyExecuting {
     let key = part.key
     for id in key.close where entries[id]?.display == display { close(id) }
     guard !failed else { return }
-    let suppress = lamp.only() && lamp.canPresent(part)
+    if let creation = key.create { try create(creation, on: display, plan: part) }
+    guard !failed else { return }
+
+    let owner = part.kind == .desktop && part.appearance == .light ? activeWindowIDs(display: display).first : nil
+    var restored: Entry?
     applyBarPresentation {
       for (number, entry) in entries where entry.display == display {
         present(key, on: entry)
-        applyGate(key.gates[number], on: entry.window, number: number, suppress: suppress)
+        if case let .value(value)? = key.gates[number] { entry.gate = value }
+        entry.window.applyAlpha(.value(number == owner ? entry.gate : 0))
       }
-      applyLamp(part, on: display)
+      guard let owner, let entry = entries[owner], entry.pair != nil else {
+        lamp.close(display)
+        return
+      }
+      do {
+        try lamp.apply(part, display: display, owner: owner, alpha: entry.window.alphaValue)
+      } catch {
+        lamp.close(display)
+        restoreOrdinaryKey(entry, reason: error)
+        restored = entry
+      }
     }
-    if let creation = key.create { try create(creation, on: display, plan: part) }
+    if let restored { try runtime.recommit(restored.backdrop) }
   }
 
-  private func applyGate(_ gate: BarAlpha?, on window: OverlayWindow, number: Int, suppress: Bool) {
-    if !suppress, suppressedGates[number] == nil {
-      if let gate { window.applyAlpha(gate) }
-      return
-    }
-    var nominal = suppressedGates[number] ?? window.alphaValue
-    if case let .value(value)? = gate { nominal = value }
-    if suppress {
-      suppressedGates[number] = nominal
-      window.applyAlpha(.value(0))
-    } else {
-      suppressedGates.removeValue(forKey: number)
-      window.applyAlpha(.value(nominal))
-    }
-  }
-
-  private func applyLamp(_ plan: BarDisplayPlan, on display: UInt32) {
-    defer {
-      for entry in entries.values where entry.display == display { lamp.presentPlate(entry.plate, on: display) }
-    }
-    guard lamp.enabled(), lamp.canPresent(plan) else {
-      lamp.close(display)
-      return
-    }
-    // Other Spaces can retain an open gate. Only the current Space can light the shared band.
-    let active = activeWindowIDs(display: display).first
-    guard let owner = active ?? entries.first(where: { $0.value.display == display })?.key else {
-      lamp.close(display)
-      return
-    }
-    let alpha = active.flatMap { suppressedGates[$0] ?? entries[$0]?.window.alphaValue } ?? 0
-    lamp.apply(plan, display: display, owner: owner, alpha: alpha)
+  /// Removing the sibling restores the original normal matrix on the glyph layer.
+  private func restoreOrdinaryKey(_ entry: Entry, reason: Error) {
+    entry.pair?.remove()
+    entry.pair = nil
+    entry.plate.apply(calibrated: false)
+    Self.logger.error("Ordinary menu key on display \(entry.display): \(reason.localizedDescription, privacy: .public)")
   }
 
   private func present(_ key: BarKeyPlan, on entry: Entry) {
@@ -153,7 +131,8 @@ final class KeyExecutor: BarKeyExecuting {
         extent = rect
       }
     }
-    if entry.backdrop.frame != extent { runtime.resize(entry.backdrop, to: extent) }
+    if entry.backdrop.frame != extent { entry.backdrop.frame = extent }
+    if let pressed = entry.pair?.pressed, pressed.frame != extent { pressed.frame = extent }
   }
 
   private func create(_ creation: BarKeyCreation, on display: UInt32, plan: BarDisplayPlan) throws {
@@ -175,7 +154,7 @@ final class KeyExecutor: BarKeyExecuting {
       return
     }
     let entry = Entry(display: display, window: window, root: root, backdrop: backdrop,
-                      plate: KeyBottomPlate(original: geometry, display: screen), clip: CAShapeLayer(), scale: scale)
+                      plate: KeyBottomPlate(original: geometry, display: screen, keySize: frame.size), scale: scale)
     entries[id] = entry
     applyBarPresentation {
       root.contentsScale = scale
@@ -185,16 +164,22 @@ final class KeyExecutor: BarKeyExecuting {
     }
     try runtime.attach(root: root, backdrop: backdrop, display: display)
     guard keyCommitted(creation, id, display) else { close(id); return }
+    do {
+      entry.pair = try runtime.installPair(on: backdrop)
+      applyBarPresentation { entry.plate.apply(calibrated: true) }
+    } catch {
+      applyBarPresentation { restoreOrdinaryKey(entry, reason: error) }
+      try runtime.recommit(backdrop)
+    }
     window.orderFrontRegardless()
     window.displayIfNeeded()
     try runtime.flush()
-    if lamp.enabled() { applyBarPresentation { applyLamp(plan, on: display) } }
     for delay in [0.25, 1.0] {
       schedule(delay) { [weak self, weak window] in
         guard let self, !self.failed, let window, let current = self.entries[id],
               current.window === window else { return }
         do {
-          try self.runtime.recommit(current.backdrop)
+          try self.recommit(current, number: id)
         } catch {
           self.disable(error)
         }
@@ -202,8 +187,29 @@ final class KeyExecutor: BarKeyExecuting {
     }
   }
 
+  private func recommit(_ entry: Entry, number: Int) throws {
+    if let pair = entry.pair {
+      do {
+        try lamp.verify(on: entry.display, owner: number)
+        try pair.verifyCommit()
+        return
+      } catch {
+        applyBarPresentation {
+          lamp.close(entry.display, owner: number)
+          restoreOrdinaryKey(entry, reason: error)
+        }
+      }
+    }
+    try runtime.recommit(entry.backdrop)
+  }
+
   private func registry(_ plan: BarPlan) -> BarEntries {
     var result: BarEntries = [:]
+    for (id, display) in plan.displays {
+      if let window = lamp.window(on: id) {
+        result[.init(display: id, part: .lamp)] = window.registryEntry(on: display.geometry, mask: display.key.mask)
+      }
+    }
     for (id, entry) in entries {
       guard let display = plan.displays[entry.display] else { continue }
       let window = entry.window
@@ -222,11 +228,11 @@ final class KeyExecutor: BarKeyExecuting {
   }
 
   private func close(_ id: Int) {
-    suppressedGates.removeValue(forKey: id)
     guard let entry = entries.removeValue(forKey: id) else { return }
     applyBarPresentation {
       entry.window.alphaValue = 0
       lamp.close(entry.display, owner: id)
+      entry.pair?.remove()
     }
     func finishClose() {
       entry.window.close()
@@ -249,5 +255,30 @@ final class KeyExecutor: BarKeyExecuting {
     stopAppearanceMonitor()
     closeAll()
     keyDidFail()
+  }
+}
+
+private extension KeyExecutor {
+  @MainActor final class Entry {
+    let display: UInt32
+    let window: OverlayWindow
+    let root: CALayer
+    let backdrop: CALayer
+    let plate: KeyBottomPlate
+    let clip: CAShapeLayer
+    let scale: CGFloat
+    var gate: CGFloat = 0
+    var pair: KeyBackdropPair?
+
+    init(display: UInt32, window: OverlayWindow, root: CALayer, backdrop: CALayer,
+         plate: KeyBottomPlate, scale: CGFloat) {
+      self.display = display
+      self.window = window
+      self.root = root
+      self.backdrop = backdrop
+      self.plate = plate
+      self.scale = scale
+      clip = CAShapeLayer()
+    }
   }
 }

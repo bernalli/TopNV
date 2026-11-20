@@ -1,10 +1,11 @@
 import Foundation
 
 public enum BarPart: Hashable, Comparable, Sendable {
-  case band, key, plate, edge, corner(ScreenCorner)
+  case band, lamp, key, plate, edge, corner(ScreenCorner)
 
   public var token: String {
     switch self {
+    case .lamp: return "lamp"
     case .band: return "band"
     case .key: return "key"
     case .plate: return "plate"
@@ -15,7 +16,8 @@ public enum BarPart: Hashable, Comparable, Sendable {
 
   private var order: Int {
     switch self {
-    case .band: return 0
+    case .band: return -1
+    case .lamp: return 0
     case .key: return 1
     case .plate: return 2
     case .edge: return 3

@@ -29,14 +29,13 @@ final class StatusMenuControllerTests: XCTestCase {
     let settings: AppSettings
   }
 
-  private func makeController(updates: UpdateMenuModel? = nil, isTestCopy: Bool = false,
-                              relativeKey: RelativeMenuBarKey? = nil) -> Fixture {
+  private func makeController(updates: UpdateMenuModel? = nil, isTestCopy: Bool = false) -> Fixture {
     let settings = AppSettings(defaults: defaults)
     let visibility = MenuVisibility(
       defaults: defaults, key: AppSettings.showMenuBarIconKey, schedule: { $0() })
     let controller = StatusMenuController(
       settings: settings, loginItem: LoginItem(), updates: updates ?? UpdateMenuModel(updater: nil),
-      visibility: visibility, isTestCopy: isTestCopy, relativeKey: relativeKey)
+      visibility: visibility, isTestCopy: isTestCopy)
     self.controller = controller
     return Fixture(controller: controller, visibility: visibility, settings: settings)
   }
@@ -65,96 +64,15 @@ final class StatusMenuControllerTests: XCTestCase {
     XCTAssertEqual(previews, 2)
   }
 
-  func testOnlyTheTestMenuOffersTheLampNextToTheRelativeKey() throws {
-    let production = makeController().controller
-    var changes = 0
-    production.onLampChanged = { changes += 1 }
-    XCTAssertNil(production.menu.item(withTitle: "Lamp under key (test)"))
-    production.perform(.lampUnderKey)
-    XCTAssertEqual(changes, 0)
-    NSStatusBar.system.removeStatusItem(production.statusItem)
-
-    let key = RelativeMenuBarKey(isTestCopy: true)
-    let testCopy = makeController(isTestCopy: true, relativeKey: key).controller
-    testCopy.onLampChanged = { changes += 1 }
-    let titles = testCopy.menu.items.map(\.title)
-    let index = try XCTUnwrap(titles.firstIndex(of: "Relative key (test)"))
-    XCTAssertEqual(titles.dropFirst(index + 1).first, "Lamp under key (test)")
-    let lamp = try XCTUnwrap(testCopy.menu.item(withTitle: "Lamp under key (test)"))
-    XCTAssertEqual(lamp.state, .on)
-    testCopy.perform(.lampUnderKey)
-    XCTAssertFalse(key.lampEnabled)
-    XCTAssertFalse(key.enabled)
-    XCTAssertEqual(lamp.state, .off)
-    testCopy.perform(.lampUnderKey)
-    XCTAssertTrue(key.lampEnabled)
-    XCTAssertEqual(lamp.state, .on)
-    XCTAssertEqual(changes, 2)
-  }
-
-  func testLampMenuModesAreExclusiveAndTestCopyOnly() throws {
-    let production = makeController().controller
-    XCTAssertNil(production.menu.item(withTitle: "Lamp only (test)"))
-    production.perform(.lampOnly)
-    NSStatusBar.system.removeStatusItem(production.statusItem)
-
-    let menu = makeController(isTestCopy: true, relativeKey: RelativeMenuBarKey(isTestCopy: true)).controller
-    let only = try XCTUnwrap(menu.menu.item(withTitle: "Lamp only (test)"))
-    let under = try XCTUnwrap(menu.menu.item(withTitle: "Lamp under key (test)"))
-    XCTAssertEqual([only.state, under.state], [.off, .on])
-    for (command, states): (MenuCommand, [NSControl.StateValue]) in [
-      (.lampOnly, [.on, .off]), (.lampUnderKey, [.off, .on]), (.lampOnly, [.on, .off]), (.lampOnly, [.off, .off])
-    ] {
-      menu.perform(command)
-      XCTAssertEqual([only.state, under.state], states)
-    }
-  }
-
-  func testLampKeySubmenuSelectsExactlyOnePresetOnlyInTestCopies() throws {
-    let key = RelativeMenuBarKey(isTestCopy: true)
-    let production = makeController(relativeKey: key).controller
-    XCTAssertNil(production.menu.item(withTitle: "Lamp key (test)"))
-    production.perform(.lampKey5)
-    XCTAssertEqual(key.lampKey.command, .lampKey6)
-    NSStatusBar.system.removeStatusItem(production.statusItem)
-
-    let menu = makeController(isTestCopy: true, relativeKey: key).controller.menu
-    let submenu = try XCTUnwrap(menu.item(withTitle: "Lamp key (test)")?.submenu)
-    XCTAssertEqual(submenu.items.map(\.title), [
-      "1  black from 0.94, white to 0.15", "2  black from 0.94, white to 0.30",
-      "3  black from 0.94, white to 0.45", "4  black from 0.94, white to 0.60", "5  black from 0.95, white to 0.45",
-      "6  two-layer colorimeter"
-    ])
-    XCTAssertEqual(submenu.items.map(\.state), [.off, .off, .off, .off, .off, .on])
-    for index in submenu.items.indices {
-      submenu.performActionForItem(at: index)
-      XCTAssertEqual(submenu.items.map(\.state), submenu.items.indices.map { $0 == index ? .on : .off })
-    }
-  }
-
-  func testLampPlateMenuSelectsOneMarginAndPresentsChangesOnlyUnderTheKey() throws {
-    let key = RelativeMenuBarKey(isTestCopy: true)
-    let production = makeController(relativeKey: key).controller
-    XCTAssertNil(production.menu.item(withTitle: "Lamp plate (test)"))
-    production.perform(.lampPlate1)
-    XCTAssertEqual(key.lampPlate.command, .lampPlate6)
-    NSStatusBar.system.removeStatusItem(production.statusItem)
-
-    let menu = makeController(isTestCopy: true, relativeKey: key).controller
-    var changes = 0
-    menu.onLampChanged = { changes += 1 }
-    let submenu = try XCTUnwrap(menu.menu.item(withTitle: "Lamp plate (test)")?.submenu)
-    XCTAssertEqual(submenu.items.map(\.title), ["1  7.5 pt", "2  5 pt", "3  3 pt", "4  1 pt", "5  No plate", "6  4 pt"])
-    XCTAssertEqual(submenu.items.map(\.state), [.off, .off, .off, .off, .off, .on])
-    menu.perform(.lampUnderKey)
-    submenu.performActionForItem(at: 3)
-    XCTAssertEqual(key.lampPlate.command, .lampPlate4)
-    XCTAssertEqual(changes, 1)
-    menu.perform(.lampUnderKey)
-    for index in submenu.items.indices {
-      submenu.performActionForItem(at: index)
-      XCTAssertEqual(submenu.items.map(\.state), submenu.items.indices.map { $0 == index ? .on : .off })
-      XCTAssertEqual(changes, index + 3)
+  func testBothMenusOmitTheExperimentalKeyControls() {
+    for isTestCopy in [false, true] {
+      let controller = makeController(isTestCopy: isTestCopy).controller
+      let titles = controller.menu.items.map(\.title)
+      for title in ["Relative key", "Lamp under key", "Lamp only", "Lamp key", "Lamp plate"] {
+        XCTAssertFalse(titles.contains("\(title) (test)"))
+      }
+      NSStatusBar.system.removeStatusItem(controller.statusItem)
+      self.controller = nil
     }
   }
 

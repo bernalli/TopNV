@@ -13,11 +13,6 @@ public enum MenuCommand: String, CaseIterable, Sendable {
   case about
   case reportIssue
   case quit
-  case relativeKey
-  case lampOnly
-  case lampUnderKey
-  case lampKey1, lampKey2, lampKey3, lampKey4, lampKey5, lampKey6
-  case lampPlate1, lampPlate2, lampPlate3, lampPlate4, lampPlate5, lampPlate6
 }
 
 /// One native menu item. `id` is stable while the state changes, so an open menu keeps the same

@@ -119,7 +119,7 @@ final class BarCheckTests: XCTestCase {
     let part = "display=2 scene=desktop part=edge px=0,-1,20,4 alpha=0.333 level=27 window=9 mask=empty"
     let listing = part + " listed=0,0,20,4/1"
     let mismatch = listing + " MISMATCH"
-    let valid = [message, part, listing, mismatch].map { record($0) }
+    let valid = [message, part, listing, mismatch, part.replacingOccurrences(of: "part=edge", with: "part=lamp")].map { record($0) }
     let prefixes = valid.flatMap { line in
       line.indices.map { String(line[..<$0]) }.filter { !valid.contains($0) }
     }

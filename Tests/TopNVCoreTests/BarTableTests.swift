@@ -30,7 +30,7 @@ final class BarTableTests: XCTestCase {
     func expected(at index: Int, inputs: Inputs) -> BarCell {
       switch part {
       case .corner: if !inputs.corners { return .closed }
-      case .key, .plate: if !inputs.band || inputs.failed { return .closed }
+      case .key, .plate, .lamp: if !inputs.band || inputs.failed { return .closed }
       case .edge:
         if !inputs.band { return .closed }
         if !inputs.menu { return .hidden }
@@ -44,7 +44,9 @@ final class BarTableTests: XCTestCase {
     let visible: [BarCell] = [.visible, .hidden, .hidden, .visible, .visible, .visible, .hold]
     let gated: [BarCell] = [.gate, .gate, .gate, .gate, .gate, .gate, .hold]
     let measured: [BarCell] = [.visible, .hidden, .hidden, .hidden, .hidden, .hidden, .hidden]
-    let rows = [Row(part: .band, normal: visible, entering: .path), Row(part: .key, normal: gated, entering: .path),
+    let lamp: [BarCell] = [.gate, .hidden, .hidden, .hidden, .hidden, .hidden, .hidden]
+    let rows = [Row(part: .lamp, normal: lamp, entering: .path), Row(part: .band, normal: visible, entering: .path),
+                Row(part: .key, normal: gated, entering: .path),
                 Row(part: .plate, normal: gated, entering: .path), Row(part: .edge, normal: measured, entering: .path)]
       + ScreenCorner.allCases.map { Row(part: .corner($0), normal: visible, entering: .fade) }
     for row in rows {

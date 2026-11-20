@@ -19,9 +19,7 @@ import TopNVCore
   private var subscriptions: Set<AnyCancellable> = []
   private var visibilityObservation: NSKeyValueObservation?
   private var refreshScheduled = false
-  var onLampChanged: (() -> Void)?
   var onEntrancePreview: (() -> Void)?
-  private let relativeKey: RelativeMenuBarKey
   private let isTestCopy: Bool
 
   private static let icon: NSImage? = {
@@ -35,9 +33,8 @@ import TopNVCore
 
   init(
     settings: AppSettings, loginItem: LoginItem, updates: UpdateMenuModel,
-    visibility: MenuVisibility, isTestCopy: Bool = false, relativeKey: RelativeMenuBarKey? = nil
+    visibility: MenuVisibility, isTestCopy: Bool = false
   ) {
-    self.relativeKey = relativeKey ?? .shared
     self.isTestCopy = isTestCopy
     self.settings = settings
     self.loginItem = loginItem
@@ -88,14 +85,7 @@ import TopNVCore
 
   func refresh() {
     refreshScheduled = false
-    var rows = MenuLayout.rows(for: state)
-    if isTestCopy, let index = rows.firstIndex(where: { $0.id == "separator.app" }) {
-      rows.insert(.lampOnly(enabled: relativeKey.lampMode == .only), at: index)
-      rows.insert(.lampPlate(selected: relativeKey.lampPlate), at: index)
-      rows.insert(.lampKey(selected: relativeKey.lampKey), at: index)
-      rows.insert(.lampUnderKey(enabled: relativeKey.lampEnabled), at: index)
-      rows.insert(.relativeKey(available: relativeKey.available, enabled: relativeKey.enabled), at: index)
-    }
+    let rows = MenuLayout.rows(for: state)
     renderer?.apply(rows, to: menu)
     if statusItem.isVisible != visibility.isVisible { statusItem.isVisible = visibility.isVisible }
   }
@@ -127,27 +117,6 @@ import TopNVCore
     case .previewCalm:
       guard isTestCopy, settings.hideNotch else { return }
       onEntrancePreview?()
-    case .lampUnderKey, .lampOnly:
-      guard isTestCopy else { return }
-      let present = onLampChanged ?? {}
-      if command == .lampOnly {
-        relativeKey.toggleLampOnly(present: present)
-      } else {
-        relativeKey.toggleLamp(present: present)
-      }
-      refresh()
-    case .lampKey1, .lampKey2, .lampKey3, .lampKey4, .lampKey5, .lampKey6:
-      guard isTestCopy, let preset = LampKeyPreset.choices.first(where: { $0.command == command }) else { return }
-      relativeKey.selectLampKey(preset)
-      refresh()
-    case .lampPlate1, .lampPlate2, .lampPlate3, .lampPlate4, .lampPlate5, .lampPlate6:
-      guard isTestCopy, let preset = LampPlatePreset.choices.first(where: { $0.command == command }) else { return }
-      relativeKey.selectLampPlate(preset, present: onLampChanged ?? {})
-      refresh()
-    case .relativeKey:
-      guard isTestCopy else { return }
-      relativeKey.toggle()
-      refresh()
     }
   }
 

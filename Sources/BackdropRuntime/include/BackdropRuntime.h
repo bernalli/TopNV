@@ -7,8 +7,7 @@ CALayer * _Nullable KOCreateBackdrop(const float *values, size_t count, CGRect b
                                      CGFloat contentsScale, NSString * _Nullable * _Nullable reason);
 BOOL KOAttachBackdrop(CALayer *root, CALayer *backdrop, NSString * _Nullable * _Nullable reason);
 BOOL KOFlushBackdrop(NSString * _Nullable * _Nullable reason);
-BOOL KORecommitBackdrop(CALayer *backdrop, NSString * _Nullable * _Nullable reason);
+BOOL KORecommitBackdrop(CALayer *backdrop, const float expectedMatrix[_Nonnull 20], NSString * _Nullable * _Nullable reason);
 BOOL KODetachBackdrop(CALayer *backdrop, NSString * _Nullable * _Nullable reason);
 NS_ASSUME_NONNULL_END
-#import "SampledBackdrop.h"
 #import "TwoLayerBackdrop.h"
