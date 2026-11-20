@@ -5,7 +5,7 @@ import TopNVCore
 
 @MainActor
 protocol KeyBackdropRuntime {
-  func create(matrix: [Float], bounds: CGRect, scale: CGFloat) throws -> CALayer
+  func create(matrix: [Float], bounds: CGRect, scale: CGFloat, display: UInt32) throws -> CALayer
   func attach(root: CALayer, backdrop: CALayer) throws
   func flush() throws
   func recommit(_ backdrop: CALayer) throws
@@ -20,14 +20,14 @@ struct BackdropFailure: LocalizedError {
 struct PrivateBackdropRuntime {}
 
 extension PrivateBackdropRuntime: KeyBackdropRuntime {
-  func create(matrix: [Float], bounds: CGRect, scale: CGFloat) throws -> CALayer {
+  func create(matrix: [Float], bounds: CGRect, scale: CGFloat, display: UInt32) throws -> CALayer {
     var reason: NSString?
     let layer = matrix.withUnsafeBufferPointer { values -> CALayer? in
       guard let base = values.baseAddress else { return nil }
       return KOCreateBackdrop(base, values.count, bounds, scale, &reason)
     }
     guard let layer else { throw BackdropFailure(reason: reason as String? ?? "layer unavailable") }
-    RelativeMenuBarKey.shared.observe(layer)
+    RelativeMenuBarKey.shared.observe(layer, display: display)
     return layer
   }
 

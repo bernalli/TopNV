@@ -90,6 +90,7 @@ import TopNVCore
     refreshScheduled = false
     var rows = MenuLayout.rows(for: state)
     if isTestCopy, let index = rows.firstIndex(where: { $0.id == "separator.app" }) {
+      rows.insert(.lampOnly(enabled: relativeKey.lampMode == .only), at: index)
       rows.insert(.lampUnderKey(enabled: relativeKey.lampEnabled), at: index)
       rows.insert(.relativeKey(available: relativeKey.available, enabled: relativeKey.enabled), at: index)
     }
@@ -124,10 +125,14 @@ import TopNVCore
     case .previewCalm:
       guard isTestCopy, settings.hideNotch else { return }
       onEntrancePreview?()
-    case .lampUnderKey:
+    case .lampUnderKey, .lampOnly:
       guard isTestCopy else { return }
-      relativeKey.toggleLamp()
-      onLampChanged?()
+      let present = onLampChanged ?? {}
+      if command == .lampOnly {
+        relativeKey.toggleLampOnly(present: present)
+      } else {
+        relativeKey.toggleLamp(present: present)
+      }
       refresh()
     case .relativeKey:
       guard isTestCopy else { return }

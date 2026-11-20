@@ -92,6 +92,24 @@ final class StatusMenuControllerTests: XCTestCase {
     XCTAssertEqual(changes, 2)
   }
 
+  func testLampMenuModesAreExclusiveAndTestCopyOnly() throws {
+    let production = makeController().controller
+    XCTAssertNil(production.menu.item(withTitle: "Lamp only (test)"))
+    production.perform(.lampOnly)
+    NSStatusBar.system.removeStatusItem(production.statusItem)
+
+    let menu = makeController(isTestCopy: true, relativeKey: RelativeMenuBarKey(isTestCopy: true)).controller
+    let only = try XCTUnwrap(menu.menu.item(withTitle: "Lamp only (test)"))
+    let under = try XCTUnwrap(menu.menu.item(withTitle: "Lamp under key (test)"))
+    XCTAssertEqual([only.state, under.state], [.off, .off])
+    for (command, states): (MenuCommand, [NSControl.StateValue]) in [
+      (.lampOnly, [.on, .off]), (.lampUnderKey, [.off, .on]), (.lampOnly, [.on, .off]), (.lampOnly, [.off, .off])
+    ] {
+      menu.perform(command)
+      XCTAssertEqual([only.state, under.state], states)
+    }
+  }
+
   func testTheStatusItemCanBeRemovedByTheUserAndShowsTheMenu() {
     let controller = makeController().controller
     XCTAssertEqual(controller.statusItem.behavior, .removalAllowed)

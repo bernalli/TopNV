@@ -15,7 +15,7 @@ import XCTest
     XCTAssertFalse(key.enabled)
     let layer = try makeLayer()
     let original = try XCTUnwrap(layer.filters?.first as? NSObject)
-    key.observe(layer)
+    key.observe(layer, display: 1)
     (layer.delegate as? KOSampledBackdrop)?.backdropLayer(layer, didChangeLuma: 0.12)
     await drainSamples()
     XCTAssertTrue(layer.filters?.first as? NSObject === original)
@@ -23,10 +23,10 @@ import XCTest
 
   func testProductionMakesNoSamplingCallKeepsTheOrdinaryFilterAndLogsNothing() throws {
     let lines = Lines()
-    let key = RelativeMenuBarKey(isTestCopy: false) { lines.all.append($0) }
+    let key = RelativeMenuBarKey(isTestCopy: false, log: { lines.all.append($0) })
     let layer = try makeLayer()
     let ordinary = try XCTUnwrap(layer.filters?.first as? NSObject)
-    key.observe(layer)
+    key.observe(layer, display: 1)
     key.toggle()
     key.toggleLamp()
     XCTAssertFalse(key.lampEnabled)
@@ -41,11 +41,11 @@ import XCTest
 
   func testATestCopyLogsAvailabilityEachVisibleSampleChangeAndTheSwitch() async throws {
     let lines = Lines()
-    let key = RelativeMenuBarKey(isTestCopy: true) { lines.all.append($0) }
+    let key = RelativeMenuBarKey(isTestCopy: true, log: { lines.all.append($0) })
     XCTAssertEqual(lines.all, ["Relative key available=\(key.available)"])
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
     let layer = try makeLayer()
-    key.observe(layer)
+    key.observe(layer, display: 1)
     let reader = try XCTUnwrap(layer.delegate as? KOSampledBackdrop)
     // 0.121 is the same visible step as 0.12; a protected sample is not a number.
     for luma in [0.12, 0.121, 0.5, 0.12, .nan] {
@@ -65,9 +65,9 @@ import XCTest
 
   func testARefusedBackdropLogsWhyTheRelativeKeyIsOff() throws {
     let lines = Lines()
-    let key = RelativeMenuBarKey(isTestCopy: true) { lines.all.append($0) }
+    let key = RelativeMenuBarKey(isTestCopy: true, log: { lines.all.append($0) })
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
-    key.observe(CALayer())
+    key.observe(CALayer(), display: 1)
     XCTAssertFalse(key.available)
     XCTAssertEqual(lines.all.last, "Relative key off for this session: a backdrop refused the sampling setup")
   }
@@ -80,8 +80,8 @@ import XCTest
     let right = try makeLayer()
     let ordinary = try XCTUnwrap(left.filters?.first as? NSObject)
     let other = try XCTUnwrap(right.filters?.first as? NSObject)
-    key.observe(left)
-    key.observe(right)
+    key.observe(left, display: 1)
+    key.observe(right, display: 2)
     let reader = try XCTUnwrap(left.delegate as? KOSampledBackdrop)
     XCTAssertTrue(left.filters?.first as? NSObject === ordinary)
 
@@ -105,7 +105,7 @@ import XCTest
     XCTAssertFalse(key.lampEnabled)
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
     let layer = try makeLayer()
-    key.observe(layer)
+    key.observe(layer, display: 1)
     let reader = try XCTUnwrap(layer.delegate as? KOSampledBackdrop)
     key.toggleLamp()
     XCTAssertFalse(key.enabled)
@@ -126,6 +126,110 @@ import XCTest
     reader.backdropLayer(layer, didSampleProtectedLuma: true)
     await drainSamples()
     XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
+  }
+
+  func testLampRejectsCachedAndQueuedSamplesUntilAFreshCallback() async throws {
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: true, log: { lines.all.append($0) })
+    guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    let layer = try makeLayer()
+    key.observe(layer, display: 2)
+    let reader = try XCTUnwrap(layer.delegate as? KOSampledBackdrop)
+    key.toggle()
+    reader.backdropLayer(layer, didChangeLuma: 0.25)
+    await drainSamples()
+    reader.backdropLayer(layer, didChangeLuma: 0.5)
+    key.toggleLamp()
+    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
+    await drainSamples()
+    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
+    reader.backdropLayer(layer, didChangeLuma: 0.75)
+    await drainSamples()
+    XCTAssertEqual(matrix(layer), LuminanceKey.forBackdrop(backgroundLuma: 0.75, relativeEnabled: true).matrix)
+    XCTAssertTrue(lines.all.contains("Key display=2 normal->relative luma=0.750"))
+  }
+
+  func testLampRelightingInvalidatesOnlyItsOwnDisplay() throws {
+    var ignition: [UInt32: TimeInterval] = [1: 5, 2: 5]
+    let clock = ProbeClock(now: { 10 })
+    let key = RelativeMenuBarKey(isTestCopy: true, clock: clock, litSince: { ignition[$0] })
+    guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    let left = try makeLayer()
+    let right = try makeLayer()
+    key.observe(left, display: 1)
+    key.observe(right, display: 2)
+    key.toggleLamp()
+    key.sample(0.75, for: left, at: 11)
+    key.sample(0.75, for: right, at: 11)
+    let relative = matrix(right)
+    XCTAssertNotEqual(relative, LuminanceKey.normal.matrix)
+    ignition[1] = nil
+    key.lampChanged(on: 1)
+    XCTAssertEqual(matrix(left), LuminanceKey.normal.matrix)
+    XCTAssertEqual(matrix(right), relative)
+    ignition[1] = 20
+    key.sample(0.75, for: left, at: 19)
+    XCTAssertEqual(matrix(left), LuminanceKey.normal.matrix)
+    key.sample(0.75, for: left, at: 21)
+    XCTAssertEqual(matrix(left), relative)
+  }
+
+  func testProbeReportsEachIntervalIncludingEqualSamplesAndTimeouts() throws {
+    var now = 10.0
+    var timers: [Timer] = []
+    let clock = ProbeClock(now: { now }, schedule: { interval, action in
+      let timer = Timer(timeInterval: interval, repeats: true) { _ in MainActor.assumeIsolated { action() } }
+      timers.append(timer)
+      return timer
+    })
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: true, clock: clock, log: { lines.all.append($0) })
+    guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    let layer = try makeLayer()
+    key.observe(layer, display: 9)
+    XCTAssertTrue(timers.isEmpty)
+    key.toggleLampOnly()
+    let timer = try XCTUnwrap(timers.first)
+    XCTAssertEqual(timer.timeInterval, 1)
+    for _ in 0..<2 {
+      key.sample(0.5, for: layer, at: now + 0.25)
+      now += 1
+      timer.fire()
+    }
+    now += 1
+    timer.fire()
+    let prefix = "Probe display=9 luma="
+    let suffix = " key=normal white=0.043 black=0.377"
+    let sample = prefix + "0.500 forced=true lastCallbackAge=0.750" + suffix
+    XCTAssertEqual(lines.all.filter { $0.hasPrefix(prefix) }, [
+      sample, sample, prefix + "none forced=true lastCallbackAge=1.750" + suffix
+    ])
+    key.toggleLamp()
+    XCTAssertEqual(timers.count, 1)
+    key.toggleLamp()
+    XCTAssertFalse(timer.isValid)
+    key.toggle()
+    XCTAssertEqual(timers.count, 2)
+    key.toggle()
+    XCTAssertFalse(try XCTUnwrap(timers.last).isValid)
+    let production = RelativeMenuBarKey(isTestCopy: false, clock: clock)
+    production.observe(layer, display: 9)
+    production.toggleLampOnly()
+    production.toggleLamp()
+    production.toggle()
+    XCTAssertEqual(timers.count, 2)
+  }
+
+  func testProbeTimeoutExcludesLateCallbacksAndFailedRequests() {
+    var probe = BackdropProbe(display: 3)
+    let prefix = "Probe display=3 luma=none "
+    let suffix = "lastCallbackAge=0.125 key=normal white=0.043 black=0.377"
+    probe.begin(at: 2, forced: true)
+    probe.receive(0.875, at: 3.125)
+    XCTAssertEqual(probe.line(at: 3.25, key: .normal), prefix + "forced=true " + suffix)
+    probe.begin(at: 4, forced: false)
+    probe.receive(0.875, at: 4.875)
+    XCTAssertEqual(probe.line(at: 5, key: .normal), prefix + "forced=false " + suffix)
   }
 
   private func makeLayer() throws -> CALayer {

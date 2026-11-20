@@ -18,7 +18,7 @@ final class RecordingRuntime: KeyBackdropRuntime {
     if operation == fail { throw operation }
   }
 
-  func create(matrix: [Float], bounds: CGRect, scale: CGFloat) throws -> CALayer {
+  func create(matrix: [Float], bounds: CGRect, scale: CGFloat, display: UInt32) throws -> CALayer {
     try record(.create)
     XCTAssertEqual(matrix, LuminanceKey.normal.matrix)
     XCTAssertEqual(scale, 2)
@@ -71,9 +71,11 @@ final class KeyHarness {
   var closed: [Int] = []
   var failureCount = 0
   var monitorStops = 0
+  var lampOnly = false
   var lampEnabled = false
   var lampLines: [String] = []
-  lazy var lamp = KeyLamp(enabled: { [unowned self] in lampEnabled }, log: { [unowned self] in
+  lazy var lamp = KeyLamp(enabled: { [unowned self] in lampEnabled },
+                          only: { [unowned self] in lampOnly }, log: { [unowned self] in
     XCTAssertTrue(CATransaction.disableActions())
     lampLines.append($0)
   })

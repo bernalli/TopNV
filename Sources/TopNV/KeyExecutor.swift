@@ -27,6 +27,7 @@ final class KeyExecutor: BarKeyExecuting {
   private let keyClosed: (Int, UInt32) -> Void
   private let keyDidFail: () -> Void
   private let stopAppearanceMonitor: () -> Void
+  private var suppressedGates: [Int: CGFloat] = [:]
   private var entries: [Int: Entry] = [:]
   private(set) var failed = false
 
@@ -41,7 +42,7 @@ final class KeyExecutor: BarKeyExecuting {
        },
        keyCommitted: @escaping (BarKeyCreation, Int, UInt32) -> Bool, keyClosed: @escaping (Int, UInt32) -> Void,
        keyDidFail: @escaping () -> Void, stopAppearanceMonitor: @escaping () -> Void) {
-    self.lamp = lamp ?? KeyLamp(enabled: { RelativeMenuBarKey.shared.lampEnabled })
+    self.lamp = lamp ?? KeyLamp.shared
     self.runtime = runtime
     self.schedule = schedule
     self.makeWindow = makeWindow
@@ -92,18 +93,35 @@ final class KeyExecutor: BarKeyExecuting {
     let key = part.key
     for id in key.close where entries[id]?.display == display { close(id) }
     guard !failed else { return }
+    let suppress = lamp.only() && lamp.canPresent(part)
     applyBarPresentation {
       for (number, entry) in entries where entry.display == display {
         present(key, on: entry)
-        if let gate = key.gates[number] { entry.window.applyAlpha(gate) }
+        applyGate(key.gates[number], on: entry.window, number: number, suppress: suppress)
       }
       applyLamp(part, on: display)
     }
     if let creation = key.create { try create(creation, on: display, plan: part) }
   }
 
+  private func applyGate(_ gate: BarAlpha?, on window: OverlayWindow, number: Int, suppress: Bool) {
+    if !suppress, suppressedGates[number] == nil {
+      if let gate { window.applyAlpha(gate) }
+      return
+    }
+    var nominal = suppressedGates[number] ?? window.alphaValue
+    if case let .value(value)? = gate { nominal = value }
+    if suppress {
+      suppressedGates[number] = nominal
+      window.applyAlpha(.value(0))
+    } else {
+      suppressedGates.removeValue(forKey: number)
+      window.applyAlpha(.value(nominal))
+    }
+  }
+
   private func applyLamp(_ plan: BarDisplayPlan, on display: UInt32) {
-    guard lamp.enabled(), plan.kind == .desktop, plan.appearance == .light else {
+    guard lamp.enabled(), lamp.canPresent(plan) else {
       lamp.close(display)
       return
     }
@@ -113,7 +131,8 @@ final class KeyExecutor: BarKeyExecuting {
       lamp.close(display)
       return
     }
-    lamp.apply(plan, display: display, owner: owner, alpha: active.flatMap { entries[$0]?.window.alphaValue } ?? 0)
+    let alpha = active.flatMap { suppressedGates[$0] ?? entries[$0]?.window.alphaValue } ?? 0
+    lamp.apply(plan, display: display, owner: owner, alpha: alpha)
   }
 
   private func present(_ key: BarKeyPlan, on entry: Entry) {
@@ -138,7 +157,8 @@ final class KeyExecutor: BarKeyExecuting {
     let key = plan.key
     guard let frame = key.frame, let geometry = key.plate, let scale = plan.geometry?.scale else { return }
     let bounds = CGRect(origin: .zero, size: frame.size)
-    let backdrop = try runtime.create(matrix: LuminanceKey.normal.matrix, bounds: bounds, scale: scale)
+    let backdrop = try runtime.create(matrix: LuminanceKey.normal.matrix, bounds: bounds,
+                                      scale: scale, display: display)
     let (id, window) = makeWindow(frame)
     let view = NSView(frame: bounds)
     applyBarPresentation {
@@ -204,6 +224,7 @@ final class KeyExecutor: BarKeyExecuting {
   }
 
   private func close(_ id: Int) {
+    suppressedGates.removeValue(forKey: id)
     guard let entry = entries.removeValue(forKey: id) else { return }
     applyBarPresentation {
       entry.window.alphaValue = 0

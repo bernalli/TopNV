@@ -15,19 +15,34 @@ import XCTest
   func testALayerWithoutTheLumaPropertiesIsNotObserved() throws {
     let plain = CALayer()
     plain.filters = try makeBackdrop().filters
-    XCTAssertNil(KOSampledBackdrop.observe(plain) { _, _ in })
+    XCTAssertNil(KOSampledBackdrop.observe(plain) { _, _, _ in })
     XCTAssertNil(plain.delegate)
     XCTAssertNil(plain.value(forKey: "tracksLuma"))
     XCTAssertEqual(plain.filters?.count, 1)
   }
 
+  func testForceSampleKeepsTheDelegateUnfilteredInputAndOrdinaryFilter() throws {
+    let layer = try makeBackdrop()
+    let ordinary = try XCTUnwrap(layer.filters?.first as? NSObject)
+    guard let reader = KOSampledBackdrop.observe(layer, sample: { _, _, _ in }) else {
+      throw XCTSkip("Sampled backdrops unavailable on this system")
+    }
+    XCTAssertTrue(reader.forceSample())
+    XCTAssertTrue(layer.delegate === reader)
+    XCTAssertTrue(layer.filters?.first as? NSObject === ordinary)
+    XCTAssertEqual(layer.value(forKey: "allowsFilteredLuma") as? Bool, false)
+    XCTAssertEqual(layer.value(forKey: "tracksLuma") as? Bool, true)
+    XCTAssertTrue(reader.stopTracking())
+    XCTAssertFalse(reader.forceSample())
+  }
+
   func testASecondObserverAndAMalformedMatrixLeaveTheFirstObserverAndTheFilterUntouched() throws {
     let layer = try makeBackdrop()
     let ordinary = try XCTUnwrap(layer.filters?.first as? NSObject)
-    guard let source = KOSampledBackdrop.observe(layer, sample: { _, _ in }) else {
+    guard let source = KOSampledBackdrop.observe(layer, sample: { _, _, _ in }) else {
       throw XCTSkip("Sampled backdrops unavailable on this system")
     }
-    XCTAssertNil(KOSampledBackdrop.observe(layer) { _, _ in })
+    XCTAssertNil(KOSampledBackdrop.observe(layer) { _, _, _ in })
     XCTAssertTrue(layer.delegate === source)
     for count in [0, 19, 21] {
       let values = [Float](repeating: 0.5, count: max(count, 1))

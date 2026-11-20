@@ -9,7 +9,7 @@
 @implementation KOSampledBackdrop {
     __weak CALayer *_layer;
     NSArray *_ordinaryFilters;
-    void (^_sample)(CALayer *, double);
+    void (^_sample)(CALayer *, double, CFTimeInterval);
 }
 
 static BOOL DelegateMatches(Class cls, SEL selector) {
@@ -27,7 +27,7 @@ static BOOL DelegateMatches(Class cls, SEL selector) {
     return YES;
 }
 
-+ (instancetype)observe:(CALayer *)layer sample:(void (^)(CALayer *, double))sample {
++ (instancetype)observe:(CALayer *)layer sample:(void (^)(CALayer *, double, CFTimeInterval))sample {
     @try {
         Class<KOFilterCatalog> catalog = NSClassFromString(@"CAFilter");
         NSMethodSignature *signature = [(id)catalog methodSignatureForSelector:@selector(filterTypes)];
@@ -61,13 +61,39 @@ static BOOL DelegateMatches(Class cls, SEL selector) {
 }
 
 - (void)backdropLayer:(CALayer *)layer didChangeLuma:(double)luma {
+    // Date receipt before the hop: a queued callback may predate a lamp switch or a probe.
+    CFTimeInterval received = CACurrentMediaTime();
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (layer.delegate == self) self->_sample(layer, luma);
+        if (layer.delegate == self) self->_sample(layer, luma, received);
     });
 }
 
 - (void)backdropLayer:(CALayer *)layer didSampleProtectedLuma:(BOOL)protectedLuma {
     if (protectedLuma) [self backdropLayer:layer didChangeLuma:NAN];
+}
+
+- (BOOL)forceSample {
+    CALayer *layer = _layer;
+    if (!layer || ![NSThread isMainThread] || layer.delegate != self) return NO;
+    @try {
+        // Separate commits prevent CA from coalescing NO -> YES into an unchanged property.
+        // Keep the original filter, delegate and unfiltered sampling input in place.
+        BOOL accepted = YES;
+        for (NSNumber *setting in @[@NO, @YES]) {
+            [CATransaction begin];
+            @try {
+                [CATransaction setDisableActions:YES];
+                [layer setValue:setting forKey:@"tracksLuma"];
+            } @finally {
+                [CATransaction commit];
+            }
+            [CATransaction flush];
+            if ([[layer valueForKey:@"tracksLuma"] boolValue] != setting.boolValue) accepted = NO;
+        }
+        return accepted;
+    } @catch (NSException *exception) {
+        return NO;
+    }
 }
 
 - (BOOL)applyMatrix:(const float *)values count:(size_t)count {

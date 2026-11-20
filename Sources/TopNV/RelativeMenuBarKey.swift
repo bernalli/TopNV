@@ -8,7 +8,10 @@ import os
 /// Test copies only: with one mean per bar a glyph lighter than 0.93 of that mean turns black,
 /// and a sample taken before a window was hidden is not proven to be replaced when it returns.
 @MainActor final class RelativeMenuBarKey {
-  static let shared = RelativeMenuBarKey(isTestCopy: TestCopy.matches(Bundle.main.bundleIdentifier))
+  static let shared: RelativeMenuBarKey = .init(isTestCopy: TestCopy.matches(Bundle.main.bundleIdentifier),
+                                                litSince: { KeyLamp.shared.litSince(on: $0) },
+                                                lampState: { KeyLamp.shared.recordState(displays: $0) })
+  enum LampMode { case off, underKey, only }
   private static let logger = Logger(subsystem: "TopNV", category: "RelativeKey")
   /// Samples closer than this are one line of the log.
   private static let loggedStepsPerUnit: Float = 50
@@ -17,36 +20,54 @@ import os
     let source: KOSampledBackdrop
     var background: Float?
     var logged: Float?
-    var applied = LuminanceKey.normal.matrix
-    init(_ source: KOSampledBackdrop) { self.source = source }
+    var applied = LuminanceKey.normal
+    var probe: BackdropProbe
+
+    init(_ source: KOSampledBackdrop, display: UInt32) {
+      self.source = source
+      probe = BackdropProbe(display: display)
+    }
   }
 
   private let entries = NSMapTable<CALayer, Entry>.weakToStrongObjects()
   private let isTestCopy: Bool
-  private(set) var lampEnabled = false
+  private(set) var lampMode = LampMode.off
+  var lampEnabled: Bool { lampMode == .underKey }
+  private var lampStarted: TimeInterval?
+  private let clock: ProbeClock
+  private let litSince: ((UInt32) -> TimeInterval?)?
+  private let lampState: (Set<UInt32>) -> Void
+  private var timer: Timer?
   private var usesRelativeKey: Bool { enabled || lampEnabled }
   private let sink: ((String) -> Void)?
   private(set) var available: Bool
   private(set) var enabled = false
 
   /// - Parameter sink: receives the lines of the log in place of the system log.
-  init(isTestCopy: Bool, log sink: ((String) -> Void)? = nil) {
+  init(isTestCopy: Bool, clock: ProbeClock = ProbeClock(), litSince: ((UInt32) -> TimeInterval?)? = nil,
+       lampState: @escaping (Set<UInt32>) -> Void = { _ in },
+       log sink: ((String) -> Void)? = nil) {
     // Production makes none of the sampling calls, keeps the ordinary key and logs nothing.
+    self.litSince = litSince
+    self.clock = clock
+    self.lampState = lampState
     self.isTestCopy = isTestCopy
     available = isTestCopy && Self.probe()
     self.sink = sink
     if isTestCopy { log("Relative key available=\(available)") }
   }
 
-  func observe(_ layer: CALayer) {
+  deinit { timer?.invalidate() }
+
+  func observe(_ layer: CALayer, display: UInt32) {
     guard available else { return }
-    guard let source = KOSampledBackdrop.observe(layer, sample: { [weak self] layer, luma in
-      MainActor.assumeIsolated { self?.sample(Float(luma), for: layer) }
+    guard let source = KOSampledBackdrop.observe(layer, sample: { [weak self] layer, luma, received in
+      MainActor.assumeIsolated { self?.sample(Float(luma), for: layer, at: received) }
     }) else {
       fallBack("a backdrop refused the sampling setup")
       return
     }
-    entries.setObject(Entry(source), forKey: layer)
+    entries.setObject(Entry(source, display: display), forKey: layer)
   }
 
   private var liveEntries: [Entry] {
@@ -58,23 +79,64 @@ import os
     enabled.toggle()
     log("Relative key enabled=\(enabled)")
     updateFilters()
+    scheduleProbes()
   }
 
-  func toggleLamp() {
+  func toggleLamp(present: () -> Void = {}) { setLamp(.underKey, present: present) }
+  func toggleLampOnly(present: () -> Void = {}) { setLamp(.only, present: present) }
+
+  private func setLamp(_ mode: LampMode, present: () -> Void) {
     guard isTestCopy else { return }
-    lampEnabled.toggle()
+    lampMode = lampMode == mode ? .off : mode
+    lampStarted = lampEnabled ? clock.now() : nil
     updateFilters()
+    present()
+    if lampEnabled { lampStarted = clock.now() }
+    scheduleProbes()
   }
 
-  private func updateFilters() {
-    for entry in liveEntries where !apply(entry) {
+  func lampChanged(on display: UInt32) {
+    if lampEnabled { updateFilters(on: display) }
+  }
+
+  private func updateFilters(on display: UInt32? = nil) {
+    for entry in liveEntries where display == nil || display == entry.probe.display {
+      guard !apply(entry) else { continue }
       fallBack("a backdrop rejected its filter")
       return
     }
   }
 
-  private func sample(_ luma: Float, for layer: CALayer) {
+  private func scheduleProbes() {
+    guard isTestCopy, enabled || lampMode != .off else {
+      timer?.invalidate()
+      timer = nil
+      return
+    }
+    guard timer == nil else { return }
+    for entry in liveEntries { beginProbe(entry) }
+    timer = clock.schedule(BackdropProbe.interval) { [weak self] in self?.tick() }
+  }
+
+  private func beginProbe(_ entry: Entry) {
+    let start = clock.now()
+    entry.probe.begin(at: start, forced: entry.source.forceSample())
+  }
+
+  private func tick() {
+    let entries = liveEntries
+    let time = clock.now()
+    lampState(Set(entries.map { $0.probe.display }))
+    for entry in entries {
+      log(entry.probe.line(at: time, key: entry.applied))
+      beginProbe(entry)
+    }
+  }
+
+  func sample(_ luma: Float, for layer: CALayer, at time: TimeInterval) {
     guard available, let entry = entries.object(forKey: layer) else { return }
+    if let previous = entry.probe.lastCallback, time < previous { return }
+    entry.probe.receive(luma, at: time)
     entry.background = luma
     // A line per visible change shows the scale and the cadence of the samples in a test log,
     // with the switch off too: the points are those of the relative key for this sample.
@@ -90,13 +152,28 @@ import os
     if !apply(entry) { fallBack("a backdrop rejected its filter") }
   }
 
+  private func hasFreshSample(_ probe: BackdropProbe) -> Bool {
+    guard let lampStarted else { return true }
+    guard let received = probe.lastCallback, received > lampStarted else { return false }
+    guard let litSince else { return true }
+    guard let ignition = litSince(probe.display) else { return false }
+    return received > ignition
+  }
+
   private func apply(_ entry: Entry) -> Bool {
-    let matrix = LuminanceKey.forBackdrop(backgroundLuma: entry.background, relativeEnabled: usesRelativeKey).matrix
-    guard entry.applied != matrix else { return true }
+    let fresh = hasFreshSample(entry.probe)
+    let key = LuminanceKey.forBackdrop(backgroundLuma: entry.background, relativeEnabled: usesRelativeKey && fresh)
+    let matrix = key.matrix
+    guard entry.applied.matrix != matrix else { return true }
     let applied = matrix == LuminanceKey.normal.matrix
       ? entry.source.applyMatrix(nil, count: 0)
       : matrix.withUnsafeBufferPointer { entry.source.applyMatrix($0.baseAddress, count: $0.count) }
-    if applied { entry.applied = matrix }
+    if applied {
+      if lampEnabled, entry.applied.matrix == LuminanceKey.normal.matrix, let luma = entry.background {
+        log("Key display=\(entry.probe.display) normal->relative luma=\(BackdropProbe.format(Double(luma)))")
+      }
+      entry.applied = key
+    }
     return applied
   }
 
@@ -108,6 +185,7 @@ import os
       log("Could not restore the ordinary key", failure: true)
     }
     entries.removeAllObjects()
+    scheduleProbes()
   }
 
   private func log(_ line: String, failure: Bool = false) {
@@ -129,7 +207,7 @@ import os
     }
     let root = CALayer()
     root.bounds = bounds
-    guard let layer, let source = KOSampledBackdrop.observe(layer, sample: { _, _ in }),
+    guard let layer, let source = KOSampledBackdrop.observe(layer, sample: { _, _, _ in }),
           KOAttachBackdrop(root, layer, &reason) else { return false }
     let matrix = LuminanceKey.forBackdrop(backgroundLuma: 0.8, relativeEnabled: true).matrix
     return matrix.withUnsafeBufferPointer { source.applyMatrix($0.baseAddress, count: $0.count) }

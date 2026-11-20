@@ -47,6 +47,27 @@ final class KeyLampTests: XCTestCase {
     XCTAssertEqual(key.alphaValue, 1)
   }
 
+  func testLampOnlyClosesTheKeyAndRestoresTheLatestHeldGate() throws {
+    let harness = KeyHarness()
+    defer { harness.executor.closeAll() }
+    harness.lampEnabled = true
+    harness.apply(ExecutorPlans.key(create: try harness.creation()))
+    harness.apply(ExecutorPlans.key(gates: [10: .value(1)]))
+    let lamp = try XCTUnwrap(harness.lamp.window(on: 1))
+    let key = try XCTUnwrap(harness.windows.first)
+    harness.lampOnly = true
+    harness.apply(ExecutorPlans.key())
+    XCTAssertTrue(harness.lamp.window(on: 1) === lamp)
+    XCTAssertEqual(lamp.alphaValue, 1)
+    XCTAssertEqual(key.alphaValue, 0)
+    harness.apply(ExecutorPlans.key(gates: [10: .value(0.5)]))
+    XCTAssertEqual(lamp.alphaValue, 0.5)
+    XCTAssertEqual(key.alphaValue, 0)
+    harness.lampOnly = false
+    harness.apply(ExecutorPlans.key(gates: [10: .hold]))
+    XCTAssertEqual(key.alphaValue, 0.5)
+  }
+
   func testHeldKeysCannotLightOtherScenesDarkMenusOrAnotherSpace() throws {
     let harness = KeyHarness()
     defer { harness.executor.closeAll() }
