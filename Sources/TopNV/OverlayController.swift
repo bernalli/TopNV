@@ -97,6 +97,7 @@ final class OverlayController: NSObject {
   }
 
   func systemChanged(_ kind: BarSystemNotification, uptime: Double) {
+    sampler.discardPending()
     deliver {
       self.scene.systemNotification(kind, uptime: uptime)
       if kind == .space {
