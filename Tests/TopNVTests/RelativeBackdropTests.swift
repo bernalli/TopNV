@@ -29,6 +29,8 @@ import XCTest
     key.observe(layer, display: 1)
     key.toggle()
     key.toggleLamp()
+    key.selectLampKey(LampKeyPreset.choices[4])
+    XCTAssertEqual(key.lampKey.command, .lampKey2)
     XCTAssertFalse(key.lampEnabled)
     XCTAssertFalse(key.available)
     XCTAssertFalse(key.enabled)
@@ -100,78 +102,74 @@ import XCTest
     XCTAssertTrue(left.filters?.first as? NSObject === ordinary)
   }
 
-  func testLampUsesSampleIndependentlyOfTheRelativeKeySwitch() async throws {
+  func testFixedLampKeySurvivesQueuedAndProtectedSamplesAndRestoresRelativeKey() async throws {
     let key = RelativeMenuBarKey(isTestCopy: true)
-    XCTAssertFalse(key.lampEnabled)
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
     let layer = try makeLayer()
     key.observe(layer, display: 1)
     let reader = try XCTUnwrap(layer.delegate as? KOSampledBackdrop)
+    key.toggle()
+    reader.backdropLayer(layer, didChangeLuma: 0.75)
     key.toggleLamp()
-    XCTAssertFalse(key.enabled)
-    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
-    reader.backdropLayer(layer, didChangeLuma: 0.875)
+    let fixed = LampKeyPreset.choices[1].key.matrix
+    XCTAssertEqual(matrix(layer), fixed)
     await drainSamples()
-    let relative = LuminanceKey.forBackdrop(backgroundLuma: 0.875, relativeEnabled: true).matrix
-    XCTAssertEqual(matrix(layer), relative)
+    XCTAssertEqual(matrix(layer), fixed)
+    key.toggleLampOnly()
+    XCTAssertEqual(matrix(layer), LuminanceKey.forBackdrop(backgroundLuma: 0.75, relativeEnabled: true).matrix)
     key.toggleLamp()
-    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
-    key.toggle()
-    key.toggleLamp()
-    key.toggleLamp()
-    XCTAssertTrue(key.enabled)
-    XCTAssertEqual(matrix(layer), relative)
-    key.toggleLamp()
-    key.toggle()
     reader.backdropLayer(layer, didSampleProtectedLuma: true)
     await drainSamples()
-    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
-  }
-
-  func testLampRejectsCachedAndQueuedSamplesUntilAFreshCallback() async throws {
-    let lines = Lines()
-    let key = RelativeMenuBarKey(isTestCopy: true, log: { lines.all.append($0) })
-    guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
-    let layer = try makeLayer()
-    key.observe(layer, display: 2)
-    let reader = try XCTUnwrap(layer.delegate as? KOSampledBackdrop)
-    key.toggle()
-    reader.backdropLayer(layer, didChangeLuma: 0.25)
-    await drainSamples()
-    reader.backdropLayer(layer, didChangeLuma: 0.5)
+    XCTAssertEqual(matrix(layer), fixed)
     key.toggleLamp()
     XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
-    await drainSamples()
-    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
-    reader.backdropLayer(layer, didChangeLuma: 0.75)
-    await drainSamples()
-    XCTAssertEqual(matrix(layer), LuminanceKey.forBackdrop(backgroundLuma: 0.75, relativeEnabled: true).matrix)
-    XCTAssertTrue(lines.all.contains("Key display=2 normal->relative luma=0.750"))
   }
 
-  func testLampRelightingInvalidatesOnlyItsOwnDisplay() throws {
-    var ignition: [UInt32: TimeInterval] = [1: 5, 2: 5]
-    let clock = ProbeClock(now: { 10 })
-    let key = RelativeMenuBarKey(isTestCopy: true, clock: clock, litSince: { ignition[$0] })
+  func testChangingLampKeyImmediatelyUpdatesAllLitBackdropsAndNewWindows() throws {
+    let lines = Lines()
+    let key = RelativeMenuBarKey(isTestCopy: true, log: { lines.all.append($0) })
     guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
     let left = try makeLayer()
     let right = try makeLayer()
     key.observe(left, display: 1)
     key.observe(right, display: 2)
     key.toggleLamp()
-    key.sample(0.75, for: left, at: 11)
-    key.sample(0.75, for: right, at: 11)
-    let relative = matrix(right)
-    XCTAssertNotEqual(relative, LuminanceKey.normal.matrix)
-    ignition[1] = nil
+    XCTAssertEqual(matrix(left), LampKeyPreset.choices[1].key.matrix)
+    let fifth = LampKeyPreset.choices[4]
+    key.selectLampKey(fifth)
+    XCTAssertEqual(matrix(left), fifth.key.matrix)
+    XCTAssertEqual(matrix(right), fifth.key.matrix)
+    XCTAssertEqual(lines.all.filter { $0.hasPrefix("LampKey ") }, ["LampKey voce=5 black=0.94 white=0.30"])
+    let next = try makeLayer()
+    key.observe(next, display: 1)
+    XCTAssertEqual(matrix(next), fifth.key.matrix)
+    key.toggleLamp()
+    for layer in [left, right, next] { XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix) }
+  }
+
+  func testFixedLampKeyFollowsEachDisplayIgnitionWithoutACallback() throws {
+    var lit: Set<UInt32> = [2]
+    let key = RelativeMenuBarKey(isTestCopy: true, isLampLit: { lit.contains($0) })
+    guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    let left = try makeLayer()
+    let right = try makeLayer()
+    key.observe(left, display: 1)
+    key.observe(right, display: 2)
+    let first = LampKeyPreset.choices[0]
+    key.selectLampKey(first)
+    XCTAssertEqual(matrix(right), LuminanceKey.normal.matrix)
+    key.toggleLamp()
+    XCTAssertEqual(matrix(left), LuminanceKey.normal.matrix)
+    XCTAssertEqual(matrix(right), first.key.matrix)
+    lit.insert(1)
     key.lampChanged(on: 1)
-    XCTAssertEqual(matrix(left), LuminanceKey.normal.matrix)
-    XCTAssertEqual(matrix(right), relative)
-    ignition[1] = 20
-    key.sample(0.75, for: left, at: 19)
-    XCTAssertEqual(matrix(left), LuminanceKey.normal.matrix)
-    key.sample(0.75, for: left, at: 21)
-    XCTAssertEqual(matrix(left), relative)
+    XCTAssertEqual(matrix(left), first.key.matrix)
+    key.toggle()
+    key.sample(0.5, for: left, at: 10)
+    lit.remove(1)
+    key.lampChanged(on: 1)
+    XCTAssertEqual(matrix(left), LuminanceKey.forBackdrop(backgroundLuma: 0.5, relativeEnabled: true).matrix)
+    XCTAssertEqual(matrix(right), first.key.matrix)
   }
 
   func testProbeReportsEachIntervalIncludingEqualSamplesAndTimeouts() throws {
@@ -206,6 +204,10 @@ import XCTest
     ])
     key.toggleLamp()
     XCTAssertEqual(timers.count, 1)
+    now += 1
+    timer.fire()
+    let fixed = prefix + "none forced=true lastCallbackAge=2.750 key=fixed white=0.150 black=0.940"
+    XCTAssertEqual(lines.all.last, fixed)
     key.toggleLamp()
     XCTAssertFalse(timer.isValid)
     key.toggle()

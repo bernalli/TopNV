@@ -3,13 +3,13 @@ import QuartzCore
 import TopNVCore
 import os
 
-/// Each keyed window follows its own bar's unfiltered mean luminance. A new window
-/// keeps the ordinary filter unless the experiment is explicitly enabled in a test copy.
+/// Test copies can key each window against its bar's unfiltered mean luminance, or use
+/// fixed endpoints while the lamp lights its display in under-key mode.
 /// Test copies only: with one mean per bar a glyph lighter than 0.93 of that mean turns black,
 /// and a sample taken before a window was hidden is not proven to be replaced when it returns.
 @MainActor final class RelativeMenuBarKey {
   static let shared: RelativeMenuBarKey = .init(isTestCopy: TestCopy.matches(Bundle.main.bundleIdentifier),
-                                                litSince: { KeyLamp.shared.litSince(on: $0) },
+                                                isLampLit: { KeyLamp.shared.litSince(on: $0) != nil },
                                                 lampState: { KeyLamp.shared.recordState(displays: $0) })
   enum LampMode { case off, underKey, only }
   private static let logger = Logger(subsystem: "TopNV", category: "RelativeKey")
@@ -33,22 +33,21 @@ import os
   private let isTestCopy: Bool
   private(set) var lampMode = LampMode.off
   var lampEnabled: Bool { lampMode == .underKey }
-  private var lampStarted: TimeInterval?
+  private(set) var lampKey = LampKeyPreset.standard
   private let clock: ProbeClock
-  private let litSince: ((UInt32) -> TimeInterval?)?
+  private let isLampLit: (UInt32) -> Bool
   private let lampState: (Set<UInt32>) -> Void
   private var timer: Timer?
-  private var usesRelativeKey: Bool { enabled || lampEnabled }
   private let sink: ((String) -> Void)?
   private(set) var available: Bool
   private(set) var enabled = false
 
   /// - Parameter sink: receives the lines of the log in place of the system log.
-  init(isTestCopy: Bool, clock: ProbeClock = ProbeClock(), litSince: ((UInt32) -> TimeInterval?)? = nil,
+  init(isTestCopy: Bool, clock: ProbeClock = ProbeClock(), isLampLit: @escaping (UInt32) -> Bool = { _ in true },
        lampState: @escaping (Set<UInt32>) -> Void = { _ in },
        log sink: ((String) -> Void)? = nil) {
     // Production makes none of the sampling calls, keeps the ordinary key and logs nothing.
-    self.litSince = litSince
+    self.isLampLit = isLampLit
     self.clock = clock
     self.lampState = lampState
     self.isTestCopy = isTestCopy
@@ -67,7 +66,9 @@ import os
       fallBack("a backdrop refused the sampling setup")
       return
     }
-    entries.setObject(Entry(source, display: display), forKey: layer)
+    let entry = Entry(source, display: display)
+    entries.setObject(entry, forKey: layer)
+    if !apply(entry) { fallBack("a backdrop rejected its filter") }
   }
 
   private var liveEntries: [Entry] {
@@ -88,11 +89,16 @@ import os
   private func setLamp(_ mode: LampMode, present: () -> Void) {
     guard isTestCopy else { return }
     lampMode = lampMode == mode ? .off : mode
-    lampStarted = lampEnabled ? clock.now() : nil
     updateFilters()
     present()
-    if lampEnabled { lampStarted = clock.now() }
     scheduleProbes()
+  }
+
+  func selectLampKey(_ preset: LampKeyPreset) {
+    guard isTestCopy, preset.command != lampKey.command else { return }
+    lampKey = preset
+    log("LampKey voce=\(preset.number) black=\(preset.blackText) white=\(preset.whiteText)")
+    if lampEnabled { updateFilters() }
   }
 
   func lampChanged(on display: UInt32) {
@@ -128,7 +134,7 @@ import os
     let time = clock.now()
     lampState(Set(entries.map { $0.probe.display }))
     for entry in entries {
-      log(entry.probe.line(at: time, key: entry.applied))
+      log(entry.probe.line(at: time, key: entry.applied, fixed: usesLampKey(entry)))
       beginProbe(entry)
     }
   }
@@ -146,34 +152,25 @@ import os
       let key = LuminanceKey.forBackdrop(backgroundLuma: luma, relativeEnabled: true)
       let numbers = [luma, key.whitePoint, key.blackPoint].map { String(format: "%.3f", $0) }
       let width = String(format: "%.0f", Double(layer.bounds.width))
-      log("Sample \(numbers[0]) over \(width) pt, enabled=\(usesRelativeKey), "
+      log("Sample \(numbers[0]) over \(width) pt, enabled=\(enabled), "
             + "relative key white to \(numbers[1]), black from \(numbers[2])")
     }
     if !apply(entry) { fallBack("a backdrop rejected its filter") }
   }
 
-  private func hasFreshSample(_ probe: BackdropProbe) -> Bool {
-    guard let lampStarted else { return true }
-    guard let received = probe.lastCallback, received > lampStarted else { return false }
-    guard let litSince else { return true }
-    guard let ignition = litSince(probe.display) else { return false }
-    return received > ignition
+  private func usesLampKey(_ entry: Entry) -> Bool {
+    lampEnabled && isLampLit(entry.probe.display)
   }
 
   private func apply(_ entry: Entry) -> Bool {
-    let fresh = hasFreshSample(entry.probe)
-    let key = LuminanceKey.forBackdrop(backgroundLuma: entry.background, relativeEnabled: usesRelativeKey && fresh)
+    let key = usesLampKey(entry) ? lampKey.key
+      : LuminanceKey.forBackdrop(backgroundLuma: entry.background, relativeEnabled: enabled)
     let matrix = key.matrix
     guard entry.applied.matrix != matrix else { return true }
     let applied = matrix == LuminanceKey.normal.matrix
       ? entry.source.applyMatrix(nil, count: 0)
       : matrix.withUnsafeBufferPointer { entry.source.applyMatrix($0.baseAddress, count: $0.count) }
-    if applied {
-      if lampEnabled, entry.applied.matrix == LuminanceKey.normal.matrix, let luma = entry.background {
-        log("Key display=\(entry.probe.display) normal->relative luma=\(BackdropProbe.format(Double(luma)))")
-      }
-      entry.applied = key
-    }
+    if applied { entry.applied = key }
     return applied
   }
 

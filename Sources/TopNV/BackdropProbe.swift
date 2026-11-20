@@ -37,10 +37,15 @@ struct BackdropProbe {
     }
   }
 
-  func line(at time: TimeInterval, key: LuminanceKey) -> String {
+  func line(at time: TimeInterval, key: LuminanceKey, fixed: Bool = false) -> String {
     let luma = reading.map { Self.format(Double($0)) } ?? "none"
     let age = lastCallback.map { Self.format(max(0, time - $0)) } ?? "none"
-    let mode = key.matrix == LuminanceKey.normal.matrix ? "normal" : "relative"
+    let mode: String
+    if fixed {
+      mode = "fixed"
+    } else {
+      mode = key.matrix == LuminanceKey.normal.matrix ? "normal" : "relative"
+    }
     return "Probe display=\(display) luma=\(luma) forced=\(forced) lastCallbackAge=\(age) "
       + "key=\(mode) white=\(Self.format(Double(key.whitePoint))) black=\(Self.format(Double(key.blackPoint)))"
   }

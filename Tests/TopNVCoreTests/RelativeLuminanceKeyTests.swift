@@ -8,6 +8,17 @@ final class RelativeLuminanceKeyTests: XCTestCase {
     return min(1, max(0, (row[0] + row[1] + row[2]) * pixel + row[4]))
   }
 
+  func testFiveLampKeysMapTheirBlackAndWhiteEndpoints() {
+    let points: [(Float, Float)] = [(0.97, 0.15), (0.94, 0.15), (0.90, 0.15), (0.86, 0.15), (0.94, 0.30)]
+    XCTAssertEqual(LampKeyPreset.choices.count, points.count)
+    for (preset, points) in zip(LampKeyPreset.choices, points) {
+      XCTAssertEqual(preset.key.blackPoint, points.0, accuracy: 1e-6)
+      XCTAssertEqual(preset.key.whitePoint, points.1, accuracy: 1e-6)
+      XCTAssertEqual(output(preset.key, points.0), 0, accuracy: 1e-6)
+      XCTAssertEqual(output(preset.key, points.1), 1, accuracy: 1e-6)
+    }
+  }
+
   func testKeyFollowsTheSampledBackground() {
     for level in 55...95 {
       let background = Float(level) / 100

@@ -110,6 +110,27 @@ final class StatusMenuControllerTests: XCTestCase {
     }
   }
 
+  func testLampKeySubmenuSelectsExactlyOnePresetOnlyInTestCopies() throws {
+    let key = RelativeMenuBarKey(isTestCopy: true)
+    let production = makeController(relativeKey: key).controller
+    XCTAssertNil(production.menu.item(withTitle: "Lamp key (test)"))
+    production.perform(.lampKey5)
+    XCTAssertEqual(key.lampKey.command, .lampKey2)
+    NSStatusBar.system.removeStatusItem(production.statusItem)
+
+    let menu = makeController(isTestCopy: true, relativeKey: key).controller.menu
+    let submenu = try XCTUnwrap(menu.item(withTitle: "Lamp key (test)")?.submenu)
+    XCTAssertEqual(submenu.items.map(\.title), [
+      "1  black from 0.97, white to 0.15", "2  black from 0.94, white to 0.15",
+      "3  black from 0.90, white to 0.15", "4  black from 0.86, white to 0.15", "5  black from 0.94, white to 0.30"
+    ])
+    XCTAssertEqual(submenu.items.map(\.state), [.off, .on, .off, .off, .off])
+    for index in submenu.items.indices {
+      submenu.performActionForItem(at: index)
+      XCTAssertEqual(submenu.items.map(\.state), submenu.items.indices.map { $0 == index ? .on : .off })
+    }
+  }
+
   func testTheStatusItemCanBeRemovedByTheUserAndShowsTheMenu() {
     let controller = makeController().controller
     XCTAssertEqual(controller.statusItem.behavior, .removalAllowed)

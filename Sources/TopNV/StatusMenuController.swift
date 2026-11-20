@@ -91,6 +91,7 @@ import TopNVCore
     var rows = MenuLayout.rows(for: state)
     if isTestCopy, let index = rows.firstIndex(where: { $0.id == "separator.app" }) {
       rows.insert(.lampOnly(enabled: relativeKey.lampMode == .only), at: index)
+      rows.insert(.lampKey(selected: relativeKey.lampKey), at: index)
       rows.insert(.lampUnderKey(enabled: relativeKey.lampEnabled), at: index)
       rows.insert(.relativeKey(available: relativeKey.available, enabled: relativeKey.enabled), at: index)
     }
@@ -133,6 +134,10 @@ import TopNVCore
       } else {
         relativeKey.toggleLamp(present: present)
       }
+      refresh()
+    case .lampKey1, .lampKey2, .lampKey3, .lampKey4, .lampKey5:
+      guard isTestCopy, let preset = LampKeyPreset.choices.first(where: { $0.command == command }) else { return }
+      relativeKey.selectLampKey(preset)
       refresh()
     case .relativeKey:
       guard isTestCopy else { return }

@@ -12,7 +12,11 @@ public struct LuminanceKey: Sendable {
           (1.0 / 255...1).contains(backgroundLuma) else { return .normal }
     let white = 0.20 * backgroundLuma
     let black = 0.93 * backgroundLuma
-    return Self(gain: 1 / (black - white), cutoff: (white + black) / 2)
+    return from(black: black, white: white)
+  }
+
+  static func from(black: Float, white: Float) -> Self {
+    Self(gain: 1 / (black - white), cutoff: (white + black) / 2)
   }
 
   /// Luma at and above which the output is black.
