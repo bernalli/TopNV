@@ -33,6 +33,7 @@ import os
   private let isTestCopy: Bool
   private(set) var lampMode = LampMode.off
   var lampEnabled: Bool { lampMode == .underKey }
+  private(set) var lampPlate = LampPlatePreset.standard
   private(set) var lampKey = LampKeyPreset.standard
   private let clock: ProbeClock
   private let isLampLit: (UInt32) -> Bool
@@ -99,6 +100,12 @@ import os
     lampKey = preset
     log("LampKey voce=\(preset.number) black=\(preset.blackText) white=\(preset.whiteText)")
     if lampEnabled { updateFilters() }
+  }
+
+  func selectLampPlate(_ preset: LampPlatePreset, present: () -> Void) {
+    guard isTestCopy, preset.command != lampPlate.command else { return }
+    lampPlate = preset
+    if lampEnabled { present() }
   }
 
   func lampChanged(on display: UInt32) {

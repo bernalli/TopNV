@@ -30,6 +30,8 @@ import XCTest
     key.toggle()
     key.toggleLamp()
     key.selectLampKey(LampKeyPreset.choices[4])
+    key.selectLampPlate(LampPlatePreset.choices[4], present: { XCTFail("Production presented a plate") })
+    XCTAssertEqual(key.lampPlate.command, .lampPlate1)
     XCTAssertEqual(key.lampKey.command, .lampKey2)
     XCTAssertFalse(key.lampEnabled)
     XCTAssertFalse(key.available)
@@ -139,7 +141,7 @@ import XCTest
     key.selectLampKey(fifth)
     XCTAssertEqual(matrix(left), fifth.key.matrix)
     XCTAssertEqual(matrix(right), fifth.key.matrix)
-    XCTAssertEqual(lines.all.filter { $0.hasPrefix("LampKey ") }, ["LampKey voce=5 black=0.94 white=0.30"])
+    XCTAssertEqual(lines.all.filter { $0.hasPrefix("LampKey ") }, ["LampKey voce=5 black=0.95 white=0.45"])
     let next = try makeLayer()
     key.observe(next, display: 1)
     XCTAssertEqual(matrix(next), fifth.key.matrix)
@@ -206,7 +208,7 @@ import XCTest
     XCTAssertEqual(timers.count, 1)
     now += 1
     timer.fire()
-    let fixed = prefix + "none forced=true lastCallbackAge=2.750 key=fixed white=0.150 black=0.940"
+    let fixed = prefix + "none forced=true lastCallbackAge=2.750 key=fixed white=0.300 black=0.940"
     XCTAssertEqual(lines.all.last, fixed)
     key.toggleLamp()
     XCTAssertFalse(timer.isValid)

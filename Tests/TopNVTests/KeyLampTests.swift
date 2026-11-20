@@ -38,13 +38,51 @@ final class KeyLampTests: XCTestCase {
     let logged = harness.lampLines
     harness.apply(ExecutorPlans.key(mask: mask))
     XCTAssertEqual(harness.lampLines, logged)
-    XCTAssertTrue(logged.last?.contains("px=0,0,400,68") == true)
+    XCTAssertTrue(logged.last { $0.hasPrefix("Lamp ") }?.contains("px=0,0,400,68") == true)
     harness.lampEnabled = false
     harness.apply(ExecutorPlans.key())
     XCTAssertNil(harness.lamp.window(on: 1))
     XCTAssertEqual(lamp.alphaValue, 0)
     XCTAssertFalse(lamp.isVisible)
     XCTAssertEqual(key.alphaValue, 1)
+  }
+
+  func testLitPlatesChangeOnLiveKeysAndRestoreTheirCreationFrames() throws {
+    let harness = KeyHarness()
+    defer { harness.executor.closeAll() }
+    let create = ExecutorPlans.key(create: try harness.creation())
+    let live = ExecutorPlans.key(gates: [10: .value(1)])
+    harness.lampPlate = LampPlatePreset.choices[4]
+    harness.apply(create)
+    harness.apply(live)
+    let root = try XCTUnwrap(harness.windows.first?.contentView?.layer)
+    let plate = try XCTUnwrap(root.sublayers?.first { $0.name == "Bottom plate" })
+    let original = plate.frame
+    XCTAssertEqual(original.height, 8.5)
+    harness.lampEnabled = true
+    let rows: [Int?] = [51, 56, 60, 64, nil]
+    let margins = ["7.5", "5", "3", "1", "none"]
+    XCTAssertEqual(LampPlatePreset.choices.count, rows.count)
+    for (index, preset) in LampPlatePreset.choices.enumerated() {
+      harness.lampPlate = preset
+      harness.apply(live)
+      let row = rows[index]
+      XCTAssertEqual(plate.frame.height, row.map { CGFloat(68 - $0) / 2 } ?? 0)
+      XCTAssertEqual(plate.frame.minY, root.isGeometryFlipped ? 34 - plate.frame.height : 0)
+      let line = "LampPlate voce=\(index + 1) margin=\(margins[index]) px=\(row.map(String.init) ?? "none")"
+      XCTAssertTrue(harness.lampLines.contains(line))
+    }
+    harness.lampOnly = true
+    harness.apply(live)
+    XCTAssertEqual(plate.frame, original)
+    harness.lampOnly = false
+    harness.apply(live)
+    XCTAssertEqual(plate.frame.height, 0)
+    harness.lampEnabled = false
+    harness.apply(ExecutorPlans.key(gap: 20))
+    XCTAssertEqual(plate.frame, original)
+    XCTAssertTrue(plate.superlayer === root)
+    XCTAssertEqual(harness.windows.count, 1)
   }
 
   func testLampOnlyClosesTheKeyAndRestoresTheLatestHeldGate() throws {

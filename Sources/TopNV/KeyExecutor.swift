@@ -13,7 +13,7 @@ final class KeyExecutor: BarKeyExecuting {
     let window: OverlayWindow
     let root: CALayer
     let backdrop: CALayer
-    let plate: CALayer
+    let plate: KeyBottomPlate
     let clip: CAShapeLayer
     let scale: CGFloat
   }
@@ -121,6 +121,9 @@ final class KeyExecutor: BarKeyExecuting {
   }
 
   private func applyLamp(_ plan: BarDisplayPlan, on display: UInt32) {
+    defer {
+      for entry in entries.values where entry.display == display { lamp.presentPlate(entry.plate, on: display) }
+    }
     guard lamp.enabled(), lamp.canPresent(plan) else {
       lamp.close(display)
       return
@@ -155,7 +158,8 @@ final class KeyExecutor: BarKeyExecuting {
 
   private func create(_ creation: BarKeyCreation, on display: UInt32, plan: BarDisplayPlan) throws {
     let key = plan.key
-    guard let frame = key.frame, let geometry = key.plate, let scale = plan.geometry?.scale else { return }
+    guard let frame = key.frame, let geometry = key.plate, let screen = plan.geometry else { return }
+    let scale = screen.scale
     let bounds = CGRect(origin: .zero, size: frame.size)
     let backdrop = try runtime.create(matrix: LuminanceKey.normal.matrix, bounds: bounds,
                                       scale: scale, display: display)
@@ -170,19 +174,13 @@ final class KeyExecutor: BarKeyExecuting {
       disable(BackdropFailure(reason: id > 0 ? "layer unavailable" : "overlay window has no number")) { window.close() }
       return
     }
-    let entry = Entry(display: display, window: window, root: root, backdrop: backdrop, plate: CALayer(),
-                      clip: CAShapeLayer(), scale: scale)
+    let entry = Entry(display: display, window: window, root: root, backdrop: backdrop,
+                      plate: KeyBottomPlate(original: geometry, display: screen), clip: CAShapeLayer(), scale: scale)
     entries[id] = entry
     applyBarPresentation {
       root.contentsScale = scale
       entry.clip.contentsScale = scale
-      entry.plate.frame = root.isGeometryFlipped ? geometry.flipped : geometry.unflipped
-      entry.plate.name = "Bottom plate"
-      entry.plate.contentsScale = scale
-      entry.plate.backgroundColor = NSColor.black.cgColor
-      entry.plate.isOpaque = true
-      entry.plate.zPosition = 1
-      root.addSublayer(entry.plate)
+      entry.plate.install(in: root, scale: scale)
       present(key, on: entry)
     }
     try runtime.attach(root: root, backdrop: backdrop)
@@ -211,7 +209,7 @@ final class KeyExecutor: BarKeyExecuting {
       let window = entry.window
       result[.init(display: entry.display, part: .key, keyWindow: id)] =
         window.registryEntry(on: display.geometry, mask: display.key.mask)
-      let frame = BarPixels.windowRect(layerFrame: entry.plate.frame, window: window.frame,
+      let frame = BarPixels.windowRect(layerFrame: entry.plate.layer.frame, window: window.frame,
                                        flipped: entry.root.isGeometryFlipped)
       result[.init(display: entry.display, part: .plate, keyWindow: id)] =
         window.registryEntry(on: display.geometry, frame: frame)

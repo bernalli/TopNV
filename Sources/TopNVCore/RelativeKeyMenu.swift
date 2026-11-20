@@ -1,12 +1,12 @@
 import Foundation
 
 public struct LampKeyPreset: Sendable {
-  public static let standard = Self(number: 2, command: .lampKey2, black: 0.94, white: 0.15)
+  public static let standard = Self(number: 2, command: .lampKey2, black: 0.94, white: 0.30)
   public static let choices = [
-    Self(number: 1, command: .lampKey1, black: 0.97, white: 0.15), standard,
-    Self(number: 3, command: .lampKey3, black: 0.90, white: 0.15),
-    Self(number: 4, command: .lampKey4, black: 0.86, white: 0.15),
-    Self(number: 5, command: .lampKey5, black: 0.94, white: 0.30)
+    Self(number: 1, command: .lampKey1, black: 0.94, white: 0.15), standard,
+    Self(number: 3, command: .lampKey3, black: 0.94, white: 0.45),
+    Self(number: 4, command: .lampKey4, black: 0.94, white: 0.60),
+    Self(number: 5, command: .lampKey5, black: 0.95, white: 0.45)
   ]
 
   public let number: Int
@@ -19,7 +19,29 @@ public struct LampKeyPreset: Sendable {
   public var whiteText: String { String(format: "%.2f", white) }
 }
 
+public struct LampPlatePreset: Sendable {
+  public static let standard = Self(number: 1, command: .lampPlate1, margin: BarGeometry.plateGlyphMargin)
+  public static let choices = [
+    standard, Self(number: 2, command: .lampPlate2, margin: 5), Self(number: 3, command: .lampPlate3, margin: 3),
+    Self(number: 4, command: .lampPlate4, margin: 1), Self(number: 5, command: .lampPlate5, margin: nil)
+  ]
+
+  public let number: Int
+  public let command: MenuCommand
+  public let margin: CGFloat?
+  public var marginText: String { margin.map { String(format: "%g", Double($0)) } ?? "none" }
+}
+
 extension MenuRow {
+  public static func lampPlate(selected: LampPlatePreset) -> Self {
+    let rows = LampPlatePreset.choices.map { preset in
+      let title = preset.margin == nil ? "No plate" : "\(preset.marginText) pt"
+      return MenuRow(id: preset.command.rawValue, title: "\(preset.number)  \(title)", symbol: nil,
+                     kind: .toggle(preset.command, isOn: preset.command == selected.command, enabled: true))
+    }
+    return MenuRow(id: "lampPlate", title: "Lamp plate (test)", symbol: nil, kind: .submenu(rows, enabled: true))
+  }
+
   public static func lampKey(selected: LampKeyPreset) -> Self {
     let rows = LampKeyPreset.choices.map { preset in
       MenuRow(id: preset.command.rawValue,

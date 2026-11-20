@@ -8,6 +8,7 @@ final class KeyLamp {
   static let shared = KeyLamp(
     enabled: { RelativeMenuBarKey.shared.lampMode != .off },
     only: { RelativeMenuBarKey.shared.lampMode == .only },
+    plate: { RelativeMenuBarKey.shared.lampPlate },
     changed: { RelativeMenuBarKey.shared.lampChanged(on: $0) })
   private static let logger = Logger(subsystem: "TopNV", category: "Lamp")
   // Just above the band (desktop + 1), still below application windows and the system menu.
@@ -23,11 +24,14 @@ final class KeyLamp {
   private var windows: [UInt32: Window] = [:]
   let enabled: () -> Bool
   let only: () -> Bool
+  private let plate: () -> LampPlatePreset
   private let changed: (UInt32) -> Void
   private let log: (String) -> Void
 
   init(enabled: @escaping () -> Bool, only: @escaping () -> Bool = { false },
+       plate: @escaping () -> LampPlatePreset = { .standard },
        changed: @escaping (UInt32) -> Void = { _ in }, log: ((String) -> Void)? = nil) {
+    self.plate = plate
     self.changed = changed
     self.only = only
     self.enabled = enabled
@@ -78,6 +82,11 @@ final class KeyLamp {
     window.close()
     if window.litSince != nil { changed(display) }
     record(window, display: display, state: "closed")
+  }
+
+  func presentPlate(_ bottom: KeyBottomPlate, on display: UInt32) {
+    let preset = litSince(on: display) != nil && !only() ? plate() : nil
+    bottom.apply(preset, log: log)
   }
 
   func recordState(displays: Set<UInt32>) {

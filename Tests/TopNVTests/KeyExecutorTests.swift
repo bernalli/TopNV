@@ -71,11 +71,13 @@ final class KeyHarness {
   var closed: [Int] = []
   var failureCount = 0
   var monitorStops = 0
+  var lampPlate = LampPlatePreset.standard
   var lampOnly = false
   var lampEnabled = false
   var lampLines: [String] = []
   lazy var lamp = KeyLamp(enabled: { [unowned self] in lampEnabled },
-                          only: { [unowned self] in lampOnly }, log: { [unowned self] in
+                          only: { [unowned self] in lampOnly },
+                          plate: { [unowned self] in lampPlate }, log: { [unowned self] in
     XCTAssertTrue(CATransaction.disableActions())
     lampLines.append($0)
   })

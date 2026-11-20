@@ -121,13 +121,37 @@ final class StatusMenuControllerTests: XCTestCase {
     let menu = makeController(isTestCopy: true, relativeKey: key).controller.menu
     let submenu = try XCTUnwrap(menu.item(withTitle: "Lamp key (test)")?.submenu)
     XCTAssertEqual(submenu.items.map(\.title), [
-      "1  black from 0.97, white to 0.15", "2  black from 0.94, white to 0.15",
-      "3  black from 0.90, white to 0.15", "4  black from 0.86, white to 0.15", "5  black from 0.94, white to 0.30"
+      "1  black from 0.94, white to 0.15", "2  black from 0.94, white to 0.30",
+      "3  black from 0.94, white to 0.45", "4  black from 0.94, white to 0.60", "5  black from 0.95, white to 0.45"
     ])
     XCTAssertEqual(submenu.items.map(\.state), [.off, .on, .off, .off, .off])
     for index in submenu.items.indices {
       submenu.performActionForItem(at: index)
       XCTAssertEqual(submenu.items.map(\.state), submenu.items.indices.map { $0 == index ? .on : .off })
+    }
+  }
+
+  func testLampPlateMenuSelectsOneMarginAndPresentsChangesOnlyUnderTheKey() throws {
+    let key = RelativeMenuBarKey(isTestCopy: true)
+    let production = makeController(relativeKey: key).controller
+    XCTAssertNil(production.menu.item(withTitle: "Lamp plate (test)"))
+    production.perform(.lampPlate5)
+    XCTAssertEqual(key.lampPlate.command, .lampPlate1)
+    NSStatusBar.system.removeStatusItem(production.statusItem)
+
+    let menu = makeController(isTestCopy: true, relativeKey: key).controller
+    var changes = 0
+    menu.onLampChanged = { changes += 1 }
+    let submenu = try XCTUnwrap(menu.menu.item(withTitle: "Lamp plate (test)")?.submenu)
+    XCTAssertEqual(submenu.items.map(\.title), ["1  7.5 pt", "2  5 pt", "3  3 pt", "4  1 pt", "5  No plate"])
+    XCTAssertEqual(submenu.items.map(\.state), [.on, .off, .off, .off, .off])
+    submenu.performActionForItem(at: 4)
+    XCTAssertEqual(changes, 0)
+    menu.perform(.lampUnderKey)
+    for index in submenu.items.indices {
+      submenu.performActionForItem(at: index)
+      XCTAssertEqual(submenu.items.map(\.state), submenu.items.indices.map { $0 == index ? .on : .off })
+      XCTAssertEqual(changes, index + 2)
     }
   }
 
