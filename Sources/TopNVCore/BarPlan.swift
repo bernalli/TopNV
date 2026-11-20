@@ -67,7 +67,7 @@ public enum BarSurface {
     func cell(_ part: BarPart) -> BarCell {
       BarTable.cell(part, kind: kind, bandEnabled: bandEnabled, cornersWanted: cornersWanted,
                     keyFailed: scene.keyFailed || !scene.appliedHideNotch, menuMeasured: menu != nil,
-                    entrance: entrance != nil)
+                    entrance: entrance != nil, entrancePermitted: scene.entrancePermitted(display: id))
     }
 
     let bandCell = cell(.band)

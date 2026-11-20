@@ -14,7 +14,7 @@ final class BarTableTests: XCTestCase {
 
     func cell(_ part: BarPart, kind: BarSceneKind) -> BarCell {
       BarTable.cell(part, kind: kind, bandEnabled: band, cornersWanted: corners,
-                    keyFailed: failed, menuMeasured: menu, entrance: entrance)
+                    keyFailed: failed, menuMeasured: menu, entrance: entrance, entrancePermitted: kind == .desktop)
     }
 
     func fixture(_ kind: BarSceneKind) -> BarPlanFixture {

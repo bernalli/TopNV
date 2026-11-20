@@ -112,6 +112,12 @@ public struct BarScene {
 
   public func evidence(display: UInt32) -> MenuBarEvidence.Result? { latestEvidence[display] }
 
+  /// The latest sample of this display permits the band entrance. A desktop scene always does;
+  /// a full-screen Space does only while it shows the menu bar.
+  public func entrancePermitted(display: UInt32) -> Bool {
+    latestEvidence[display].map { BandEntrance.Sample($0) == .desktop } ?? false
+  }
+
   @discardableResult
   public mutating func handle(_ event: BandState.Event, displays: [BarDisplay], settings: BarSettings,
                               entrance: BandEntrance.Event, screenRebuildPending: Bool) -> BarEventEffects {

@@ -51,7 +51,8 @@ final class BarSceneKindTests: XCTestCase {
       let evidence = evaluate(windows, autoHidden: random.next(2) == 0, fullScreen: random.next(2) == 0)
       let scene = BarSceneKind.classify(evidence, screenPresent: true)
       XCTAssertEqual(scene == .revealed || scene == .overview, !CornerVisibility.visible(evidence))
-      XCTAssertEqual(scene == .desktop, BandEntrance.Sample(evidence) == .desktop)
+      XCTAssertEqual(scene == .desktop, evidence.desktopScene && !evidence.desktopRevealed)
+      if scene == .desktop { XCTAssertEqual(BandEntrance.Sample(evidence), .desktop) }
     }
   }
 }

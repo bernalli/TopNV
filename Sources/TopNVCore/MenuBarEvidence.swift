@@ -53,10 +53,15 @@ public enum MenuBarEvidence {
     /// the Space that leaves with the Space that arrives.
     public let spaceSliding: Bool
     /// At rest a native full-screen Space has a WindowManager backdrop one level above
-    /// the desktop level. This signal is local to the display.
+    /// the desktop level. This signal is local to the display. Measured on 19 and 20 November:
+    /// when the full-screen Space shows the menu bar, it also reserves the top of the display and
+    /// lists the menu surface, exactly like a desktop. The backdrop then decides the scene only.
     public let fullScreenBackdrop: Bool
-    /// The base band can animate on an ordinary desktop even when the key is gated off.
+    /// The base band can animate on an ordinary desktop even when the key is gated off, and on a
+    /// full-screen Space that shows the menu bar.
     let permitsBandEntrance: Bool
+    /// An ordinary desktop: the scene that `BarSceneKind` calls `.desktop` when nothing is revealed.
+    public var desktopScene: Bool { permitsBandEntrance && !fullScreenBackdrop }
   }
 
   /// Converts the dictionaries of `CGWindowListCopyWindowInfo`. Window titles are never read.
@@ -178,8 +183,10 @@ public enum MenuBarEvidence {
     let backdrop = fullScreenBackdrop(frame: frame, windows: windows, tolerance)
     let fullScreenApp = nativeFullScreen || coveringApp
     let autoHiddenMenu = noReservedTop && autoHiddenDesktop(frame, windows, displayFrames, systemFullScreen, tolerance)
-    let reservedMenu = !noReservedTop && (menuVisible || (revealSurface != nil && !systemFullScreen))
-    let permitsBandEntrance = !fullScreenApp && !backdrop && !spaceSliding && (reservedMenu || autoHiddenMenu)
+    // With the backdrop, a full-screen Space shows its menu bar only when the menu surface is
+    // listed (all 151 logged reveals list it). A top that is not reserved stays a veto.
+    let reservedMenu = !noReservedTop && (menuVisible || (revealSurface != nil && !systemFullScreen && !backdrop))
+    let permitsBandEntrance = !fullScreenApp && !spaceSliding && (reservedMenu || (autoHiddenMenu && !backdrop))
     // A transition can list several menu surfaces. The cover starts below their lowest edge.
     // Prefer stationary surfaces at the system menu level when that level is present.
     let menuLayer = Int(CGWindowLevelForKey(.mainMenuWindow))
