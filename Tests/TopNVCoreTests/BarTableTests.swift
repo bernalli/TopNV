@@ -81,6 +81,33 @@ final class BarTableTests: XCTestCase {
     }
   }
 
+  func testFullScreenPermissionMasksOnlyThePartsOfAnActiveEntrance() {
+    let parts: [BarPart] = [.band, .key, .plate, .lamp, .edge]
+      + ScreenCorner.allCases.map { .corner($0) }
+    for bits in 0..<32 {
+      let inputs = Inputs(bits: bits)
+      for permitted in [false, true] {
+        for part in parts {
+          let regular = inputs.cell(part, kind: .fullScreen)
+          var expected = regular
+          if permitted && inputs.band && inputs.entrance {
+            switch part {
+            case .band: expected = .path
+            case .key, .plate, .lamp: expected = inputs.failed ? .closed : .path
+            case .corner: expected = inputs.corners ? .fade : .closed
+            case .edge: expected = .hidden
+            }
+          }
+          let actual = BarTable.cell(
+            part, kind: .fullScreen, bandEnabled: inputs.band, cornersWanted: inputs.corners,
+            keyFailed: inputs.failed, menuMeasured: inputs.menu, entrance: inputs.entrance,
+            entrancePermitted: permitted)
+          XCTAssertEqual(actual, expected, "\(part) flags=\(bits) permitted=\(permitted)")
+        }
+      }
+    }
+  }
+
   func testNoPartExistsWhenItsCellIsClosed() {
     for kind in kinds {
       for bits in 0..<32 {

@@ -8,7 +8,7 @@ protocol BarSampling: AnyObject {
   func sampleNow() -> BarSample
   func monitorAppearance(_ enabled: Bool)
   func scheduleSamples(needed: Bool, duringReveal: Bool)
-  /// A Space or screen event makes a window list read that started before it stale.
+  /// A rebuild or screen event makes earlier window list reads stale.
   func discardPending()
 }
 
@@ -40,17 +40,25 @@ final class BarSampler: BarSampling {
   private var timer: Timer?
   private var dock: NSRunningApplication?
   private let reader: WindowListReader
+  private let makeSample: ((WindowListRead) -> BarSample)?
+  private let installTimer: (Timer) -> Void
   /// Timer samples read the window list off the main thread: during a reveal or a return the read
   /// can block for longer than a display frame, and the entrance is drawn on the main thread.
   private let queue = DispatchQueue(label: "TopNV.WindowList", qos: .userInteractive)
   private var reading = false
-  /// Advances at every Space or screen event. A read that started before the event is dropped.
+  private var recoveryRequested = false
   private var generation: UInt64 = 0
+  /// Shared by direct reads and reads consumed through the callback.
+  private var lastSampleTime = -Double.infinity
   /// The read that `onSample` delivers. Only the first `sampleNow()` inside `onSample` uses it.
   private var delivered: WindowListRead?
 
-  init(reader: @escaping WindowListReader = BarSampler.readWindowList) {
+  init(reader: @escaping WindowListReader = { BarSampler.readWindowList($0) },
+       makeSample: ((WindowListRead) -> BarSample)? = nil,
+       installTimer: @escaping (Timer) -> Void = { RunLoop.main.add($0, forMode: .common) }) {
     self.reader = reader
+    self.makeSample = makeSample
+    self.installTimer = installTimer
   }
 
   /// Safe on any thread: the window list functions of Quartz do not need the main thread.
@@ -66,6 +74,7 @@ final class BarSampler: BarSampling {
   }
 
   func monitorAppearance(_ enabled: Bool) {
+    guard makeSample == nil else { return }
     if enabled && monitor == nil {
       monitor = MenuBarConditionsMonitor()
       monitor?.onChange = { [weak self] in self?.requestSample() }
@@ -82,6 +91,7 @@ final class BarSampler: BarSampling {
     guard needed else {
       timer?.invalidate()
       timer = nil
+      recoveryRequested = false
       discardPending()
       return
     }
@@ -93,13 +103,15 @@ final class BarSampler: BarSampling {
     }
     timer.tolerance = Self.tolerance(duringReveal: duringReveal)
     self.timer = timer
-    RunLoop.main.add(timer, forMode: .common)
+    installTimer(timer)
   }
 
-  /// A timer tick or an appearance change asks for a sample. One read is in flight at a time:
-  /// a request during a read is covered by that read, whose sample is built when it arrives.
+  /// Keep at most one async read in flight and coalesce requests for a fresh read behind it.
   func requestSample() {
-    guard !reading else { return }
+    guard !reading else {
+      recoveryRequested = true
+      return
+    }
     reading = true
     let started = generation
     let query = query()
@@ -113,10 +125,16 @@ final class BarSampler: BarSampling {
   }
 
   private func deliver(_ read: WindowListRead, generation started: UInt64) {
-    reading = false
-    guard started == generation else { return }
+    defer {
+      delivered = nil
+      reading = false
+      if recoveryRequested {
+        recoveryRequested = false
+        requestSample()
+      }
+    }
+    guard started == generation, read.signalTime > lastSampleTime else { return }
     delivered = read
-    defer { delivered = nil }
     onSample?()
   }
 
@@ -129,6 +147,8 @@ final class BarSampler: BarSampling {
   func sampleNow() -> BarSample {
     let read = delivered ?? reader(query())
     delivered = nil
+    lastSampleTime = max(lastSampleTime, read.signalTime)
+    if let makeSample { return makeSample(read) }
     var appearance: [UInt32: KeyedOverlayState.Appearance] = [:]
     let displays = NSScreen.screens.compactMap { screen -> BarDisplay? in
       guard let display = BarDisplay(screen: screen), appearance[display.id] == nil else { return nil }

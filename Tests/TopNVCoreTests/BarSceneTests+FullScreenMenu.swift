@@ -37,6 +37,86 @@ extension BarSceneTests {
     for corner in display.corners.values { XCTAssertEqual(corner.alpha, .value(1), label) }
   }
 
+  func testEarlyReturnKeepsTheRevealVisibleUntilTheSurfaceLeavesWhenEntranceIsSuppressed() throws {
+    for layer in [18, 19] {
+      for reduced in [false, true] {
+        let rest = [menu(), backdrop]
+        let home = CGRect(x: 300, y: 120, width: 500, height: 600)
+        func document(_ bounds: CGRect) -> Window {
+          Window(owner: .application, layer: 0, bounds: bounds, number: 40)
+        }
+        let surface = background(layer)
+        let parked = document(home.offsetBy(dx: 0, dy: -710))
+        let returning = document(home.offsetBy(dx: 0, dy: -410))
+        let reveal = rest + [surface] + (layer == 18 ? [parked] : [])
+        let early = rest + (layer == 18 ? [surface, returning] : [background(layer, alpha: 0.8)])
+        let kind: BarSceneKind = layer == 18 ? .revealed : .overview
+        var scene = scene()
+        _ = scene.handle(sample(rest + [document(home)], now: 1))
+        if !reduced { scene.systemNotification(.space, uptime: 2) }
+        _ = scene.handle(sample(reveal, now: 2))
+        scene.endEvent(screenRebuildPending: false)
+        for time in [3.0, 4] {
+          let effects = scene.handle(sample(early, now: time, active: [1: [7]], reduced: reduced))
+          XCTAssertFalse(returnStarts(effects))
+          let presented = try plan(scene)
+          XCTAssertEqual(presented.kind, kind)
+          XCTAssertEqual(presented.band.alpha, .value(0))
+          XCTAssertEqual(presented.key.gates[7], .value(0))
+          XCTAssertTrue(presented.corners.values.allSatisfy { $0.alpha == .value(0) })
+        }
+        let end = scene.handle(sample(rest + [document(home)], now: 5, reduced: reduced))
+        XCTAssertFalse(returnStarts(end))
+        checkFullScreenRow(try plan(scene), label: "layer \(layer), reduced motion \(reduced)")
+      }
+    }
+  }
+
+  func testBackdropChangesInterruptAReturnWithoutASpaceNotification() {
+    for fromFullScreen in [false, true] {
+      for newReveal in [false, true] {
+        let old = [menu()] + (fromFullScreen ? [backdrop] : [])
+        let new = [menu()] + (fromFullScreen ? [] : [backdrop])
+        var scene = scene()
+        _ = scene.handle(sample(old, now: 1))
+        _ = scene.handle(sample(old + [background(19)], now: 2))
+        let fading = background(19, alpha: 0.8)
+        XCTAssertEqual(scene.handle(sample(old + [fading], now: 3)).entranceEffects,
+                       [.start(display: 1, returnSignal: 103)])
+        XCTAssertEqual(scene.handle(sample(new + (newReveal ? [fading] : []), now: 4)).entranceEffects,
+                       [.restore(display: 1)])
+        XCTAssertTrue(scene.entrances.isEmpty)
+        XCTAssertTrue(scene.handle(sample(new, now: 5)).entranceEffects.isEmpty)
+        _ = scene.handle(sample(new + [background(19)], now: 6))
+        XCTAssertEqual(scene.handle(sample(new + [fading], now: 7)).entranceEffects,
+                       [.start(display: 1, returnSignal: 107)])
+        XCTAssertEqual(scene.handle(sample(new, now: 8)).entranceEffects,
+                       [.surfaceEnded(display: 1, signalTime: 108)])
+      }
+    }
+  }
+
+  func testFullScreenReturnRequiresAVisibleMenuInAnyListOrder() {
+    let bar = menu()
+    let transparent = Window(owner: .windowServer, layer: bar.layer, bounds: bar.bounds, alpha: 0)
+    let backdrop = Window(owner: .desktop, layer: MenuBarEvidence.fullScreenBackdropLayer,
+                          bounds: display().frame, isWindowManager: true, number: 201)
+
+    for alpha in [-0.01, 0, 0.01, 1, 1.01, .nan, .infinity] {
+      let candidate = Window(owner: .windowServer, layer: bar.layer, bounds: bar.bounds, alpha: alpha)
+      for menus in [[transparent, candidate, transparent], [candidate, transparent, transparent]] {
+        for layer in [18, 19] {
+          var scene = scene()
+          let rest = menus + [backdrop]
+          _ = scene.handle(sample(rest, now: 1))
+          _ = scene.handle(sample(rest + [background(layer)], now: 2))
+          let returning = layer == 19 ? rest + [background(layer, alpha: 0.8)] : rest
+          XCTAssertEqual(returnStarts(scene.handle(sample(returning, now: 3))), alpha > 0 && alpha <= 1)
+        }
+      }
+    }
+  }
+
   func testAFullScreenSpaceThatShowsTheMenuBarEntersAfterEitherReveal() throws {
     for layer in [18, 19] {
       let label = "layer \(layer)"

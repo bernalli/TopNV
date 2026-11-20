@@ -8,7 +8,12 @@ import TopNVCore
 private final class ReadLog: Sendable {
   private let threads = OSAllocatedUnfairLock(initialState: [Bool]())
 
-  func record() { threads.withLock { $0.append(Thread.isMainThread) } }
+  func record() -> Int {
+    threads.withLock { recorded in
+      recorded.append(Thread.isMainThread)
+      return recorded.count
+    }
+  }
 
   var onMain: [Bool] { threads.withLock { $0 } }
 }
@@ -18,13 +23,13 @@ final class BarSamplerTests: XCTestCase {
   private let menu = MenuBarEvidence.Window(owner: .windowServer, layer: 24,
                                             bounds: CGRect(x: 0, y: 949, width: 1512, height: 33))
 
-  private func sampler(_ log: ReadLog, gate: DispatchSemaphore? = nil, signalTime: Double = 42) -> BarSampler {
+  private func sampler(_ log: ReadLog, gate: DispatchSemaphore? = nil, signalTime: Double? = nil) -> BarSampler {
     let menu = menu
     return BarSampler(reader: { _ in
       // Bounded, so that a read on the main thread fails the test instead of hanging it.
       _ = gate?.wait(timeout: .now() + 1)
-      log.record()
-      return WindowListRead(windows: [menu], signalTime: signalTime, uptime: 7)
+      let readCount = log.record()
+      return WindowListRead(windows: [menu], signalTime: signalTime ?? Double(readCount), uptime: 7)
     })
   }
 
@@ -49,13 +54,13 @@ final class BarSamplerTests: XCTestCase {
     XCTAssertEqual(samples.first?.windows?.count, 1)
   }
 
-  func testOneReadIsInFlightAtATime() {
+  func testRequestsDuringOneReadAreCoalescedIntoOneRecoveryRead() {
     _ = NSApplication.shared
     let log = ReadLog()
     let gate = DispatchSemaphore(value: 0)
     let sampler = sampler(log, gate: gate)
-    let delivered = expectation(description: "one sample delivered")
-    delivered.assertForOverFulfill = false
+    let delivered = expectation(description: "original and recovery samples delivered")
+    delivered.expectedFulfillmentCount = 2
     var count = 0
     sampler.onSample = {
       count += 1
@@ -67,10 +72,10 @@ final class BarSamplerTests: XCTestCase {
     sampler.requestSample()
     XCTAssertEqual(count, 0, "A request never blocks the main thread on the read")
     gate.signal()
+    gate.signal()
     wait(for: [delivered], timeout: 2)
-    RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
-    XCTAssertEqual(count, 1)
-    XCTAssertEqual(log.onMain, [false])
+    XCTAssertEqual(count, 2)
+    XCTAssertEqual(log.onMain, [false, false])
   }
 
   func testAReadThatStartedBeforeASpaceOrScreenEventIsDiscarded() {
@@ -146,13 +151,13 @@ private final class DiscardRecorder: BarSampling {
 }
 
 @MainActor
-private final class NoParts: BarPartExecuting {
+final class NoParts: BarPartExecuting {
   func apply(_ plan: BarPlan) -> BarEntries { [:] }
   func closeAll() {}
 }
 
 @MainActor
-private final class NoKeys: BarKeyExecuting {
+final class NoKeys: BarKeyExecuting {
   func apply(_ plan: BarPlan) -> BarEntries { [:] }
   func closeAll() {}
   func activeWindowIDs(display: UInt32) -> [Int] { [] }

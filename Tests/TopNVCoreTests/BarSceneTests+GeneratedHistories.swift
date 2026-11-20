@@ -5,7 +5,7 @@ import XCTest
 extension BarSceneTests {
   private func checkInvariants(_ subject: BarScene, label: String) {
     for (id, entrance) in subject.entrances {
-      XCTAssertEqual(subject.kinds[id], .desktop, label)
+      XCTAssertTrue(subject.entrancePermitted(display: id), label)
       XCTAssertNotNil(subject.bandFrames[id], label)
       XCTAssertTrue(entrance.elapsedMS.isFinite, label)
     }
@@ -22,11 +22,13 @@ extension BarSceneTests {
     // Independent composition of the raw fixture, DesktopReturn and the characterized per-display key.
     for screen in input.displays where scene.keyedActive {
       guard let evidence = resolved[screen.id] else { continue }
+      let followsSurface = evidence.fullScreenBackdrop && scene.entrances[screen.id] == nil
+      let revealed = followsSurface ? evidence.revealLayer != nil : evidence.desktopRevealed
       var reference = before[screen.id] ?? KeyedOverlayState()
       let expected = reference.update(.init(
         activeWindowIDs: input.activeKeyWindows[screen.id] ?? [], appearance: .light, context: evidence.context,
         menuVisible: evidence.menuVisible, enabled: true, now: input.now,
-        desktopRevealed: evidence.desktopRevealed, spaceSliding: evidence.spaceSliding,
+        desktopRevealed: revealed, spaceSliding: evidence.spaceSliding,
         nativeFullScreen: evidence.nativeFullScreen))
       let actual = effects.keyDecisions[screen.id]
       XCTAssertEqual(actual?.close, expected.close, label)
@@ -49,6 +51,11 @@ extension BarSceneTests {
   }
 
   private func windows(_ id: UInt32) -> [Window] {
+    let backdrop = next(3) == 0 ? [background(MenuBarEvidence.fullScreenBackdropLayer, id)] : []
+    return surfaces(id) + backdrop
+  }
+
+  private func surfaces(_ id: UInt32) -> [Window] {
     switch next(10) {
     case 0: return [menu(id), background(18, id)]
     case 1: return [menu(id), background(19, id)]
@@ -83,10 +90,30 @@ extension BarSceneTests {
       }
       let raw = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame, bandFrame: band,
         windows: input.windows, systemFullScreen: input.systemFullScreen, displayFrames: input.displays.map(\.frame))
+      if let previous = history.subject.evidence(display: id), previous.fullScreenBackdrop != raw.fullScreenBackdrop {
+        history.returns[id] = nil
+      }
       resolved[id] = history.returns[id, default: DesktopReturn()].resolve(raw, on: screen.frame,
                                                                          windows: input.windows)
     }
     return resolved
+  }
+
+  private func checkBackdropTransitions(_ previous: BarScene, _ current: BarScene,
+                                        effects: BarSampleEffects, label: String) {
+    for id in current.bandFrames.keys {
+      guard let evidence = current.evidence(display: id), evidence.context != .unknown else { continue }
+      if evidence.fullScreenBackdrop, let layer = evidence.revealLayer, current.entrances[id] == nil {
+        XCTAssertEqual(current.kinds[id], layer == 19 ? .overview : .revealed, label)
+      }
+      guard previous.entranceEvent != .system, let old = previous.evidence(display: id), old.context != .unknown,
+            old.fullScreenBackdrop != evidence.fullScreenBackdrop else { continue }
+      XCTAssertNil(current.entrances[id], label)
+      XCTAssertTrue(effects.entranceEffects.contains(.restore(display: id)), label)
+      for effect in effects.entranceEffects {
+        if case let .surfaceEnded(display, _) = effect { XCTAssertNotEqual(display, id, label) }
+      }
+    }
   }
 
   private func deliverSample(_ history: inout History, now: Double, label: String) {
@@ -99,12 +126,13 @@ extension BarSceneTests {
     }
     let input = sample(unavailable ? nil : local + other, present, now: now, active: active, fullScreen: full,
                        reduced: reduced)
-    let before = history.subject.keyStates
+    let before = history.subject
     let resolved = resolveMirror(&history, input)
     let effects = history.subject.handle(input)
     _ = history.neighbour.handle(sample(unavailable ? nil : local + alternate, present, now: now, active: active,
                                         fullScreen: full, reduced: reduced))
-    checkKeyDecisions(input, resolved: resolved, before: before, scene: history.subject, effects: effects,
+    checkBackdropTransitions(before, history.subject, effects: effects, label: label)
+    checkKeyDecisions(input, resolved: resolved, before: before.keyStates, scene: history.subject, effects: effects,
                       label: label)
     for (id, decision) in effects.keyDecisions.sorted(by: { $0.key < $1.key }) {
       if let reservation = decision.create {

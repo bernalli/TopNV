@@ -2,6 +2,20 @@ import XCTest
 @testable import TopNVCore
 
 final class ReturnTimingTests: XCTestCase {
+  func testDeliveryDelayDoesNotAdvanceTheTrackAtReceipt() {
+    for signal in [0.0, 80, 260, 292] {
+      for delay in [0.0, 10, 35, 70] {
+        let receipt = signal + delay
+        var timing = ReturnTiming()
+        let before = timing.progress(at: receipt)
+        timing.surfaceEnded(at: signal, receivedAt: receipt)
+        XCTAssertEqual(timing.progress(at: receipt), before, accuracy: 0.000_001)
+        XCTAssertGreaterThanOrEqual(timing.progress(at: receipt + 1), before)
+        XCTAssertEqual(timing.progress(at: receipt + 100), 1)
+      }
+    }
+  }
+
   func testEarlySurfaceEndShortensTheRemainingTrackWithoutJumping() {
     var timing = ReturnTiming()
     let before = timing.progress(at: 180)

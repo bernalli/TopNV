@@ -23,7 +23,8 @@ public struct ReturnTiming {
     return from + (1 - from) * AnimationTiming.easeOut.progress(elapsed - tailStart, to: tailMS)
   }
 
-  public mutating func surfaceEnded(at elapsed: Double) {
-    if endSignalMS == nil { endSignalMS = max(0, elapsed) }
+  public mutating func surfaceEnded(at elapsed: Double, receivedAt: Double? = nil) {
+    guard endSignalMS == nil else { return }
+    endSignalMS = max(0, max(elapsed, receivedAt ?? elapsed))
   }
 }
