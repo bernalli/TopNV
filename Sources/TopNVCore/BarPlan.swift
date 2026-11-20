@@ -82,7 +82,8 @@ public enum BarSurface {
     }
     let band = part(bandCell, frame: bandFrame, mask: mask)
     let edgeCell = cell(.edge)
-    let edgeFrame = edgeCell == .visible || edgeCell == .path ? BarGeometry.edge(menuBounds: menu) : nil
+    let edgeFrame = edgeCell == .visible || edgeCell == .path
+      ? BarGeometry.edge(menuBounds: menu, band: bandFrame) : nil
     var edgeMask = BarMask.none
     if edgeCell == .path, let bandFrame, let edgeFrame {
       edgeMask = BarEntranceMask.edge(band: mask, bandFrame: bandFrame, edgeFrame: edgeFrame)

@@ -97,13 +97,11 @@ final class BarTableCharacterizationTests: XCTestCase {
   }
 
   func testEdgeNeedsAPermittedDesktopAndAMeasuredMenu() {
-    // MenuBarEvidence.swift:42-45 anchors the cover to the measured menu, independently of the band.
-    // KeyedOverlayController.swift:260-264 withdraws it when the display is absent.
-    let edge = CGRect(x: menu.bounds.minX, y: menu.bounds.minY - 2, width: menu.bounds.width, height: 2)
+    let edge = CGRect(x: menu.bounds.minX, y: band.minY, width: menu.bounds.width, height: 1)
     for fixture in fixtures {
       let sample = evidence(fixture)
       let kind = BarSceneKind.classify(sample, screenPresent: fixture.present)
-      let frame = kind == .desktop ? BarGeometry.edge(menuBounds: sample?.menuBounds) : nil
+      let frame = kind == .desktop ? BarGeometry.edge(menuBounds: sample?.menuBounds, band: band) : nil
       XCTAssertEqual(frame, fixture.edge ? edge : nil, fixture.name)
     }
   }

@@ -59,6 +59,24 @@ final class BarEntranceMaskTests: XCTestCase {
     }
   }
 
+  func testAnEdgeInsideTheBandShowsExactlyTheBandRowsItCovers() throws {
+    let frame = CGRect(x: 100, y: 100, width: 200, height: 34)
+    for height: CGFloat in [1, 2] {
+      let edge = CGRect(x: 100, y: frame.minY, width: 200, height: height)
+      for grown in stride(from: CGFloat(30), through: 34, by: 0.25) {
+        let source = BarMask.rect(CGRect(x: 0, y: 0, width: 200, height: grown))
+        let bandPath = try XCTUnwrap(BarEntranceMask.path(source, height: frame.height, flipped: true))
+        let mask = BarEntranceMask.edge(band: source, bandFrame: frame, edgeFrame: edge)
+        let edgePath = try XCTUnwrap(BarEntranceMask.path(mask, height: height, flipped: true))
+        for row in stride(from: CGFloat(0.125), to: height, by: 0.25) {
+          XCTAssertEqual(edgePath.contains(CGPoint(x: 100, y: row)),
+                         bandPath.contains(CGPoint(x: 100, y: frame.height - height + row)),
+                         "height=\(height) grown=\(grown) row=\(row)")
+        }
+      }
+    }
+  }
+
   func testTheKeyBackdropExtentIsTheMaskInsideTheBand() {
     let size = CGSize(width: 1512, height: 33)
     let mask = BarEntranceMask.band(elapsedMS: 180, bandSize: size, notchWidth: 150)

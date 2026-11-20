@@ -75,9 +75,12 @@ public enum BarGeometry {
     barRect(frame: display.frame, visibleFrame: display.visibleFrame, safeAreaTop: display.safeAreaTop)
   }
 
-  public static func edge(menuBounds: CGRect?) -> CGRect? {
-    guard let menu = menuBounds else { return nil }
-    return CGRect(x: menu.minX, y: menu.minY - edgeDepth, width: menu.width, height: edgeDepth)
+  public static func edge(menuBounds: CGRect?, band: CGRect?) -> CGRect? {
+    guard let menu = menuBounds, let band else { return nil }
+    let room = menu.minY - band.minY
+    guard room.isFinite, room > 0, menu.minX.isFinite, menu.width.isFinite else { return nil }
+    let height = min(edgeDepth, room)
+    return CGRect(x: menu.minX, y: menu.minY - height, width: menu.width, height: height)
   }
 
   public static func plate(keySize: CGSize, menuHeight: CGFloat, scale: CGFloat) -> BarPlate {

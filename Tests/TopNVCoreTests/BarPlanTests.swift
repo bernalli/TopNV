@@ -60,9 +60,9 @@ final class BarPlanTests: XCTestCase {
     XCTAssertEqual(plan.band.frame, band)
     XCTAssertEqual(plan.key.frame, band)
     XCTAssertEqual(plan.band.pixels, PixelRect(x: 0, y: 0, width: 3024, height: 68))
-    XCTAssertEqual(plan.edge.frame, CGRect(x: -1512, y: 1047, width: 1512, height: 2))
-    XCTAssertEqual(plan.edge.pixels, PixelRect(x: 0, y: 66, width: 3024, height: 4))
-    XCTAssertEqual(plan.blackBottom, 70)
+    XCTAssertEqual(plan.edge.frame, CGRect(x: -1512, y: 1048, width: 1512, height: 1))
+    XCTAssertEqual(plan.edge.pixels, PixelRect(x: 0, y: 66, width: 3024, height: 2))
+    XCTAssertEqual(plan.blackBottom, 68)
     let frames = BarGeometry.corners(display: fixture.display.frame, bandHeight: 34, rounded: true)
     XCTAssertEqual(plan.corners.count, 4)
     for (corner, frame) in frames {

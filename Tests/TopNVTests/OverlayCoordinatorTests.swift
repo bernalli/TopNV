@@ -258,7 +258,7 @@ final class OverlayCoordinatorTests: XCTestCase {
     fixture.samples.windows = [fixture.menu(), fixture.menu(2)]
     fixture.controller.start()
     XCTAssertTrue(fixture.lines.contains {
-      $0.contains("display=1 scene=desktop part=summary") && $0.hasSuffix("blackBottom=70")
+      $0.contains("display=1 scene=desktop part=summary") && $0.hasSuffix("blackBottom=68")
     })
     fixture.keys.active = [1: [101], 2: [102]]
     for (surfaces, kind) in [([fixture.surface(18), fixture.surface(19)], BarSceneKind.revealed),

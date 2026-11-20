@@ -35,17 +35,27 @@ final class BarGeometryTests: XCTestCase {
   func testEdgeStartsAtTheMeasuredMenuBottomAndIsEdgeDepthDeep() {
     XCTAssertEqual(BarGeometry.edgeDepth, 2)
     for scale: CGFloat in [1, 2, 3] {
-      let screen = display(gap: 24, scale: scale, origin: CGPoint(x: -1512, y: 100))
+      let screen = display(gap: 24, safeArea: 38, scale: scale, origin: CGPoint(x: -1512, y: 100))
+      let band = BarGeometry.band(screen)
       let measured = menu(on: screen, depth: 33)
       let window = MenuBarEvidence.Window(owner: .windowServer, layer: Int(CGWindowLevelForKey(.mainMenuWindow)),
                                           bounds: measured)
       let evidence = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame,
-                                              bandFrame: menu(on: screen, depth: 32), windows: [window])
+                                              bandFrame: menu(on: screen, depth: 38), windows: [window])
       XCTAssertEqual(evidence.menuBounds, measured)
-      let edge = BarGeometry.edge(menuBounds: evidence.menuBounds)
+      let edge = BarGeometry.edge(menuBounds: evidence.menuBounds, band: band)
       XCTAssertEqual(BarGeometry.pixels(edge, on: screen),
                      PixelRect(x: 0, y: Int(33 * scale), width: Int(1512 * scale), height: Int(2 * scale)))
     }
+  }
+
+  func testEdgeCoversOnlyTheLastTwoPixelsOfTheRecordedBand() {
+    let screen = display()
+    let band = BarGeometry.band(screen)
+    let edge = BarGeometry.edge(menuBounds: menu(on: screen, depth: 33), band: band)
+    let pixels = BarGeometry.pixels(edge, on: screen)
+    XCTAssertEqual(pixels, PixelRect(x: 0, y: 66, width: 3024, height: 2))
+    XCTAssertEqual(BarGeometry.blackBottom(band: BarGeometry.pixels(band, on: screen), edge: pixels), 68)
   }
 
   func testNoEdgeWithoutAMeasuredMenu() {
@@ -53,9 +63,18 @@ final class BarGeometryTests: XCTestCase {
     let evidence = MenuBarEvidence.evaluate(frame: screen.frame, visibleFrame: screen.visibleFrame,
                                             bandFrame: menu(on: screen, depth: 34), windows: [])
     XCTAssertNil(evidence.menuBounds)
-    let edge = BarGeometry.edge(menuBounds: evidence.menuBounds)
+    let edge = BarGeometry.edge(menuBounds: evidence.menuBounds, band: BarGeometry.band(screen))
     XCTAssertNil(edge)
     XCTAssertNil(BarGeometry.pixels(edge, on: screen))
+  }
+
+  func testNoEdgeFromNonFiniteGeometry() {
+    let band = CGRect(x: 0, y: 948, width: 1512, height: 34)
+    for value in [CGFloat.nan, .infinity, -.infinity] {
+      XCTAssertNil(BarGeometry.edge(menuBounds: CGRect(x: 0, y: value, width: 1512, height: 33), band: band))
+      XCTAssertNil(BarGeometry.edge(menuBounds: CGRect(x: 0, y: 949, width: 1512, height: 33),
+                                    band: CGRect(x: 0, y: value, width: 1512, height: 34)))
+    }
   }
 
   func testPlateKeepsTheGlyphRowsFree() {
@@ -113,12 +132,20 @@ final class BarGeometryTests: XCTestCase {
     let corners = BarGeometry.corners(display: screen.frame, bandHeight: band?.height, rounded: true)
     XCTAssertEqual(corners.count, 4)
     let midway = (gap + (band?.height ?? gap)) / 2
-    for depth: CGFloat? in [nil, gap, midway] {
+    for depth: CGFloat? in [nil, gap, midway, band?.height, band.map { $0.height + 3 }] {
       let measured = depth.map { menu(on: screen, depth: $0) }
-      let edge = BarGeometry.edge(menuBounds: measured)
+      let edge = BarGeometry.edge(menuBounds: measured, band: band)
       let context = "scale=\(screen.scale) gap=\(gap) safeArea=\(screen.safeAreaTop) " +
         "origin=\(screen.frame.origin) depth=\(String(describing: depth))"
-      XCTAssertEqual(edge != nil, measured != nil, context)
+      if let depth, let band, depth < band.height {
+        let frame = try XCTUnwrap(edge, context)
+        XCTAssertGreaterThanOrEqual(frame.minY, band.minY, context)
+        for corner in [ScreenCorner.topLeft, .topRight] {
+          XCTAssertGreaterThanOrEqual(frame.minY, try XCTUnwrap(corners[corner], context).maxY, context)
+        }
+      } else {
+        XCTAssertNil(edge, context)
+      }
       for rect in Array(corners.values) + [band, edge].compactMap({ $0 }) {
         let pixels = try XCTUnwrap(BarGeometry.pixels(rect, on: screen), context)
         XCTAssertGreaterThanOrEqual(pixels.x, 0, context)
@@ -127,12 +154,12 @@ final class BarGeometryTests: XCTestCase {
         XCTAssertLessThanOrEqual(pixels.bottom, Int(screen.frame.height * screen.scale), context)
       }
 
-      // On a display without a notch both the band and its edge are closed.
       let bandPixels = BarGeometry.pixels(band, on: screen)
-      let edgePixels = screen.safeAreaTop > 0 ? BarGeometry.pixels(edge, on: screen) : nil
+      let edgePixels = BarGeometry.pixels(edge, on: screen)
       let strips = [bandPixels, edgePixels].compactMap { $0 }
       let rows = Set(strips.flatMap { Array($0.y..<$0.bottom) })
       let bottom = BarGeometry.blackBottom(band: bandPixels, edge: edgePixels)
+      XCTAssertEqual(bottom, bandPixels?.bottom ?? 0, context)
       XCTAssertEqual(rows, Set(0..<bottom), context)
     }
   }
@@ -140,12 +167,13 @@ final class BarGeometryTests: XCTestCase {
   func testAMenuDeeperThanTheBandLeavesRowsToTheMenuSurface() throws {
     let screen = display()
     let measured = menu(on: screen, depth: 37)
-    let band = try XCTUnwrap(BarGeometry.pixels(BarGeometry.band(screen), on: screen))
-    let edge = try XCTUnwrap(BarGeometry.pixels(BarGeometry.edge(menuBounds: measured), on: screen))
+    let band = BarGeometry.band(screen)
+    let edge = BarGeometry.edge(menuBounds: measured, band: band)
+    XCTAssertNil(edge)
+    let bandPixels = BarGeometry.pixels(band, on: screen)
     let menuPixels = try XCTUnwrap(BarGeometry.pixels(measured, on: screen))
-    let bottom = BarGeometry.blackBottom(band: band, edge: edge)
-    let uncovered = Set(0..<bottom).subtracting(band.y..<band.bottom).subtracting(edge.y..<edge.bottom)
-    XCTAssertEqual(uncovered, Set(68..<74))
-    XCTAssertTrue(uncovered.isSubset(of: Set(menuPixels.y..<menuPixels.bottom)))
+    let bottom = BarGeometry.blackBottom(band: bandPixels, edge: BarGeometry.pixels(edge, on: screen))
+    XCTAssertEqual(bottom, 68)
+    XCTAssertEqual(menuPixels.bottom, 74)
   }
 }
