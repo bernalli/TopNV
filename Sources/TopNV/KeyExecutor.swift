@@ -19,6 +19,7 @@ final class KeyExecutor: BarKeyExecuting {
   }
 
   private static let logger = Logger(subsystem: "TopNV", category: "KeyedOverlay")
+  private let lamp: KeyLamp
   private let runtime: KeyBackdropRuntime
   private let schedule: Schedule
   private let makeWindow: MakeWindow
@@ -29,7 +30,7 @@ final class KeyExecutor: BarKeyExecuting {
   private var entries: [Int: Entry] = [:]
   private(set) var failed = false
 
-  init(runtime: KeyBackdropRuntime = PrivateBackdropRuntime(),
+  init(runtime: KeyBackdropRuntime = PrivateBackdropRuntime(), lamp: KeyLamp? = nil,
        schedule: @escaping Schedule = { delay, run in
          DispatchQueue.main.asyncAfter(deadline: .now() + delay) { run() }
        },
@@ -40,6 +41,7 @@ final class KeyExecutor: BarKeyExecuting {
        },
        keyCommitted: @escaping (BarKeyCreation, Int, UInt32) -> Bool, keyClosed: @escaping (Int, UInt32) -> Void,
        keyDidFail: @escaping () -> Void, stopAppearanceMonitor: @escaping () -> Void) {
+    self.lamp = lamp ?? KeyLamp(enabled: { RelativeMenuBarKey.shared.lampEnabled })
     self.runtime = runtime
     self.schedule = schedule
     self.makeWindow = makeWindow
@@ -95,8 +97,23 @@ final class KeyExecutor: BarKeyExecuting {
         present(key, on: entry)
         if let gate = key.gates[number] { entry.window.applyAlpha(gate) }
       }
+      applyLamp(part, on: display)
     }
     if let creation = key.create { try create(creation, on: display, plan: part) }
+  }
+
+  private func applyLamp(_ plan: BarDisplayPlan, on display: UInt32) {
+    guard lamp.enabled(), plan.kind == .desktop, plan.appearance == .light else {
+      lamp.close(display)
+      return
+    }
+    // Other Spaces can retain an open gate. Only the current Space can light the shared band.
+    let active = activeWindowIDs(display: display).first
+    guard let owner = active ?? entries.first(where: { $0.value.display == display })?.key else {
+      lamp.close(display)
+      return
+    }
+    lamp.apply(plan, display: display, owner: owner, alpha: active.flatMap { entries[$0]?.window.alphaValue } ?? 0)
   }
 
   private func present(_ key: BarKeyPlan, on entry: Entry) {
@@ -153,6 +170,7 @@ final class KeyExecutor: BarKeyExecuting {
     window.orderFrontRegardless()
     window.displayIfNeeded()
     try runtime.flush()
+    if lamp.enabled() { applyBarPresentation { applyLamp(plan, on: display) } }
     for delay in [0.25, 1.0] {
       schedule(delay) { [weak self, weak window] in
         guard let self, !self.failed, let window, let current = self.entries[id],
@@ -187,7 +205,10 @@ final class KeyExecutor: BarKeyExecuting {
 
   private func close(_ id: Int) {
     guard let entry = entries.removeValue(forKey: id) else { return }
-    applyBarPresentation { entry.window.alphaValue = 0 }
+    applyBarPresentation {
+      entry.window.alphaValue = 0
+      lamp.close(entry.display, owner: id)
+    }
     func finishClose() {
       entry.window.close()
       keyClosed(id, entry.display)

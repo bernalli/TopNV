@@ -31,6 +31,7 @@ public struct BarKeyPlan: Equatable, Sendable {
 public struct BarDisplayPlan: Equatable, Sendable {
   /// The sample used for pixel conversion and the backing scale of a newly created key.
   public let geometry: BarDisplay?
+  public let appearance: KeyedOverlayState.Appearance
   public let kind: BarSceneKind
   public let bandEnabled: Bool
   public let band: BarPartPlan
@@ -104,7 +105,8 @@ public enum BarSurface {
         corners[corner] = part(cornerCell, frame: frame)
       }
     }
-    return BarDisplayPlan(geometry: display, kind: kind, bandEnabled: bandEnabled, band: band, edge: edge, key: key,
+    return BarDisplayPlan(geometry: display, appearance: scene.appearances[id] ?? .unknown, kind: kind,
+                          bandEnabled: bandEnabled, band: band, edge: edge, key: key,
                           corners: corners, blackBottom: BarGeometry.blackBottom(band: band.solidPixels,
                                                                                 edge: edge.solidPixels))
   }

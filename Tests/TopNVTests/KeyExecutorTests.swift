@@ -4,7 +4,7 @@ import XCTest
 @testable import TopNVCore
 
 @MainActor
-private final class RecordingRuntime: KeyBackdropRuntime {
+final class RecordingRuntime: KeyBackdropRuntime {
   enum Operation: String, Error, CaseIterable { case create, attach, flush, recommit, detach }
   var fail: Operation?
   var calls: [String] = []
@@ -48,6 +48,8 @@ private final class RecordingRuntime: KeyBackdropRuntime {
 
 @MainActor
 private final class RecordingWindow: OverlayWindow {
+  var active = true
+  override var isOnActiveSpace: Bool { active }
   var record: ((String) -> Void)?
   override func orderFrontRegardless() {
     record?("order")
@@ -61,7 +63,7 @@ private final class RecordingWindow: OverlayWindow {
 }
 
 @MainActor
-private final class KeyHarness {
+final class KeyHarness {
   let runtime = RecordingRuntime()
   var jobs: [(delay: Double, run: @MainActor () -> Void)] = []
   var windows: [OverlayWindow] = []
@@ -69,10 +71,16 @@ private final class KeyHarness {
   var closed: [Int] = []
   var failureCount = 0
   var monitorStops = 0
+  var lampEnabled = false
+  var lampLines: [String] = []
+  lazy var lamp = KeyLamp(enabled: { [unowned self] in lampEnabled }, log: { [unowned self] in
+    XCTAssertTrue(CATransaction.disableActions())
+    lampLines.append($0)
+  })
   var nextID = 10
   var accept: (BarKeyCreation, Int, UInt32) -> Bool = { _, _, _ in true }
 
-  lazy var executor = KeyExecutor(runtime: runtime, schedule: { [unowned self] delay, run in
+  lazy var executor = KeyExecutor(runtime: runtime, lamp: lamp, schedule: { [unowned self] delay, run in
     jobs.append((delay, run))
   }, makeWindow: { [unowned self] frame in
     let window = RecordingWindow(frame: frame, level: .init(rawValue: 26), isOpaque: false,
@@ -92,6 +100,8 @@ private final class KeyHarness {
   stopAppearanceMonitor: { [unowned self] in monitorStops += 1 })
 
   init() { _ = NSApplication.shared }
+
+  func leaveSpace(_ index: Int) { (windows[index] as? RecordingWindow)?.active = false }
 
   func creation() throws -> BarKeyCreation {
     var state = KeyedOverlayState()

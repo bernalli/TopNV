@@ -90,6 +90,7 @@ public struct BarScene {
   private var lastKeyTrace: [UInt32: String] = [:]
   private var spaceUptime = Double.nan
   private var reduceMotion = false
+  private(set) var appearances: [UInt32: KeyedOverlayState.Appearance] = [:]
 
   // Completion of the presentation (including a timeout) may precede the first end signal.
   private var awaitingSurfaceEnd: Set<UInt32> = []
@@ -171,6 +172,7 @@ public struct BarScene {
     latestEvidence.removeAll()
     visibility.removeAll()
     kinds.removeAll()
+    appearances = sample.appearance
     reduceMotion = sample.reduceMotion
     for id in cornerDisplays.union(bands.frames.keys).sorted() {
       guard let display = displays[id] else {

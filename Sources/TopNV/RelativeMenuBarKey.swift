@@ -22,6 +22,9 @@ import os
   }
 
   private let entries = NSMapTable<CALayer, Entry>.weakToStrongObjects()
+  private let isTestCopy: Bool
+  private(set) var lampEnabled = false
+  private var usesRelativeKey: Bool { enabled || lampEnabled }
   private let sink: ((String) -> Void)?
   private(set) var available: Bool
   private(set) var enabled = false
@@ -29,6 +32,7 @@ import os
   /// - Parameter sink: receives the lines of the log in place of the system log.
   init(isTestCopy: Bool, log sink: ((String) -> Void)? = nil) {
     // Production makes none of the sampling calls, keeps the ordinary key and logs nothing.
+    self.isTestCopy = isTestCopy
     available = isTestCopy && Self.probe()
     self.sink = sink
     if isTestCopy { log("Relative key available=\(available)") }
@@ -53,6 +57,16 @@ import os
     guard available else { return }
     enabled.toggle()
     log("Relative key enabled=\(enabled)")
+    updateFilters()
+  }
+
+  func toggleLamp() {
+    guard isTestCopy else { return }
+    lampEnabled.toggle()
+    updateFilters()
+  }
+
+  private func updateFilters() {
     for entry in liveEntries where !apply(entry) {
       fallBack("a backdrop rejected its filter")
       return
@@ -70,14 +84,14 @@ import os
       let key = LuminanceKey.forBackdrop(backgroundLuma: luma, relativeEnabled: true)
       let numbers = [luma, key.whitePoint, key.blackPoint].map { String(format: "%.3f", $0) }
       let width = String(format: "%.0f", Double(layer.bounds.width))
-      log("Sample \(numbers[0]) over \(width) pt, enabled=\(enabled), "
+      log("Sample \(numbers[0]) over \(width) pt, enabled=\(usesRelativeKey), "
             + "relative key white to \(numbers[1]), black from \(numbers[2])")
     }
     if !apply(entry) { fallBack("a backdrop rejected its filter") }
   }
 
   private func apply(_ entry: Entry) -> Bool {
-    let matrix = LuminanceKey.forBackdrop(backgroundLuma: entry.background, relativeEnabled: enabled).matrix
+    let matrix = LuminanceKey.forBackdrop(backgroundLuma: entry.background, relativeEnabled: usesRelativeKey).matrix
     guard entry.applied != matrix else { return true }
     let applied = matrix == LuminanceKey.normal.matrix
       ? entry.source.applyMatrix(nil, count: 0)

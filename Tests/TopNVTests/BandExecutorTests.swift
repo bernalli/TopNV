@@ -23,8 +23,11 @@ enum ExecutorPlans {
   }
 
   static func display(band: BarPartPlan = part(), edge: BarPartPlan = part(), key: BarKeyPlan = ExecutorPlans.key(),
-                      corners: [ScreenCorner: BarPartPlan] = [:], geometry: BarDisplay? = screen) -> BarDisplayPlan {
-    BarDisplayPlan(geometry: geometry, kind: geometry == nil ? .absent : .desktop, bandEnabled: band.exists,
+                      corners: [ScreenCorner: BarPartPlan] = [:], geometry: BarDisplay? = screen,
+                      appearance: KeyedOverlayState.Appearance = .light,
+                      kind: BarSceneKind = .desktop) -> BarDisplayPlan {
+    BarDisplayPlan(geometry: geometry, appearance: appearance, kind: geometry == nil ? .absent : kind,
+                   bandEnabled: band.exists,
                    band: band, edge: edge, key: key, corners: corners, blackBottom: 0)
   }
 

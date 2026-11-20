@@ -29,13 +29,14 @@ final class StatusMenuControllerTests: XCTestCase {
     let settings: AppSettings
   }
 
-  private func makeController(updates: UpdateMenuModel? = nil, isTestCopy: Bool = false) -> Fixture {
+  private func makeController(updates: UpdateMenuModel? = nil, isTestCopy: Bool = false,
+                              relativeKey: RelativeMenuBarKey? = nil) -> Fixture {
     let settings = AppSettings(defaults: defaults)
     let visibility = MenuVisibility(
       defaults: defaults, key: AppSettings.showMenuBarIconKey, schedule: { $0() })
     let controller = StatusMenuController(
       settings: settings, loginItem: LoginItem(), updates: updates ?? UpdateMenuModel(updater: nil),
-      visibility: visibility, isTestCopy: isTestCopy)
+      visibility: visibility, isTestCopy: isTestCopy, relativeKey: relativeKey)
     self.controller = controller
     return Fixture(controller: controller, visibility: visibility, settings: settings)
   }
@@ -62,6 +63,33 @@ final class StatusMenuControllerTests: XCTestCase {
     testCopy.settings.hideNotch = false
     testCopy.controller.perform(.previewCalm)
     XCTAssertEqual(previews, 2)
+  }
+
+  func testOnlyTheTestMenuOffersTheLampNextToTheRelativeKey() throws {
+    let production = makeController().controller
+    var changes = 0
+    production.onLampChanged = { changes += 1 }
+    XCTAssertNil(production.menu.item(withTitle: "Lamp under key (test)"))
+    production.perform(.lampUnderKey)
+    XCTAssertEqual(changes, 0)
+    NSStatusBar.system.removeStatusItem(production.statusItem)
+
+    let key = RelativeMenuBarKey(isTestCopy: true)
+    let testCopy = makeController(isTestCopy: true, relativeKey: key).controller
+    testCopy.onLampChanged = { changes += 1 }
+    let titles = testCopy.menu.items.map(\.title)
+    let index = try XCTUnwrap(titles.firstIndex(of: "Relative key (test)"))
+    XCTAssertEqual(titles.dropFirst(index + 1).first, "Lamp under key (test)")
+    let lamp = try XCTUnwrap(testCopy.menu.item(withTitle: "Lamp under key (test)"))
+    XCTAssertEqual(lamp.state, .off)
+    testCopy.perform(.lampUnderKey)
+    XCTAssertTrue(key.lampEnabled)
+    XCTAssertFalse(key.enabled)
+    XCTAssertEqual(lamp.state, .on)
+    testCopy.perform(.lampUnderKey)
+    XCTAssertFalse(key.lampEnabled)
+    XCTAssertEqual(lamp.state, .off)
+    XCTAssertEqual(changes, 2)
   }
 
   func testTheStatusItemCanBeRemovedByTheUserAndShowsTheMenu() {

@@ -55,6 +55,7 @@ final class BarPlanTests: XCTestCase {
     let fixture = BarPlanFixture()
     let plan = try XCTUnwrap(fixture.plan())
     XCTAssertEqual(plan.kind, .desktop)
+    XCTAssertEqual(plan.appearance, .light)
     XCTAssertTrue(plan.bandEnabled)
     let band = CGRect(x: -1512, y: 1048, width: 1512, height: 34)
     XCTAssertEqual(plan.band.frame, band)
@@ -145,6 +146,7 @@ final class BarPlanTests: XCTestCase {
     let fixture = BarPlanFixture(active: [7], appearance: .dark)
     for time in [-600.0, 180, 570] {
       let plan = try XCTUnwrap(fixture.plan(elapsedMS: time))
+      XCTAssertEqual(plan.appearance, .dark)
       let band = try XCTUnwrap(plan.band.frame), edge = try XCTUnwrap(plan.edge.frame)
       let mask = BarEntranceMask.band(elapsedMS: time, bandSize: band.size, notchWidth: 180)
       XCTAssertEqual(plan.band.mask, mask)

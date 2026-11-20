@@ -19,8 +19,9 @@ import TopNVCore
   private var subscriptions: Set<AnyCancellable> = []
   private var visibilityObservation: NSKeyValueObservation?
   private var refreshScheduled = false
+  var onLampChanged: (() -> Void)?
   var onEntrancePreview: (() -> Void)?
-  private let relativeKey = RelativeMenuBarKey.shared
+  private let relativeKey: RelativeMenuBarKey
   private let isTestCopy: Bool
 
   private static let icon: NSImage? = {
@@ -34,8 +35,9 @@ import TopNVCore
 
   init(
     settings: AppSettings, loginItem: LoginItem, updates: UpdateMenuModel,
-    visibility: MenuVisibility, isTestCopy: Bool = false
+    visibility: MenuVisibility, isTestCopy: Bool = false, relativeKey: RelativeMenuBarKey? = nil
   ) {
+    self.relativeKey = relativeKey ?? .shared
     self.isTestCopy = isTestCopy
     self.settings = settings
     self.loginItem = loginItem
@@ -88,6 +90,7 @@ import TopNVCore
     refreshScheduled = false
     var rows = MenuLayout.rows(for: state)
     if isTestCopy, let index = rows.firstIndex(where: { $0.id == "separator.app" }) {
+      rows.insert(.lampUnderKey(enabled: relativeKey.lampEnabled), at: index)
       rows.insert(.relativeKey(available: relativeKey.available, enabled: relativeKey.enabled), at: index)
     }
     renderer?.apply(rows, to: menu)
@@ -121,6 +124,11 @@ import TopNVCore
     case .previewCalm:
       guard isTestCopy, settings.hideNotch else { return }
       onEntrancePreview?()
+    case .lampUnderKey:
+      guard isTestCopy else { return }
+      relativeKey.toggleLamp()
+      onLampChanged?()
+      refresh()
     case .relativeKey:
       guard isTestCopy else { return }
       relativeKey.toggle()

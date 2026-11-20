@@ -44,10 +44,13 @@ extension OverlayWindow {
 final class BarStripView: NSView {
   private let shape = CAShapeLayer()
 
-  init(in window: OverlayWindow) {
+  private let color: NSColor
+
+  init(in window: OverlayWindow, color: NSColor = .black) {
+    self.color = color
     super.init(frame: CGRect(origin: .zero, size: window.frame.size))
     wantsLayer = true
-    shape.fillColor = NSColor.black.cgColor
+    shape.fillColor = color.cgColor
     layer?.addSublayer(shape)
     window.contentView = self
   }
@@ -59,7 +62,7 @@ final class BarStripView: NSView {
     let opaque = mask == .none
     if window.isOpaque != opaque {
       window.isOpaque = opaque
-      window.backgroundColor = opaque ? .black : .clear
+      window.backgroundColor = opaque ? color : .clear
     }
     guard let root = layer else { return }
     let bounds = CGRect(origin: .zero, size: window.frame.size)

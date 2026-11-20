@@ -28,6 +28,8 @@ import XCTest
     let ordinary = try XCTUnwrap(layer.filters?.first as? NSObject)
     key.observe(layer)
     key.toggle()
+    key.toggleLamp()
+    XCTAssertFalse(key.lampEnabled)
     XCTAssertFalse(key.available)
     XCTAssertFalse(key.enabled)
     XCTAssertNil(layer.delegate)
@@ -96,6 +98,34 @@ import XCTest
     reader.backdropLayer(left, didSampleProtectedLuma: true)
     await drainSamples()
     XCTAssertTrue(left.filters?.first as? NSObject === ordinary)
+  }
+
+  func testLampUsesSampleIndependentlyOfTheRelativeKeySwitch() async throws {
+    let key = RelativeMenuBarKey(isTestCopy: true)
+    XCTAssertFalse(key.lampEnabled)
+    guard key.available else { throw XCTSkip("Sampled backdrops unavailable on this system") }
+    let layer = try makeLayer()
+    key.observe(layer)
+    let reader = try XCTUnwrap(layer.delegate as? KOSampledBackdrop)
+    key.toggleLamp()
+    XCTAssertFalse(key.enabled)
+    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
+    reader.backdropLayer(layer, didChangeLuma: 0.875)
+    await drainSamples()
+    let relative = LuminanceKey.forBackdrop(backgroundLuma: 0.875, relativeEnabled: true).matrix
+    XCTAssertEqual(matrix(layer), relative)
+    key.toggleLamp()
+    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
+    key.toggle()
+    key.toggleLamp()
+    key.toggleLamp()
+    XCTAssertTrue(key.enabled)
+    XCTAssertEqual(matrix(layer), relative)
+    key.toggleLamp()
+    key.toggle()
+    reader.backdropLayer(layer, didSampleProtectedLuma: true)
+    await drainSamples()
+    XCTAssertEqual(matrix(layer), LuminanceKey.normal.matrix)
   }
 
   private func makeLayer() throws -> CALayer {
