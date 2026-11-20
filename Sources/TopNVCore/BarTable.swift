@@ -11,6 +11,10 @@ public enum BarCell: Equatable, Sendable {
 /// edge    | measured: visible or path | hidden   | hidden    | hidden     | hidden  | hidden  | hidden
 /// corner  | visible (entrance: fade)  | hidden   | hidden    | visible    | visible | visible | hold
 ///
+/// An entrance changes the cells only while the latest sample permits it. A desktop always does.
+/// A full-screen Space that shows the menu bar does too: band and key then take the path and the
+/// corners fade, as on a desktop, while its edge stays hidden. Any other scene shows its own row.
+///
 /// An unmeasured desktop edge is hidden. Overview retains the system window behavior.
 /// A disabled band closes band, key, plate and edge. Unwanted corners close independently.
 /// A failed key closes the key, lamp and plate. Key commands always come from the scene's
@@ -21,8 +25,8 @@ public enum BarTable {
   // The public table takes one argument for each independent input.
   // swiftlint:disable:next function_parameter_count
   public static func cell(_ part: BarPart, kind: BarSceneKind, bandEnabled: Bool, cornersWanted: Bool,
-                          keyFailed: Bool, menuMeasured: Bool, entrance: Bool) -> BarCell {
-    let entering = entrance && bandEnabled && kind == .desktop
+                          keyFailed: Bool, menuMeasured: Bool, entrance: Bool, entrancePermitted: Bool) -> BarCell {
+    let entering = entrance && bandEnabled && entrancePermitted
     switch part {
     case .key, .plate, .lamp:
       guard bandEnabled, !keyFailed else { return .closed }

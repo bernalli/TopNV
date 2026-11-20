@@ -53,10 +53,15 @@ public enum MenuBarEvidence {
     /// the Space that leaves with the Space that arrives.
     public let spaceSliding: Bool
     /// At rest a native full-screen Space has a WindowManager backdrop one level above
-    /// the desktop level. This signal is local to the display.
+    /// the desktop level. This signal is local to the display. Measured on 19 and 20 November:
+    /// when the full-screen Space shows the menu bar, it also reserves the top of the display and
+    /// lists the menu surface, exactly like a desktop. The backdrop then decides the scene only.
     public let fullScreenBackdrop: Bool
-    /// The base band can animate on an ordinary desktop even when the key is gated off.
+    /// The base band can animate on an ordinary desktop even when the key is gated off, and on a
+    /// full-screen Space that shows the menu bar.
     let permitsBandEntrance: Bool
+    /// An ordinary desktop: the scene that `BarSceneKind` calls `.desktop` when nothing is revealed.
+    public var desktopScene: Bool { permitsBandEntrance && !fullScreenBackdrop }
   }
 
   /// Converts the dictionaries of `CGWindowListCopyWindowInfo`. Window titles are never read.
@@ -121,9 +126,15 @@ public enum MenuBarEvidence {
   /// A Window Server window along the top edge, as wide as the band.
   /// The system layer can vary between macOS versions.
   public static func menuSurface(in windows: [Window], bandFrame: CGRect, preferredLayer: Int? = nil) -> Window? {
+    menuSurface(in: windows, bandFrame: bandFrame, preferredLayer: preferredLayer, visibleOnly: false)
+  }
+
+  private static func menuSurface(in windows: [Window], bandFrame: CGRect, preferredLayer: Int? = nil,
+                                  visibleOnly: Bool) -> Window? {
     let tolerance: CGFloat = 2
     let matches = windows.lazy.filter {
       $0.owner == .windowServer && $0.layer >= 0 && valid($0.bounds)
+        && (!visibleOnly || ($0.alpha > 0 && $0.alpha <= 1))
         && $0.bounds.minX <= bandFrame.minX + tolerance
         && $0.bounds.maxX >= bandFrame.maxX - tolerance
         && abs($0.bounds.maxY - bandFrame.maxY) <= tolerance
@@ -178,8 +189,21 @@ public enum MenuBarEvidence {
     let backdrop = fullScreenBackdrop(frame: frame, windows: windows, tolerance)
     let fullScreenApp = nativeFullScreen || coveringApp
     let autoHiddenMenu = noReservedTop && autoHiddenDesktop(frame, windows, displayFrames, systemFullScreen, tolerance)
-    let reservedMenu = !noReservedTop && (menuVisible || (revealSurface != nil && !systemFullScreen))
-    let permitsBandEntrance = !fullScreenApp && !backdrop && !spaceSliding && (reservedMenu || autoHiddenMenu)
+    // With the backdrop, a full-screen Space shows its menu bar only when the menu surface is
+    // listed (all 151 logged reveals list it). A top that is not reserved stays a veto.
+    let listedMenu = menuVisible
+      && (!backdrop || menuSurface(in: windows, bandFrame: bandFrame, visibleOnly: true) != nil)
+    let reservedMenu = !noReservedTop
+      && (listedMenu || (revealSurface != nil && !systemFullScreen && !backdrop))
+    let permitsBandEntrance = !fullScreenApp && !spaceSliding && (reservedMenu || (autoHiddenMenu && !backdrop))
+    return Result(visibleMenuBounds: visibleMenuBounds(in: windows, frame: frame, bandFrame: bandFrame),
+                  context: fullScreenApp || noReservedTop ? .fullScreen : .desktop,
+                  nativeFullScreen: nativeFullScreen,
+                  menuVisible: menuVisible, revealSurface: revealSurface,
+                  spaceSliding: spaceSliding, fullScreenBackdrop: backdrop, permitsBandEntrance: permitsBandEntrance)
+  }
+
+  private static func visibleMenuBounds(in windows: [Window], frame: CGRect, bandFrame: CGRect) -> CGRect? {
     // A transition can list several menu surfaces. The cover starts below their lowest edge.
     // Prefer stationary surfaces at the system menu level when that level is present.
     let menuLayer = Int(CGWindowLevelForKey(.mainMenuWindow))
@@ -191,12 +215,8 @@ public enum MenuBarEvidence {
         && $0.bounds.height <= bandFrame.height * 2
     }
     let lowerEdge: (Window, Window) -> Bool = { $0.bounds.minY < $1.bounds.minY }
-    let bounds = (candidates.filter { $0.layer == menuLayer }.min(by: lowerEdge)
+    return (candidates.filter { $0.layer == menuLayer }.min(by: lowerEdge)
       ?? candidates.min(by: lowerEdge))?.bounds
-    return Result(visibleMenuBounds: bounds, context: fullScreenApp || noReservedTop ? .fullScreen : .desktop,
-                  nativeFullScreen: nativeFullScreen,
-                  menuVisible: menuVisible, revealSurface: revealSurface,
-                  spaceSliding: spaceSliding, fullScreenBackdrop: backdrop, permitsBandEntrance: permitsBandEntrance)
   }
 
   private static func revealSurface(in windows: [Window], frame: CGRect, tolerance: CGFloat) -> Window? {

@@ -10,6 +10,6 @@ public enum BarSceneKind: String, CaseIterable, Sendable {
       return evidence.revealLayer == overviewLayer ? .overview : .revealed
     }
     if evidence.spaceSliding { return .sliding }
-    return BandEntrance.Sample(evidence) == .desktop ? .desktop : .fullScreen
+    return evidence.desktopScene ? .desktop : .fullScreen
   }
 }

@@ -14,7 +14,7 @@ final class BarTableTests: XCTestCase {
 
     func cell(_ part: BarPart, kind: BarSceneKind) -> BarCell {
       BarTable.cell(part, kind: kind, bandEnabled: band, cornersWanted: corners,
-                    keyFailed: failed, menuMeasured: menu, entrance: entrance)
+                    keyFailed: failed, menuMeasured: menu, entrance: entrance, entrancePermitted: kind == .desktop)
     }
 
     func fixture(_ kind: BarSceneKind) -> BarPlanFixture {
@@ -76,6 +76,33 @@ final class BarTableTests: XCTestCase {
           case .value(let value): XCTAssertTrue(value == 0 || value == 1, "\(kind): \(value)")
           case .hold: XCTAssertEqual(kind, .absent)
           }
+        }
+      }
+    }
+  }
+
+  func testFullScreenPermissionMasksOnlyThePartsOfAnActiveEntrance() {
+    let parts: [BarPart] = [.band, .key, .plate, .lamp, .edge]
+      + ScreenCorner.allCases.map { .corner($0) }
+    for bits in 0..<32 {
+      let inputs = Inputs(bits: bits)
+      for permitted in [false, true] {
+        for part in parts {
+          let regular = inputs.cell(part, kind: .fullScreen)
+          var expected = regular
+          if permitted && inputs.band && inputs.entrance {
+            switch part {
+            case .band: expected = .path
+            case .key, .plate, .lamp: expected = inputs.failed ? .closed : .path
+            case .corner: expected = inputs.corners ? .fade : .closed
+            case .edge: expected = .hidden
+            }
+          }
+          let actual = BarTable.cell(
+            part, kind: .fullScreen, bandEnabled: inputs.band, cornersWanted: inputs.corners,
+            keyFailed: inputs.failed, menuMeasured: inputs.menu, entrance: inputs.entrance,
+            entrancePermitted: permitted)
+          XCTAssertEqual(actual, expected, "\(part) flags=\(bits) permitted=\(permitted)")
         }
       }
     }

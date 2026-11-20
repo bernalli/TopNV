@@ -51,7 +51,7 @@ final class BarTableCharacterizationTests: XCTestCase {
             systemFullScreen: true),
       .init(name: "covering window", scene: .fullScreen, windows: [menu, covering], key: .hide),
       .init(name: "full-screen backdrop", scene: .fullScreen,
-            windows: [menu, background(MenuBarEvidence.fullScreenBackdropLayer)], key: .show),
+            windows: [menu, background(MenuBarEvidence.fullScreenBackdropLayer)], key: .show, entrance: .desktop),
       .init(name: "sliding with menu", scene: .sliding, windows: [menu, slide], key: .show),
       .init(name: "sliding without menu", scene: .sliding, windows: [slide], key: .hide),
       .init(name: "reveal during slide", scene: .revealed, windows: [menu, reveal, slide], key: .maskAll),
@@ -211,7 +211,7 @@ final class BarTableCharacterizationTests: XCTestCase {
     XCTAssertTrue(state.visibility.isEmpty)
   }
 
-  func testEntranceStartsOnlyOnADesktopScene() {
+  func testEntranceStartsOnlyWhereTheSamplePermitsIt() {
     // BandEntrance.swift:18-28,37-39 uses the evidence for activation and reveal returns; absence restores once.
     let id: UInt32 = 1
     for fixture in fixtures {
@@ -220,13 +220,13 @@ final class BarTableCharacterizationTests: XCTestCase {
       let samples = sample.map { [id: $0] } ?? [:]
       var entrance = BandEntrance()
       let activation = entrance.update(.settings, enabled: true, samples: samples, reduceMotion: false)
-      let expected: BandEntrance.Action? = sample.map { _ in fixture.scene == .desktop ? .start : .restore }
+      let expected: BandEntrance.Action? = sample.map { $0 == .desktop ? .start : .restore }
       XCTAssertEqual(activation[id], expected, fixture.name)
 
       _ = entrance.update(.sample, enabled: true, samples: [id: .desktop], reduceMotion: false)
       _ = entrance.update(.sample, enabled: true, samples: [id: .revealed], reduceMotion: false)
       let afterReveal = entrance.update(.sample, enabled: true, samples: samples, reduceMotion: false)
-      XCTAssertEqual(afterReveal[id], fixture.scene == .desktop ? .start : .restore, fixture.name)
+      XCTAssertEqual(afterReveal[id], fixture.entrance == .desktop ? .start : .restore, fixture.name)
       let disabled = entrance.update(.sample, enabled: false, samples: samples, reduceMotion: false)
       XCTAssertEqual(disabled[id], fixture.present ? .restore : nil, fixture.name)
     }

@@ -192,11 +192,14 @@ final class BandEntranceTests: XCTestCase {
     XCTAssertEqual(BandEntrance.Sample(reservedEvidence(revealed, systemFullScreen: true)), .unavailable)
   }
 
-  /// A native full-screen Space on a notched display keeps the menu surface and adds the backdrop.
+  /// A full-screen Space that shows the menu bar keeps the menu surface, reserves the top and adds
+  /// the backdrop (measured on 19 and 20 November). Its entrance was missing: a defect reported by
+  /// the user. A covering app, a slide and missing evidence still interrupt without replay.
   func testWithAVisibleMenuBarFullScreenSlidingAndMissingEvidenceInterruptWithoutReplay() {
     let ordinary = BandEntrance.Sample(reservedEvidence([desktop(), menu]))
+    let shownMenu = reservedEvidence([desktop(), menu, desktop(layer: MenuBarEvidence.fullScreenBackdropLayer)])
+    XCTAssertEqual(BandEntrance.Sample(shownMenu), .desktop)
     let samples = [
-      reservedEvidence([desktop(), menu, desktop(layer: MenuBarEvidence.fullScreenBackdropLayer)]),
       reservedEvidence([desktop(), menu, .init(owner: .application, layer: 0, bounds: frame)]),
       reservedEvidence([desktop(), menu, desktop(offset: 200)]),
       reservedEvidence([desktop(offset: 200)]),

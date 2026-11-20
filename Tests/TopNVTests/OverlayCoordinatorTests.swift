@@ -26,7 +26,7 @@ private final class Samples: BarSampling {
 }
 
 @MainActor
-private final class Parts: BarPartExecuting {
+final class Parts: BarPartExecuting {
   let parts: [BarPart]
   var plans: [BarPlan] = []
   var duringApply: (() -> Void)?
@@ -129,7 +129,7 @@ private final class Keys: BarKeyExecuting {
 }
 
 @MainActor
-private final class Clock: EntranceTiming {
+final class Clock: EntranceTiming {
   var frame: ((Double) -> Void)?
   var finish: (() -> Void)?
   var ends: [Double] = []

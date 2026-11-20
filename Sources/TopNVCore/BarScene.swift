@@ -112,6 +112,12 @@ public struct BarScene {
 
   public func evidence(display: UInt32) -> MenuBarEvidence.Result? { latestEvidence[display] }
 
+  /// The latest sample of this display permits the band entrance. A desktop scene always does;
+  /// a full-screen Space does only while it shows the menu bar.
+  public func entrancePermitted(display: UInt32) -> Bool {
+    latestEvidence[display].map { BandEntrance.Sample($0) == .desktop } ?? false
+  }
+
   @discardableResult
   public mutating func handle(_ event: BandState.Event, displays: [BarDisplay], settings: BarSettings,
                               entrance: BandEntrance.Event, screenRebuildPending: Bool) -> BarEventEffects {
@@ -169,7 +175,8 @@ public struct BarScene {
     let displays = Dictionary(sample.displays.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     let frames = displays.values.map(\.frame)
     var bandSamples: [UInt32: BandEntrance.Sample] = [:]
-    latestEvidence.removeAll()
+    var evidenceByDisplay: [UInt32: MenuBarEvidence.Result] = [:]
+    var interruptions: Set<UInt32> = []
     visibility.removeAll()
     kinds.removeAll()
     appearances = sample.appearance
@@ -186,13 +193,29 @@ public struct BarScene {
       let raw = MenuBarEvidence.evaluate(frame: frame, visibleFrame: display.visibleFrame, bandFrame: strip,
                                          windows: sample.windows, systemFullScreen: sample.systemFullScreen,
                                          displayFrames: frames)
+      if entranceEvent != .system, let previous = latestEvidence[id],
+         previous.context != .unknown, raw.context != .unknown,
+         previous.fullScreenBackdrop != raw.fullScreenBackdrop {
+        desktopReturns[id] = nil
+        interruptions.insert(id)
+      }
       let evidence = desktopReturns[id, default: DesktopReturn()].resolve(raw, on: frame, windows: sample.windows)
-      latestEvidence[id] = evidence
+      evidenceByDisplay[id] = evidence
       visibility[id] = CornerVisibility.visible(evidence)
       kinds[id] = BarSceneKind.classify(evidence, screenPresent: true)
       if bands.frames[id] != nil { bandSamples[id] = BandEntrance.Sample(evidence) }
     }
-    effects.entranceEffects = updateEntrances(bandSamples, signalTime: sample.signalTime)
+    latestEvidence = evidenceByDisplay
+    effects.entranceEffects = updateEntrances(bandSamples, signalTime: sample.signalTime, interruptions: interruptions)
+    // An early return can start the clock while the reveal surface is still present.
+    // If no entrance started, keep the reveal presentation until that surface leaves.
+    for (id, var evidence) in evidenceByDisplay where evidence.fullScreenBackdrop && entrances[id] == nil
+      && !awaitingSurfaceEnd.contains(id) && evidence.desktopRevealed != (evidence.revealLayer != nil) {
+      evidence.revealOverride = nil
+      latestEvidence[id] = evidence
+      visibility[id] = CornerVisibility.visible(evidence)
+      kinds[id] = BarSceneKind.classify(evidence, screenPresent: true)
+    }
     updateKeys(sample, effects: &effects)
     for (id, shown) in visibility.sorted(by: { $0.key < $1.key }) where previousVisibility[id] != shown {
       effects.traces.append("Desktop overlays, display \(id): visible=\(shown)")
@@ -202,9 +225,9 @@ public struct BarScene {
   }
 
   private mutating func updateEntrances(_ samples: [UInt32: BandEntrance.Sample],
-                                        signalTime: Double) -> [BarEntranceEffect] {
+                                        signalTime: Double, interruptions: Set<UInt32>) -> [BarEntranceEffect] {
     let actions = entranceState.update(entranceEvent, enabled: appliedHideNotch,
-                                      samples: samples, reduceMotion: reduceMotion)
+                                      samples: samples, reduceMotion: reduceMotion, interruptions: interruptions)
     var effects: [BarEntranceEffect] = []
     for (id, action) in actions.sorted(by: { $0.key < $1.key }) {
       switch action {

@@ -97,7 +97,8 @@ final class OverlayController: NSObject {
   }
 
   func systemChanged(_ kind: BarSystemNotification, uptime: Double) {
-    deliver {
+    if kind == .screen { sampler.discardPending() }
+    deliver { [self] in
       self.scene.systemNotification(kind, uptime: uptime)
       if kind == .space {
         self.rebuild(.spaceChanged, entrance: .system)
@@ -131,6 +132,7 @@ final class OverlayController: NSObject {
   }
 
   private func rebuild(_ event: BandState.Event, entrance: BandEntrance.Event) {
+    sampler.discardPending()
     scene.handle(event, displays: displays(), settings: barSettings, entrance: entrance,
                  screenRebuildPending: pendingScreenRebuild != nil)
     cancelClocks()

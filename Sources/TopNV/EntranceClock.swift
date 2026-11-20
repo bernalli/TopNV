@@ -72,7 +72,8 @@ final class EntranceClock: NSObject, EntranceTiming {
   func surfaceEnded(at time: Double) {
     guard returnID != nil, !sawEnd else { return }
     sawEnd = true
-    timing?.surfaceEnded(at: (time - startTime) * 1000)
+    let receivedAt = (CACurrentMediaTime() - startTime) * 1000
+    timing?.surfaceEnded(at: (time - startTime) * 1000, receivedAt: receivedAt)
     record("signalEnd", at: time)
     if link == nil { returnID = nil }
   }
