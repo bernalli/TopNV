@@ -131,6 +131,31 @@ final class KeyedOverlayStateTests: XCTestCase {
     XCTAssertNotNil(state.update(input(time: 43)).create)
   }
 
+  func testFullScreenRefundsOnlyWindowsCommittedThisVisit() throws {
+    var state = State()
+    let previous = try XCTUnwrap(state.update(input(time: 10)).create)
+    XCTAssertTrue(state.commit(previous, windowID: 1))
+    _ = state.update(input(active: [1], time: 11))
+    state.spaceDidChange(now: 12)
+
+    for id in 2...4 {
+      let request = try XCTUnwrap(state.update(input(time: Double(id + 11))).create)
+      XCTAssertTrue(state.commit(request, windowID: id))
+    }
+    XCTAssertEqual(state.creationsThisVisit, 3)
+
+    func fullScreen(_ id: Int, at time: Double) -> State.Input {
+      .init(activeWindowIDs: [id], appearance: .light, context: .fullScreen,
+            menuVisible: true, enabled: true, now: time, nativeFullScreen: true)
+    }
+    XCTAssertEqual(state.update(fullScreen(1, at: 16)).close, [1])
+    XCTAssertEqual(state.creationsThisVisit, 3)
+    XCTAssertEqual(state.update(fullScreen(2, at: 17)).close, [2])
+    XCTAssertEqual(state.creationsThisVisit, 2)
+    _ = state.update(fullScreen(2, at: 18))
+    XCTAssertEqual(state.creationsThisVisit, 2)
+  }
+
   func testFullScreenWithRevealedMenuHidesExistingAndNeverCreates() {
     var state = State()
     _ = state.update(input(active: [1]))
@@ -221,6 +246,7 @@ final class KeyedOverlayStateTests: XCTestCase {
       var now = 1.0
       var known: [Int] = []
       var nextID = 1
+      var oracle = GateOracle()
       var sinceConfirmedDeparture = 0
       var lastKeeper: Int?
       var candidate: Int?
@@ -241,11 +267,11 @@ final class KeyedOverlayStateTests: XCTestCase {
         let context = [State.Context.desktop, .desktop, .desktop, .fullScreen, .unknown][next(5)]
         let menu = next(6) != 0
         let enabled = next(12) != 0
-        let allPositive = appearance == .light && context == .desktop && menu && enabled
+        let revealed = next(2) == 0
+        let allPositive = appearance == .light && context == .desktop && menu && enabled && !revealed
         let result = state.update(.init(
           activeWindowIDs: active, appearance: appearance, context: context, menuVisible: menu,
-          enabled: enabled, now: now))
-
+          enabled: enabled, now: now, desktopRevealed: revealed))
         let distinct = Set(active).sorted()
         if let candidate, now >= settleUntil, !distinct.contains(candidate) {
           sinceConfirmedDeparture = 0
@@ -254,9 +280,10 @@ final class KeyedOverlayStateTests: XCTestCase {
         lastKeeper = distinct.first
 
         XCTAssertEqual(result.close, Array(distinct.dropFirst()))
-        XCTAssertTrue(result.gates.keys.allSatisfy { $0 == distinct.first })
-        for (_, shown) in result.gates where shown { XCTAssertTrue(allPositive) }
-        if now < settleUntil { XCTAssertTrue(result.gates.isEmpty) }
+        for id in distinct.dropFirst() { oracle.windows[id] = nil }
+        let expected = oracle.gates(keeper: distinct.first, settled: now >= settleUntil, enabled: enabled,
+                                    revealed: revealed, eligible: allPositive)
+        XCTAssertEqual(result.gates, expected)
         if let request = result.create {
           XCTAssertTrue(distinct.isEmpty)
           XCTAssertTrue(allPositive)
@@ -271,9 +298,46 @@ final class KeyedOverlayStateTests: XCTestCase {
         }
         if next(15) == 0, let victim = known.first {
           state.forget(victim)
+          oracle.windows[victim] = nil
           known.removeFirst()
         }
       }
     }
+  }
+}
+
+/// Independent per-window model of the gate remembered across Space changes.
+private struct GateOracle {
+  enum Window { case hidden, shown, masked }
+  var windows: [Int: Window] = [:]
+
+  mutating func gates(keeper: Int?, settled: Bool, enabled: Bool, revealed: Bool,
+                      eligible: Bool) -> [Int: Bool] {
+    var gates: [Int: Bool] = [:]
+    for (id, previous) in windows where id != keeper {
+      switch previous {
+      case .shown where revealed:
+        windows[id] = .masked
+        gates[id] = false
+      case .masked where eligible:
+        windows[id] = .shown
+        gates[id] = true
+      default:
+        break
+      }
+    }
+    guard let keeper else { return gates }
+    let previous = windows[keeper] ?? .hidden
+    if !enabled {
+      windows[keeper] = .hidden
+    } else if revealed {
+      windows[keeper] = previous == .hidden ? .hidden : .masked
+    } else if settled || (previous == .masked && eligible) {
+      windows[keeper] = eligible ? .shown : .hidden
+    } else {
+      return gates
+    }
+    gates[keeper] = windows[keeper] == .shown
+    return gates
   }
 }

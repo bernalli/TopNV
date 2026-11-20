@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   let menuVisibility = MenuVisibility(
     defaults: .standard, key: AppSettings.showMenuBarIconKey)
   private var overlay: OverlayController?
+  private let isTestCopy = TestCopy.matches(Bundle.main.bundleIdentifier)
   private let updateConfiguration = UpdateConfiguration(infoDictionary: Bundle.main.infoDictionary)
   private lazy var sparkleUpdater: SparkleUpdater? = {
     guard Bundle.main.bundleURL.pathExtension == "app", updateConfiguration.isValid else {
@@ -50,9 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     let statusMenu = StatusMenuController(
-      settings: settings, loginItem: loginItem, updates: updates, visibility: menuVisibility)
+      settings: settings, loginItem: loginItem, updates: updates, visibility: menuVisibility,
+      isTestCopy: isTestCopy)
     Application.statusMenu = statusMenu
     let controller = OverlayController(settings: settings)
+    statusMenu.onEntrancePreview = { [weak controller] in controller?.replayEntrance() }
     controller.start()
     overlay = controller
     sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }

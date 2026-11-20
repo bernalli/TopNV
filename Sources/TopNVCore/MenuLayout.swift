@@ -2,6 +2,7 @@ import Foundation
 
 /// What a selectable menu item does. The app target maps each command to an action.
 public enum MenuCommand: String, CaseIterable, Sendable {
+  case previewCalm = "fable-scorrimento-calmo"
   case hideNotch
   case roundCorners
   case cornersOnAllDisplays
@@ -51,10 +52,12 @@ public struct MenuState: Equatable, Sendable {
   /// The last registration error; blank text counts as no error.
   public var loginError: String?
   public var updates: UpdateItems
+  public var isTestCopy: Bool
 
   public init(
     hideNotch: Bool, roundCorners: Bool, cornersOnAllDisplays: Bool, launchAtLogin: Bool,
-    loginNeedsApproval: Bool, loginError: String?, updates: UpdateItems
+    loginNeedsApproval: Bool, loginError: String?, updates: UpdateItems,
+    isTestCopy: Bool = false
   ) {
     self.hideNotch = hideNotch
     self.roundCorners = roundCorners
@@ -63,6 +66,7 @@ public struct MenuState: Equatable, Sendable {
     self.loginNeedsApproval = loginNeedsApproval
     self.loginError = loginError
     self.updates = updates
+    self.isTestCopy = isTestCopy
   }
 }
 
@@ -83,7 +87,12 @@ public enum MenuLayout {
       separator("separator.options"),
       MenuRow(
         id: "options", title: localizer(.options), symbol: "gearshape",
-        kind: .submenu(options(for: state, localizer: localizer), enabled: true)),
+        kind: .submenu(options(for: state, localizer: localizer), enabled: true))
+    ]
+    if state.isTestCopy {
+      rows.append(animationPreview(for: state))
+    }
+    rows += [
       separator("separator.app"),
       MenuRow(
         id: "about", title: localizer(.about, appName), symbol: nil,

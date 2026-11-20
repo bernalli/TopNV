@@ -210,6 +210,48 @@ final class MenuBarEvidenceTests: XCTestCase {
                                            windows: windows).menuVisible)
   }
 
+  private let menuEntryBounds: [String: Any] = ["X": 0, "Y": 0, "Width": 1512, "Height": 34]
+  private let fullScreenBounds: [String: Any] = ["X": 0, "Y": 0, "Width": 1512, "Height": 982]
+
+  /// Show Desktop and a click on the wallpaper add a full-screen WindowManager window at
+  /// layer 18; the screenshot and recording tool adds a full-screen Screenshot window at layer 24.
+  func testShowDesktopAndScreenshotWindowsAreNotFullScreenEvidence() throws {
+    for (owner, layer) in [("WindowManager", 18), ("Screenshot", 24)] {
+      let list = [
+        entry(owner: "Window Server", layer: 24, bounds: menuEntryBounds),
+        entry(owner: owner, pid: Int32(600), layer: layer, bounds: fullScreenBounds)
+      ]
+      let result = MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible, bandFrame: strip,
+                                            windows: try XCTUnwrap(parse(list)))
+      XCTAssertEqual(result.context, .desktop, owner)
+      XCTAssertTrue(result.menuVisible, owner)
+    }
+  }
+
+  func testWindowManagerAndScreenshotWindowsAreClassifiedAsDesktop() throws {
+    for owner in ["WindowManager", "Screenshot"] {
+      for layer in [-1, 0, 18, 24, 26] {
+        let windows = try XCTUnwrap(parse([
+          entry(owner: owner, pid: Int32(600), layer: layer, bounds: fullScreenBounds)
+        ]))
+        XCTAssertEqual(windows.map(\.owner), [.desktop], "\(owner) layer \(layer)")
+      }
+    }
+  }
+
+  func testARealFullScreenAppIsStillFullScreenEvidence() throws {
+    for owner in ["Safari", "Windowmanager", "WindowManagerHelper", "Screenshots", "Finder"] {
+      let list = [
+        entry(owner: "Window Server", layer: 24, bounds: menuEntryBounds),
+        entry(owner: owner, pid: Int32(700), layer: 0, bounds: fullScreenBounds)
+      ]
+      let result = MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible, bandFrame: strip,
+                                            windows: try XCTUnwrap(parse(list)))
+      XCTAssertEqual(result.context, .fullScreen, owner)
+      XCTAssertTrue(result.menuVisible, owner)
+    }
+  }
+
   func testAnIncompleteOrMistypedWindowMakesTheListUnavailable() {
     let malformed: [[String: Any]] = [
       entry(pid: nil), entry(layer: nil), entry(bounds: nil),
@@ -229,5 +271,143 @@ final class MenuBarEvidenceTests: XCTestCase {
     for height in [CGFloat(0), -982, .nan, .infinity] {
       XCTAssertNil(MenuBarEvidence.windows(from: [entry()], ownPID: 42, primaryScreenHeight: height))
     }
+  }
+}
+
+// MARK: - Revealed desktop
+
+extension MenuBarEvidenceTests {
+  private func windowManager(layer: Int, bounds: [String: Any]) -> [String: Any] {
+    entry(owner: "WindowManager", pid: Int32(600), layer: layer, bounds: bounds)
+  }
+
+  /// The menu bar and the two WindowManager windows at negative layers of every real list.
+  private func revealed(_ extra: [[String: Any]], frame: CGRect? = nil) -> Bool {
+    let list = [
+      entry(owner: "Window Server", layer: 24, bounds: menuEntryBounds),
+      windowManager(layer: -2_147_483_624, bounds: fullScreenBounds),
+      windowManager(layer: -2_147_483_622, bounds: fullScreenBounds)
+    ] + extra
+    return MenuBarEvidence.evaluate(frame: frame ?? self.frame, visibleFrame: visible,
+                                    bandFrame: strip, windows: parse(list)).desktopRevealed
+  }
+
+  func testAFullScreenWindowManagerWindowRevealsTheDesktop() {
+    XCTAssertTrue(revealed([windowManager(layer: 18, bounds: fullScreenBounds)]))
+    for layer in [0, 16, 18, 24] {
+      for bounds: [String: Any] in [
+        ["X": 0, "Y": 0, "Width": 1361, "Height": 982], ["X": 151, "Y": 0, "Width": 1361, "Height": 982],
+        ["X": 0, "Y": 2, "Width": 1512, "Height": 978], ["X": -10, "Y": -10, "Width": 1600, "Height": 1100]
+      ] {
+        XCTAssertTrue(revealed([windowManager(layer: layer, bounds: bounds)]), "layer \(layer) \(bounds)")
+      }
+    }
+    // The revealed desktop is still the desktop.
+    let list = [
+      entry(owner: "Window Server", layer: 24, bounds: menuEntryBounds),
+      windowManager(layer: 18, bounds: fullScreenBounds)
+    ]
+    let result = MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible, bandFrame: strip,
+                                          windows: parse(list))
+    XCTAssertEqual(result.context, .desktop)
+    XCTAssertTrue(result.menuVisible)
+  }
+
+  func testMalformedNumbersInvalidateTheWholeListInEveryPosition() {
+    let good = windowManager(layer: 18, bounds: fullScreenBounds)
+    let pid = kCGWindowOwnerPID as String
+    let layer = kCGWindowLayer as String
+    let alpha = kCGWindowAlpha as String
+    let bounds = kCGWindowBounds as String
+    let invalid: [Any?] = [nil, true, "1", [1], NSNull(), Double.nan, Double.infinity]
+    var malformed: [[String: Any]] = []
+    for key in [pid, layer, alpha] {
+      for value in invalid {
+        var row = good
+        row[key] = value
+        malformed.append(row)
+      }
+    }
+    for key in ["X", "Y", "Width", "Height"] {
+      for value in invalid {
+        var row = fullScreenBounds
+        row[key] = value
+        malformed.append(windowManager(layer: 18, bounds: row))
+      }
+    }
+    let outsideInt32: [Any] = [Int64(Int32.min) - 1, Int64(Int32.max) + 1, 18.5]
+    let outOfRange: [(String, [Any])] = [
+      (pid, outsideInt32 + [0, -1, Int64(4_294_967_338)]),
+      (layer, outsideInt32), (alpha, [-0.01, 1.01])
+    ]
+    for (key, values) in outOfRange {
+      for value in values {
+        var row = good
+        row[key] = value
+        malformed.append(row)
+      }
+    }
+    let huge = Double.greatestFiniteMagnitude
+    for rect in [
+      ["X": 1512, "Y": 0, "Width": -1512, "Height": 982],
+      ["X": 0, "Y": 982, "Width": 1512, "Height": -982],
+      ["X": huge, "Y": 0, "Width": huge, "Height": 982],
+      ["X": 0, "Y": huge, "Width": 1512, "Height": huge]
+    ] as [[String: Any]] {
+      var row = good
+      row[bounds] = rect
+      malformed.append(row)
+    }
+    for row in malformed {
+      for index in 0...2 {
+        var list = [good, good]
+        list.insert(row, at: index)
+        XCTAssertNil(parse(list))
+        XCTAssertFalse(revealed(list))
+      }
+    }
+  }
+
+  func testRevealIsInvariantUnderDuplicatesAndOrdering() {
+    let candidates = [
+      windowManager(layer: -1, bounds: fullScreenBounds),
+      windowManager(layer: 16, bounds: ["X": 0, "Y": 0, "Width": 77, "Height": 70])
+    ]
+    for alpha in [0.0, 0.01, 0.5, 1.0] {
+      var full = windowManager(layer: 18, bounds: fullScreenBounds)
+      full[kCGWindowAlpha as String] = alpha
+      full["unknown"] = ["ignored": true]
+      for index in 0...candidates.count {
+        var rows = candidates
+        rows.insert(full, at: index)
+        XCTAssertEqual(revealed(rows), alpha > 0)
+        XCTAssertEqual(revealed(Array(rows.reversed()) + rows), alpha > 0)
+      }
+    }
+  }
+
+  func testOtherWindowsDoNotRevealTheDesktop() {
+    XCTAssertFalse(revealed([]))
+    for extra in [
+      windowManager(layer: 16, bounds: ["X": 1400, "Y": 900, "Width": 77, "Height": 70]),
+      windowManager(layer: -1, bounds: fullScreenBounds),
+      windowManager(layer: 18, bounds: ["X": 0, "Y": 0, "Width": 1360, "Height": 982]),
+      windowManager(layer: 18, bounds: ["X": 0, "Y": 3, "Width": 1512, "Height": 979]),
+      windowManager(layer: 18, bounds: ["X": 0, "Y": 0, "Width": 1512, "Height": 979]),
+      windowManager(layer: 18, bounds: ["X": 1512, "Y": 0, "Width": 1920, "Height": 1080]),
+      windowManager(layer: 18, bounds: ["X": 0, "Y": 0, "Width": 0, "Height": 982]),
+      entry(owner: "Screenshot", pid: Int32(601), layer: 24, bounds: fullScreenBounds),
+      entry(owner: "Dock", pid: Int32(602), layer: 18, bounds: fullScreenBounds),
+      entry(owner: "Safari", pid: Int32(603), layer: 18, bounds: fullScreenBounds),
+      entry(owner: nil, pid: Int32(604), layer: 18, bounds: fullScreenBounds),
+      entry(owner: "WindowManager", pid: Int32(42), layer: 18, bounds: fullScreenBounds)
+    ] {
+      XCTAssertFalse(revealed([extra]), "\(extra)")
+    }
+    let full = windowManager(layer: 18, bounds: fullScreenBounds)
+    XCTAssertFalse(revealed([full], frame: .null))
+    XCTAssertFalse(revealed([full, entry(pid: nil)]))
+    XCTAssertFalse(MenuBarEvidence.evaluate(frame: frame, visibleFrame: visible, bandFrame: strip,
+                                            windows: nil).desktopRevealed)
   }
 }

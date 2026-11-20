@@ -19,6 +19,8 @@ import TopNVCore
   private var subscriptions: Set<AnyCancellable> = []
   private var visibilityObservation: NSKeyValueObservation?
   private var refreshScheduled = false
+  var onEntrancePreview: (() -> Void)?
+  private let isTestCopy: Bool
 
   private static let icon: NSImage? = {
     let image =
@@ -31,8 +33,9 @@ import TopNVCore
 
   init(
     settings: AppSettings, loginItem: LoginItem, updates: UpdateMenuModel,
-    visibility: MenuVisibility
+    visibility: MenuVisibility, isTestCopy: Bool = false
   ) {
+    self.isTestCopy = isTestCopy
     self.settings = settings
     self.loginItem = loginItem
     self.updates = updates
@@ -48,8 +51,7 @@ import TopNVCore
     statusItem.menu = menu
     refresh()
     // A removal by the user is written back like the Hide Menu Bar Icon setting.
-    visibilityObservation = statusItem.observe(\.isVisible, options: [.new]) {
-      [weak self] _, change in
+    visibilityObservation = statusItem.observe(\.isVisible, options: [.new]) { [weak self] _, change in
       guard let visible = change.newValue else { return }
       MainActor.assumeIsolated {
         guard let self, visible != self.visibility.isVisible else { return }
@@ -61,7 +63,7 @@ import TopNVCore
       settings.objectWillChange.eraseToAnyPublisher(),
       loginItem.objectWillChange.eraseToAnyPublisher(),
       updates.objectWillChange.eraseToAnyPublisher(),
-      visibility.objectWillChange.eraseToAnyPublisher(),
+      visibility.objectWillChange.eraseToAnyPublisher()
     ] {
       publisher.sink { [weak self] _ in
         MainActor.assumeIsolated { self?.scheduleRefresh() }
@@ -83,7 +85,8 @@ import TopNVCore
 
   func refresh() {
     refreshScheduled = false
-    renderer?.apply(MenuLayout.rows(for: state), to: menu)
+    let rows = MenuLayout.rows(for: state)
+    renderer?.apply(rows, to: menu)
     if statusItem.isVisible != visibility.isVisible { statusItem.isVisible = visibility.isVisible }
   }
 
@@ -92,7 +95,7 @@ import TopNVCore
       hideNotch: settings.hideNotch, roundCorners: settings.roundCorners,
       cornersOnAllDisplays: settings.cornersOnAllDisplays, launchAtLogin: loginItem.isEnabled,
       loginNeedsApproval: loginItem.needsApproval, loginError: loginItem.errorMessage,
-      updates: updates.items)
+      updates: updates.items, isTestCopy: isTestCopy)
   }
 
   /// The login item does not publish approval changes made in System Settings; opening the menu
@@ -104,17 +107,28 @@ import TopNVCore
 
   func perform(_ command: MenuCommand) {
     switch command {
+    case .hideNotch, .roundCorners, .cornersOnAllDisplays, .launchAtLogin, .automaticUpdates, .hideMenuBarIcon:
+      performSetting(command)
+    case .checkForUpdates: updates.checkForUpdates()
+    case .about: AboutWindowController.shared.show()
+    case .reportIssue:
+      if let url = AppLink.reportIssue.url { NSWorkspace.shared.open(url) }
+    case .quit: NSApp.terminate(nil)
+    case .previewCalm:
+      guard isTestCopy, settings.hideNotch else { return }
+      onEntrancePreview?()
+    }
+  }
+
+  private func performSetting(_ command: MenuCommand) {
+    switch command {
     case .hideNotch: settings.hideNotch.toggle()
     case .roundCorners: settings.roundCorners.toggle()
     case .cornersOnAllDisplays: settings.cornersOnAllDisplays.toggle()
     case .launchAtLogin: loginItem.setEnabled(!loginItem.isEnabled)
     case .automaticUpdates: updates.setAutomaticallyChecks(!updates.automaticallyChecksForUpdates)
     case .hideMenuBarIcon: visibility.setMenuVisible(false)
-    case .checkForUpdates: updates.checkForUpdates()
-    case .about: AboutWindowController.shared.show()
-    case .reportIssue:
-      if let url = AppLink.reportIssue.url { NSWorkspace.shared.open(url) }
-    case .quit: NSApp.terminate(nil)
+    default: assertionFailure("Expected a settings command")
     }
   }
 }

@@ -30,40 +30,11 @@ public enum ScreenGeometry {
     max(frame.maxY - visibleFrame.maxY, safeAreaTop, 0)
   }
 
-  /// The rectangle of the black bar for a screen, or `nil` when the screen has no notch.
-  public static func barRect(
-    frame: CGRect, visibleFrame: CGRect, safeAreaTop: CGFloat
-  ) -> CGRect? {
-    guard isNotched(safeAreaTop: safeAreaTop) else { return nil }
-    let height = menuBarHeight(frame: frame, visibleFrame: visibleFrame, safeAreaTop: safeAreaTop)
-    guard height > 0 else { return nil }
-    return CGRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
-  }
-
   /// The radius actually used for a screen: never negative and never larger than half of the
   /// shorter screen side.
   public static func effectiveRadius(_ radius: CGFloat, frame: CGRect) -> CGFloat {
     guard radius.isFinite, radius > 0 else { return 0 }
     return min(radius, frame.width / 2, frame.height / 2)
-  }
-
-  /// The four square corner rectangles (side = radius) for a screen.
-  /// Top corners start below `topInset`; negative or non-finite insets are treated as zero.
-  /// Returns an empty dictionary when the radius or remaining height is zero (no windows needed).
-  public static func cornerRects(
-    frame: CGRect, radius: CGFloat, topInset: CGFloat = 0
-  ) -> [ScreenCorner: CGRect] {
-    let inset = topInset.isFinite ? max(topInset, 0) : 0
-    var usableFrame = frame
-    usableFrame.size.height = max(0, frame.height - inset)
-    let side = effectiveRadius(radius, frame: usableFrame)
-    guard side > 0 else { return [:] }
-    return [
-      .topLeft: CGRect(x: frame.minX, y: frame.maxY - inset - side, width: side, height: side),
-      .topRight: CGRect(x: frame.maxX - side, y: frame.maxY - inset - side, width: side, height: side),
-      .bottomLeft: CGRect(x: frame.minX, y: frame.minY, width: side, height: side),
-      .bottomRight: CGRect(x: frame.maxX - side, y: frame.minY, width: side, height: side),
-    ]
   }
 
   /// Centre of the circle that is cut out of a corner square, in the square's local coordinates
