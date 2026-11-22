@@ -14,10 +14,10 @@ final class BarSceneTests: XCTestCase {
                       scale: 2, notchWidth: 180, isBuiltin: id == 1)
   }
 
-  func menu(_ id: UInt32 = 1) -> Window {
+  func menu(_ id: UInt32 = 1, depth: CGFloat = 33) -> Window {
     let frame = display(id).frame
     return Window(owner: .windowServer, layer: 24,
-                  bounds: CGRect(x: frame.minX, y: frame.maxY - 33, width: frame.width, height: 33))
+                  bounds: CGRect(x: frame.minX, y: frame.maxY - depth, width: frame.width, height: depth))
   }
 
   func background(_ layer: Int, _ id: UInt32 = 1, offset: CGFloat = 0, alpha: Double = 1) -> Window {
@@ -34,10 +34,11 @@ final class BarSceneTests: XCTestCase {
   }
 
   func sample(_ windows: [Window]?, _ displays: [BarDisplay]? = nil, now: Double = 1,
-              active: [UInt32: [Int]] = [:], fullScreen: Bool = false, reduced: Bool = false) -> BarSample {
+              active: [UInt32: [Int]] = [:], fullScreen: Bool = false, reduced: Bool = false,
+              menuBarBackground: Bool = false) -> BarSample {
     BarSample(displays: displays ?? [display()], windows: windows, systemFullScreen: fullScreen,
               appearance: [1: .light, 2: .light], activeKeyWindows: active, now: now,
-              reduceMotion: reduced, signalTime: now + 100)
+              reduceMotion: reduced, signalTime: now + 100, menuBarBackground: menuBarBackground)
   }
 
   private func edgeFrame(_ scene: BarScene, on display: BarDisplay) -> CGRect? {
@@ -127,6 +128,43 @@ extension BarSceneTests {
     XCTAssertTrue(scene.handle(sample([menu()], now: 4, active: [1: [4]])).entranceEffects.isEmpty)
   }
 
+  func testDesktopTwoBandReturnsBeforeTheOpaqueOverviewEnds() {
+    var scene = scene()
+    let bar = menu()
+    let overlay = Window(owner: .ownApp, layer: -2147483622, bounds: bar.bounds, alpha: 0, number: 55677)
+    let overview = background(19)
+    // Replay the stable hidden, absent and relisted band from desktop 2 at 14:11:16.
+    func deliver(_ windows: [Window], at time: Double) -> [BarEntranceEffect] {
+      scene.handlePresentation(sample(windows, now: time), bandWindow: { $0 == 1 ? 55677 : nil }).entranceEffects
+    }
+    _ = deliver([bar], at: 1)
+    _ = deliver([bar], at: 1.1)
+    let observed = [bar, overview, overlay]
+    for (time, windows) in [(2.0, observed), (2.2, [bar, overview]), (2.24, [bar, overview]), (2.727, observed)] {
+      XCTAssertEqual(deliver(windows, at: time), [.restore(display: 1)])
+    }
+    XCTAssertEqual(deliver(observed, at: 2.763), [.start(display: 1, returnSignal: 2.763 + 100)])
+    XCTAssertEqual(scene.entrances[1]?.origin, .returnSignal)
+    XCTAssertEqual(deliver([bar, overlay], at: 3.031), [.surfaceEnded(display: 1, signalTime: 3.031 + 100)])
+  }
+
+  func testReduceMotionHoldsARevealWhileItsSurfaceIsStillFading() {
+    for layer in [18, 19] {
+      var scene = scene()
+      _ = scene.handle(sample([menu()], reduced: true))
+      _ = scene.handle(sample([menu(), background(layer, alpha: 0.96)], reduced: true))
+      XCTAssertEqual(scene.visibility[1], false)
+      let fading = scene.handle(sample([menu(), background(layer, alpha: 0.90)], reduced: true))
+      XCTAssertEqual(fading.entranceEffects, [.restore(display: 1)])
+      XCTAssertEqual(scene.visibility[1], false)
+      XCTAssertEqual(scene.kinds[1], layer == 18 ? .revealed : .overview)
+      let ended = scene.handle(sample([menu()], reduced: true))
+      XCTAssertEqual(ended.entranceEffects, [.restore(display: 1)])
+      XCTAssertEqual(scene.visibility[1], true)
+      XCTAssertEqual(scene.kinds[1], .desktop)
+    }
+  }
+
   func testASpaceChangeIsNotATopologyChangeForBandOrCorners() {
     var scene = scene([display(), display(2)])
     let frames = scene.bandFrames
@@ -189,12 +227,14 @@ extension BarSceneTests {
     XCTAssertFalse(scene.keyCommitted(old, window: 4, display: 2))
     _ = scene.handle(.settingsChanged, displays: both, settings: settings,
                      entrance: .settings, screenRebuildPending: false)
-    _ = scene.handle(sample([menu(), menu(2), background(18)], both, active: active))
+    let revealed = sample([menu(), menu(2, depth: 31), background(18)], both, active: active)
+    _ = scene.handle(revealed)
+    _ = scene.handle(revealed)
     XCTAssertTrue(scene.keyDecisions.isEmpty)
     XCTAssertEqual(scene.visibility, [1: false, 2: true])
     XCTAssertEqual(scene.cornerDisplays, [1, 2])
     XCTAssertEqual(Set(scene.bandFrames.keys), [1, 2])
-    XCTAssertNotNil(edgeFrame(scene, on: both[1]))
+    XCTAssertEqual(edgeFrame(scene, on: both[1]), CGRect(x: 1800, y: 950, width: 1512, height: 1))
   }
 
   func testAnAdapterResetGivesTheDisplayAFullCreationBudget() throws {

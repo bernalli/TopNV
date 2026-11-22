@@ -15,9 +15,13 @@ enum ExecutorPlans {
   }
 
   static func key(create: BarKeyCreation? = nil, gates: [Int: BarAlpha] = [:], close: [Int] = [],
-                  mask: BarMask = .none, gap: CGFloat = 33) -> BarKeyPlan {
-    let plate = BarGeometry.plate(keySize: frame.size, menuHeight: gap, scale: screen.scale)
-    return BarKeyPlan(exists: true, frame: frame, plate: plate, gates: gates, close: close, create: create,
+                  mask: BarMask = .none, gap: CGFloat = 33, confirmedMenuDepth: CGFloat? = nil) -> BarKeyPlan {
+    let depth = confirmedMenuDepth ?? gap
+    let plate = BarGeometry.plate(keySize: frame.size, menuHeight: depth, scale: screen.scale)
+    let calibrated = BarGeometry.plate(keySize: frame.size, menuHeight: depth, scale: screen.scale,
+                                       margin: BarGeometry.calibratedPlateMargin)
+    return BarKeyPlan(exists: true, frame: frame, plate: plate, calibratedPlate: calibrated,
+                      confirmedMenuDepth: confirmedMenuDepth, gates: gates, close: close, create: create,
                       mask: mask, backdropExtent: mask == .none ? nil :
                         BarEntranceMask.keyBackdropExtent(band: mask, bandSize: frame.size))
   }

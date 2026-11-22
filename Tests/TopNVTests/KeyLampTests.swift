@@ -8,6 +8,12 @@ import XCTest
 final class KeyLampTests: XCTestCase {
   private let litMask = BarMask.rect(CGRect(x: 20, y: 0, width: 80, height: 17))
 
+  func testNormalWindowShadowsStayBelowTheLampAndSystemRevealsStayAboveIt() {
+    XCTAssertGreaterThan(KeyLamp.level.rawValue, NSWindow.Level.normal.rawValue)
+    XCTAssertLessThan(KeyLamp.level.rawValue, BarSceneKind.overviewLayer - 1)
+    XCTAssertLessThan(KeyLamp.level.rawValue, NSWindow.Level.mainMenu.rawValue)
+  }
+
   func testTheLampWindowBelongsToOneSpaceLikeItsKeyAndSitsBelowIt() {
     _ = NSApplication.shared
     let lamp = KeyLamp.makeWindow(ExecutorPlans.frame)
@@ -177,6 +183,43 @@ final class KeyLampTests: XCTestCase {
       XCTAssertEqual(lamp.alphaValue, 0)
     }
     XCTAssertEqual(harness.lamp.keys, [])
+  }
+
+  func testConfirmedDepthUpdatesThePlateWithoutReplacingTheKey() throws {
+    let harness = KeyHarness()
+    defer { harness.executor.closeAll() }
+    harness.runtime.rejectPair = true
+    harness.apply(ExecutorPlans.key(create: try harness.creation(), confirmedMenuDepth: 31))
+    let key = try XCTUnwrap(harness.windows.first)
+    let plate = try XCTUnwrap(key.contentView?.layer?.sublayers?.first { $0.name == "Bottom plate" })
+    XCTAssertEqual(plate.frame.height, 10.5)
+
+    harness.apply(ExecutorPlans.key(confirmedMenuDepth: 32))
+    XCTAssertEqual(plate.frame.height, 9.5)
+    XCTAssertEqual(harness.windows.count, 1)
+
+    harness.apply(ExecutorPlans.key())
+    XCTAssertEqual(plate.frame.height, 8.5)
+    harness.apply(ExecutorPlans.key(gap: 20))
+    XCTAssertEqual(plate.frame.height, 8.5)
+  }
+
+  func testConfirmedDepthUpdatesTheCalibratedPlate() throws {
+    let initial = ExecutorPlans.key(confirmedMenuDepth: 31)
+    let plate = KeyBottomPlate(original: try XCTUnwrap(initial.plate),
+                               calibrated: try XCTUnwrap(initial.calibratedPlate), menuDepth: 31)
+    let root = CALayer()
+    plate.install(in: root, scale: 2)
+    plate.apply(calibrated: true)
+    XCTAssertEqual(plate.layer.frame.height, 7)
+
+    plate.update(ExecutorPlans.key(confirmedMenuDepth: 32), calibrated: true)
+    XCTAssertEqual(plate.layer.frame.height, 6)
+    plate.update(ExecutorPlans.key(), calibrated: true)
+    XCTAssertEqual(plate.layer.frame.height, 5)
+    plate.update(ExecutorPlans.key(gap: 20), calibrated: true)
+    XCTAssertEqual(plate.layer.frame.height, 5)
+    XCTAssertTrue(plate.layer.superlayer === root)
   }
 
   func testPairAndLampFailuresRestoreTheOrdinaryKeyAndCreationPlate() throws {

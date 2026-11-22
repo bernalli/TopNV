@@ -16,12 +16,22 @@ final class BarGeometryTests: XCTestCase {
     CGRect(x: display.frame.minX, y: display.frame.maxY - depth, width: display.frame.width, height: depth)
   }
 
-  func testBandIsTheMenuGapPlusTheSeparator() {
+  func testBandIsExactlyTheMenuGap() {
     let screen = display()
     let band = BarGeometry.band(screen)
-    XCTAssertEqual(BarGeometry.separator, 1)
-    XCTAssertEqual(band, CGRect(x: 0, y: 948, width: 1512, height: 34))
-    XCTAssertEqual(BarGeometry.pixels(band, on: screen), PixelRect(x: 0, y: 0, width: 3024, height: 68))
+    XCTAssertEqual(band, CGRect(x: 0, y: 949, width: 1512, height: 33))
+    XCTAssertEqual(BarGeometry.pixels(band, on: screen), PixelRect(x: 0, y: 0, width: 3024, height: 66))
+    XCTAssertNil(BarGeometry.edge(menuBounds: menu(on: screen, depth: 33), band: band))
+  }
+
+  func testBandNeverEndsBelowTheVisibleFrame() throws {
+    for gap: CGFloat in [1, 24, 33, 37, 44] {
+      for safeArea: CGFloat in [1, 32, 38] {
+        let screen = display(gap: gap, safeArea: safeArea)
+        let band = try XCTUnwrap(BarGeometry.band(screen))
+        XCTAssertEqual(band.minY, min(screen.visibleFrame.maxY, screen.frame.maxY - safeArea))
+      }
+    }
   }
 
   func testBandFallsBackToTheSafeAreaWithAnAutoHiddenMenu() {
@@ -51,7 +61,8 @@ final class BarGeometryTests: XCTestCase {
 
   func testEdgeCoversOnlyTheLastTwoPixelsOfTheRecordedBand() {
     let screen = display()
-    let band = BarGeometry.band(screen)
+    // An edge can occupy only the overlap between the menu bottom and the band bottom.
+    let band = CGRect(x: 0, y: 948, width: 1512, height: 34)
     let edge = BarGeometry.edge(menuBounds: menu(on: screen, depth: 33), band: band)
     let pixels = BarGeometry.pixels(edge, on: screen)
     XCTAssertEqual(pixels, PixelRect(x: 0, y: 66, width: 3024, height: 2))
@@ -115,13 +126,13 @@ final class BarGeometryTests: XCTestCase {
   }
 
   func testBlackBottomIsTheLowerOfBandAndEdge() {
-    let band = PixelRect(x: 0, y: 0, width: 3024, height: 68)
+    let band = PixelRect(x: 0, y: 0, width: 3024, height: 66)
     for top in [50, 66] {
       let edge = PixelRect(x: 0, y: top, width: 3024, height: 4)
-      XCTAssertEqual(BarGeometry.blackBottom(band: band, edge: edge), max(68, top + 4))
+      XCTAssertEqual(BarGeometry.blackBottom(band: band, edge: edge), max(66, top + 4))
       XCTAssertEqual(BarGeometry.blackBottom(band: nil, edge: edge), top + 4)
     }
-    XCTAssertEqual(BarGeometry.blackBottom(band: band, edge: nil), 68)
+    XCTAssertEqual(BarGeometry.blackBottom(band: band, edge: nil), 66)
     XCTAssertEqual(BarGeometry.blackBottom(band: nil, edge: nil), 0)
   }
 
@@ -175,7 +186,7 @@ final class BarGeometryTests: XCTestCase {
     }
   }
 
-  func testAMenuDeeperThanTheBandLeavesRowsToTheMenuSurface() throws {
+  func testAMenuDeeperThanTheFallbackBandHasNoEdge() throws {
     let screen = display()
     let measured = menu(on: screen, depth: 37)
     let band = BarGeometry.band(screen)
@@ -184,7 +195,7 @@ final class BarGeometryTests: XCTestCase {
     let bandPixels = BarGeometry.pixels(band, on: screen)
     let menuPixels = try XCTUnwrap(BarGeometry.pixels(measured, on: screen))
     let bottom = BarGeometry.blackBottom(band: bandPixels, edge: BarGeometry.pixels(edge, on: screen))
-    XCTAssertEqual(bottom, 68)
+    XCTAssertEqual(bottom, 66)
     XCTAssertEqual(menuPixels.bottom, 74)
   }
 }

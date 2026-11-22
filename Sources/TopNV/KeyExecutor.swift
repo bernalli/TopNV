@@ -105,6 +105,7 @@ final class KeyExecutor: BarKeyExecuting {
   }
 
   private func present(_ key: BarKeyPlan, on entry: Entry) {
+    entry.plate.update(key, calibrated: entry.pair != nil)
     let bounds = entry.root.bounds
     let flipped = entry.root.isGeometryFlipped
     var extent = bounds
@@ -125,7 +126,8 @@ final class KeyExecutor: BarKeyExecuting {
 
   private func create(_ creation: BarKeyCreation, on display: UInt32, plan: BarDisplayPlan) throws {
     let key = plan.key
-    guard let frame = key.frame, let geometry = key.plate, let screen = plan.geometry else { return }
+    guard let frame = key.frame, let geometry = key.plate, let calibrated = key.calibratedPlate,
+          let screen = plan.geometry else { return }
     let scale = screen.scale
     let bounds = CGRect(origin: .zero, size: frame.size)
     let backdrop = try runtime.create(matrix: LuminanceKey.normal.matrix, bounds: bounds,
@@ -142,7 +144,8 @@ final class KeyExecutor: BarKeyExecuting {
       return
     }
     let entry = Entry(display: display, window: window, root: root, backdrop: backdrop,
-                      plate: KeyBottomPlate(original: geometry, display: screen, keySize: frame.size), scale: scale)
+                      plate: KeyBottomPlate(original: geometry, calibrated: calibrated,
+                                            menuDepth: key.confirmedMenuDepth), scale: scale)
     entries[id] = entry
     applyBarPresentation {
       root.contentsScale = scale

@@ -57,14 +57,16 @@ final class BarPlanTests: XCTestCase {
     XCTAssertEqual(plan.kind, .desktop)
     XCTAssertEqual(plan.appearance, .light)
     XCTAssertTrue(plan.bandEnabled)
-    let band = CGRect(x: -1512, y: 1048, width: 1512, height: 34)
+    let band = CGRect(x: -1512, y: 1049, width: 1512, height: 33)
     XCTAssertEqual(plan.band.frame, band)
     XCTAssertEqual(plan.key.frame, band)
-    XCTAssertEqual(plan.band.pixels, PixelRect(x: 0, y: 0, width: 3024, height: 68))
-    XCTAssertEqual(plan.edge.frame, CGRect(x: -1512, y: 1048, width: 1512, height: 1))
-    XCTAssertEqual(plan.edge.pixels, PixelRect(x: 0, y: 66, width: 3024, height: 2))
-    XCTAssertEqual(plan.blackBottom, 68)
-    let frames = BarGeometry.corners(display: fixture.display.frame, bandHeight: 34, rounded: true)
+    XCTAssertEqual(plan.band.pixels, PixelRect(x: 0, y: 0, width: 3024, height: 66))
+    // The measured menu fills the band, so the edge has no room.
+    XCTAssertTrue(plan.edge.exists)
+    XCTAssertNil(plan.edge.frame)
+    XCTAssertNil(plan.edge.pixels)
+    XCTAssertEqual(plan.blackBottom, 66)
+    let frames = BarGeometry.corners(display: fixture.display.frame, bandHeight: 33, rounded: true)
     XCTAssertEqual(plan.corners.count, 4)
     for (corner, frame) in frames {
       XCTAssertEqual(plan.corners[corner]?.frame, frame)
@@ -73,7 +75,7 @@ final class BarPlanTests: XCTestCase {
     XCTAssertEqual(plan.key.plate, BarGeometry.plate(keySize: band.size, menuHeight: 33, scale: 2))
     let reservation = try XCTUnwrap(fixture.scene.keyDecisions[1]?.create)
     XCTAssertEqual(plan.key.create, BarKeyCreation(instance: 1, reservation: reservation))
-    // The measured gap may change between rebuild and key creation.
+    // A new display sample can lose the reserved gap while the confirmed menu depth is unchanged.
     let screen = fixture.display
     let hiddenMenu = BarDisplay(id: 1, frame: screen.frame, visibleFrame: screen.frame, safeAreaTop: 32,
                                 scale: 3, notchWidth: 180, isBuiltin: true)
@@ -82,11 +84,13 @@ final class BarPlanTests: XCTestCase {
     let changed = try XCTUnwrap(updated.displays[1])
     XCTAssertEqual(changed.band.frame, band)
     XCTAssertEqual(changed.key.frame, band)
-    XCTAssertEqual(changed.key.plate, BarGeometry.plate(keySize: band.size, menuHeight: 0, scale: 3))
+    XCTAssertEqual(changed.key.plate, BarGeometry.plate(keySize: band.size, menuHeight: 33, scale: 3))
     let unmeasured = try XCTUnwrap(BarPlanFixture(measured: false).plan())
+    XCTAssertEqual(unmeasured.key.plate?.flipped.minY, 25.5)
+    XCTAssertEqual(unmeasured.key.calibratedPlate?.flipped.minY, 29)
     XCTAssertNil(unmeasured.edge.frame)
     XCTAssertEqual(unmeasured.edge.alpha, .value(0))
-    XCTAssertEqual(unmeasured.blackBottom, 68)
+    XCTAssertEqual(unmeasured.blackBottom, 66)
   }
 
   func testRevealPlanHidesBandEdgeCornersAndKeys() throws {
@@ -142,19 +146,21 @@ final class BarPlanTests: XCTestCase {
     XCTAssertEqual(first, plan(screens.reversed()))
   }
 
-  func testAnEntrancePlanMasksBandKeyAndEdgeAndFadesCorners() throws {
+  func testAnEntrancePlanMasksBandAndKeyAndFadesCorners() throws {
     let fixture = BarPlanFixture(active: [7], appearance: .dark)
     for time in [-600.0, 180, 570] {
       let plan = try XCTUnwrap(fixture.plan(elapsedMS: time))
       XCTAssertEqual(plan.appearance, .dark)
-      let band = try XCTUnwrap(plan.band.frame), edge = try XCTUnwrap(plan.edge.frame)
+      let band = try XCTUnwrap(plan.band.frame)
       let mask = BarEntranceMask.band(elapsedMS: time, bandSize: band.size, notchWidth: 180)
       XCTAssertEqual(plan.band.mask, mask)
       XCTAssertEqual(plan.band.alpha, .value(1))
       XCTAssertEqual(plan.key.mask, mask)
       XCTAssertEqual(plan.key.gates, [7: .value(0)])
       XCTAssertEqual(plan.key.backdropExtent, BarEntranceMask.keyBackdropExtent(band: mask, bandSize: band.size))
-      XCTAssertEqual(plan.edge.mask, BarEntranceMask.edge(band: mask, bandFrame: band, edgeFrame: edge))
+      // The measured menu fills the band: the edge has no frame and so no mask.
+      XCTAssertNil(plan.edge.frame)
+      XCTAssertEqual(plan.edge.mask, .none)
       XCTAssertEqual(plan.edge.alpha, .value(1))
       for corner in ScreenCorner.allCases {
         XCTAssertEqual(plan.corners[corner]?.alpha, .value(BarAnimation.calm.corner(at: time, top: true).progress))

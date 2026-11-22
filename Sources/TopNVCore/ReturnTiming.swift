@@ -13,14 +13,16 @@ public struct ReturnTiming {
 
   public func progress(at elapsed: Double) -> Double {
     // Hold a display frame of motion while waiting at most one extra window-list sample.
-    let tailStart = min(endSignalMS ?? Self.timeoutMS, Self.timeoutMS)
+    let reserveStart = Self.durationMS - Self.reserveMS
+    // A return and its end can arrive in one sample. Only the reserved frame
+    // follows the end signal; the visible entrance keeps its original clock.
+    let tailStart = max(reserveStart, min(endSignalMS ?? Self.timeoutMS, Self.timeoutMS))
     func base(_ time: Double) -> Double {
-      min(max(0, time), Self.durationMS - Self.reserveMS) / Self.durationMS
+      min(max(0, time), reserveStart) / Self.durationMS
     }
     guard elapsed >= tailStart else { return base(elapsed) }
     let from = base(tailStart)
-    let tailMS = min(2 * Self.sampleMS, (1 - from) * Self.durationMS)
-    return from + (1 - from) * AnimationTiming.easeOut.progress(elapsed - tailStart, to: tailMS)
+    return from + (1 - from) * AnimationTiming.easeOut.progress(elapsed - tailStart, to: Self.reserveMS)
   }
 
   public mutating func surfaceEnded(at elapsed: Double, receivedAt: Double? = nil) {

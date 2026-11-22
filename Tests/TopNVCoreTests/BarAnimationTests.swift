@@ -35,6 +35,20 @@ final class BarAnimationTests: XCTestCase {
     XCTAssertEqual(BarAnimation.curtain.corner(at: 560, top: false).progress, 0)
   }
 
+  func testCalmWidthMovesEarlyAndAvoidsAMidpointSurge() {
+    let variant = BarAnimation.calm
+    func width(_ elapsed: Double) -> Double {
+      2 * variant.frame(at: elapsed / ReturnTiming.durationMS * variant.durationMS,
+                        width: 3024, height: 66, notch: 346).halfWidth
+    }
+    // In the build 20 recording, adjacent frames could be 25 ms apart.
+    // Advance at least one slice per side early; keep each such step under 15% of the display.
+    XCTAssertGreaterThan(width(25) - width(0), 96)
+    for elapsed in stride(from: 0.0, through: 210, by: 1) {
+      XCTAssertLessThan(width(elapsed + 25) - width(elapsed), 3024 * 0.15)
+    }
+  }
+
   func testAllCalmCornersReachHalfOpacityAtMidTravelAndFullOpacityAtArrival() {
     for top in [true, false] {
       let variant = BarAnimation.calm

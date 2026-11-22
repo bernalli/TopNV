@@ -19,8 +19,10 @@ public struct BarPartPlan: Equatable, Sendable {
 public struct BarKeyPlan: Equatable, Sendable {
   public let exists: Bool
   public let frame: CGRect?
-  /// Geometry to install when creating a key. Existing plates keep their original geometry.
+  /// Existing plates take new geometry when the confirmed depth changes.
   public let plate: BarPlate?
+  public let calibratedPlate: BarPlate?
+  public let confirmedMenuDepth: CGFloat?
   public let gates: [Int: BarAlpha]
   public let close: [Int]
   public let create: BarKeyCreation?
@@ -38,6 +40,7 @@ public struct BarDisplayPlan: Equatable, Sendable {
   public let edge: BarPartPlan
   public let key: BarKeyPlan
   public let corners: [ScreenCorner: BarPartPlan]
+  public internal(set) var cascadesOnReturn = false
   public let blackBottom: Int
 }
 
@@ -61,11 +64,14 @@ public enum BarSurface {
                                   entrance: BarEntrance?) -> BarDisplayPlan {
     let kind = scene.kinds[id] ?? (display == nil ? .absent : .unknown)
     let bandFrame = scene.bandFrames[id]
-    let bandEnabled = bandFrame != nil
     let cornersWanted = scene.cornerDisplays.contains(id)
-    let menu = scene.evidence(display: id)?.menuBounds
+    let menuDepth = scene.confirmedMenuDepth(display: id)
+    // A measured menu spans the same top edge as the band.
+    let menu = bandFrame.flatMap { frame in
+      menuDepth.map { BarGeometry.topStrip(frame: frame, height: $0) }
+    }
     func cell(_ part: BarPart) -> BarCell {
-      BarTable.cell(part, kind: kind, bandEnabled: bandEnabled, cornersWanted: cornersWanted,
+      BarTable.cell(part, kind: kind, bandEnabled: bandFrame != nil, cornersWanted: cornersWanted,
                     keyFailed: scene.keyFailed || !scene.appliedHideNotch, menuMeasured: menu != nil,
                     entrance: entrance != nil, entrancePermitted: scene.entrancePermitted(display: id))
     }
@@ -106,8 +112,9 @@ public enum BarSurface {
       }
     }
     return BarDisplayPlan(geometry: display, appearance: scene.appearances[id] ?? .unknown, kind: kind,
-                          bandEnabled: bandEnabled, band: band, edge: edge, key: key,
-                          corners: corners, blackBottom: BarGeometry.blackBottom(band: band.solidPixels,
+                          bandEnabled: bandFrame != nil, band: band, edge: edge, key: key,
+                          corners: corners, cascadesOnReturn: bandCell == .path && entrance?.origin == .returnSignal,
+                          blackBottom: BarGeometry.blackBottom(band: band.solidPixels,
                                                                                 edge: edge.solidPixels))
   }
 
@@ -115,9 +122,11 @@ public enum BarSurface {
                               display: BarDisplay?, scene: BarScene) -> BarKeyPlan {
     let exists = cell != .closed
     let keyFrame = exists ? band.frame : nil
-    let plate = keyFrame.flatMap { frame in
-      display.map { BarGeometry.plate(keySize: frame.size, menuHeight: $0.frame.maxY - $0.visibleFrame.maxY,
-                                      scale: $0.scale) }
+    let menuDepth = exists ? scene.confirmedMenuDepth(display: id) : nil
+    func plate(margin: CGFloat) -> BarPlate? {
+      guard let keyFrame, let display else { return nil }
+      let depth = menuDepth ?? (display.frame.maxY - display.visibleFrame.maxY)
+      return BarGeometry.plate(keySize: keyFrame.size, menuHeight: depth, scale: display.scale, margin: margin)
     }
     let decision = cell == .gate || cell == .path ? scene.keyDecisions[id] : nil
     let create = decision?.create.map { BarKeyCreation(instance: scene.keyInstances[id] ?? 0, reservation: $0) }
@@ -125,7 +134,8 @@ public enum BarSurface {
     let extent = keyMask == .none ? nil : keyFrame.map {
       BarEntranceMask.keyBackdropExtent(band: keyMask, bandSize: $0.size)
     }
-    return BarKeyPlan(exists: exists, frame: keyFrame, plate: plate,
+    return BarKeyPlan(exists: exists, frame: keyFrame, plate: plate(margin: BarGeometry.plateGlyphMargin),
+                      calibratedPlate: plate(margin: BarGeometry.calibratedPlateMargin), confirmedMenuDepth: menuDepth,
                       gates: decision?.gates.mapValues { .value($0 ? 1 : 0) } ?? [:],
                       close: decision?.close ?? [], create: create, mask: keyMask, backdropExtent: extent)
   }

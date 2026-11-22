@@ -11,20 +11,21 @@ final class ReturnTimingTests: XCTestCase {
         timing.surfaceEnded(at: signal, receivedAt: receipt)
         XCTAssertEqual(timing.progress(at: receipt), before, accuracy: 0.000_001)
         XCTAssertGreaterThanOrEqual(timing.progress(at: receipt + 1), before)
-        XCTAssertEqual(timing.progress(at: receipt + 100), 1)
+        XCTAssertEqual(timing.progress(at: max(ReturnTiming.durationMS, receipt + 100)), 1)
       }
     }
   }
 
-  func testEarlySurfaceEndShortensTheRemainingTrackWithoutJumping() {
-    var timing = ReturnTiming()
-    let before = timing.progress(at: 180)
-    timing.surfaceEnded(at: 180)
-    XCTAssertEqual(timing.progress(at: 180), before)
-    XCTAssertGreaterThan(timing.progress(at: 195), before)
-    XCTAssertLessThan(timing.progress(at: 195), 1)
-    timing.surfaceEnded(at: 195)
-    XCTAssertEqual(timing.progress(at: 247), 1)
+  func testEarlyEndPreservesEveryVisibleFrameOfTheCalmEntrance() {
+    let normal = ReturnTiming()
+    for end in [0.0, 1, 25, 80, 180, 260] {
+      var timing = ReturnTiming()
+      timing.surfaceEnded(at: end)
+      for elapsed in stride(from: 0.0, through: 270, by: 5) {
+        XCTAssertEqual(timing.progress(at: elapsed), normal.progress(at: elapsed), accuracy: 0.000_001)
+      }
+      XCTAssertEqual(timing.progress(at: ReturnTiming.durationMS), 1)
+    }
   }
 
   func testLateSignalKeepsTheLastFramesUntilTheSurfaceLeaves() {

@@ -18,6 +18,6 @@ extension MenuLayout {
     let calm = MenuRow(id: "previewCalm", title: "\(BarAnimation.calm.name) — fable", symbol: nil,
                        kind: .action(.previewCalm, enabled: true, key: ""))
     return MenuRow(id: "animationPreview", title: "Animation preview", symbol: nil,
-                   kind: .submenu([calm], enabled: state.hideNotch))
+                   kind: .submenu([calm], enabled: state.hideNotch && !state.menuBarBackground))
   }
 }

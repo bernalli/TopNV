@@ -11,7 +11,9 @@ import sys
 # removed. The Black Menu Bar on Light Wallpapers key of 1.2.3 is removed again
 # in 1.2.4, so Localization.swift is back to its reviewed bytes (only the TextKey
 # enum changed in between; the Localizer and the English About path stay the
-# same). Do not regenerate automatically:
+# same). In 1.2.7 the shared source adds the menu-background caption to the
+# TopNV-only menu keys. AboutText still uses Localizer.english throughout.
+# Do not regenerate automatically:
 # changing any digest requires reviewing the entire About text path again.
 EXPECTED = {
     "Sources/TopNV/AboutTitleFont.swift":
@@ -31,7 +33,7 @@ EXPECTED = {
     "Sources/TopNVCore/AppVersion.swift":
         "ace8d64174babf5a40915aa7132bde50dd3f329f92cf38459e204875e2618d1b",
     "Sources/TopNVCore/Localization.swift":
-        "9f2324f7aea4fa075c802f6b8980fc7febdd348d56d44de312d803a650ef1ab3",
+        "faa5fb150b8ce82f601e9e4b28bf0cdb6bf0a535b2b84565513d288e78f79bda",
 }
 
 

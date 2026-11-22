@@ -96,6 +96,24 @@ extension BarSceneTests {
     }
   }
 
+  func testDesktopOverviewStaysHiddenDuringAReducedMotionReturn() throws {
+    var scene = scene()
+    _ = scene.handle(sample([menu()], now: 1, reduced: true))
+    _ = scene.handle(sample([menu(), background(19)], now: 2, reduced: true))
+    for now in [3.0, 4] {
+      let effects = scene.handle(sample([menu(), background(19, alpha: 0.8)], now: now, reduced: true))
+      XCTAssertFalse(returnStarts(effects))
+      let fading = try plan(scene)
+      XCTAssertEqual(fading.kind, .overview)
+      XCTAssertEqual(fading.band.alpha, .value(0))
+      XCTAssertEqual(fading.edge.alpha, .value(0))
+      XCTAssertTrue(fading.corners.values.allSatisfy { $0.alpha == .value(0) })
+    }
+    let end = scene.handle(sample([menu()], now: 5, reduced: true))
+    XCTAssertFalse(returnStarts(end))
+    XCTAssertEqual(try plan(scene).band.alpha, .value(1))
+  }
+
   func testFullScreenReturnRequiresAVisibleMenuInAnyListOrder() {
     let bar = menu()
     let transparent = Window(owner: .windowServer, layer: bar.layer, bounds: bar.bounds, alpha: 0)
@@ -133,6 +151,7 @@ extension BarSceneTests {
 
       scene.advanceEntrance(display: 1, elapsedMS: 100)
       let entering = try plan(scene)
+      XCTAssertTrue(entering.cascadesOnReturn, label)
       XCTAssertEqual(entering.kind, .fullScreen, label)
       XCTAssertNotEqual(entering.band.mask, BarMask.none, label)
       XCTAssertEqual(entering.key.mask, entering.band.mask, label)

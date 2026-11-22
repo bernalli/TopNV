@@ -22,7 +22,8 @@ extension BarSceneTests {
     // Independent composition of the raw fixture, DesktopReturn and the characterized per-display key.
     for screen in input.displays where scene.keyedActive {
       guard let evidence = resolved[screen.id] else { continue }
-      let followsSurface = evidence.fullScreenBackdrop && scene.entrances[screen.id] == nil
+      let reducedOverview = input.reduceMotion && evidence.revealLayer == BarSceneKind.overviewLayer
+      let followsSurface = (evidence.fullScreenBackdrop || reducedOverview) && scene.entrances[screen.id] == nil
       let revealed = followsSurface ? evidence.revealLayer != nil : evidence.desktopRevealed
       var reference = before[screen.id] ?? KeyedOverlayState()
       let expected = reference.update(.init(

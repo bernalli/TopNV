@@ -24,8 +24,9 @@ final class KeyLamp {
   }
 
   private static let logger = Logger(subsystem: "TopNV", category: "Lamp")
-  /// Above the black band, below the key and the system menu.
-  static let level = NSWindow.Level(rawValue: OverlayLevel.bar.rawValue + 1)
+  /// Illuminate the menu above normal document shadows. The system reveal surfaces,
+  /// menu glyphs and per-Space key still composite above this window.
+  static let level = NSWindow.Level(rawValue: NSWindow.Level.normal.rawValue + 1)
   /// The Space behavior of the key: a lamp never stays behind on another Space.
   static let behavior = OverlayBehavior.keyed
   private let newWindow: @MainActor (CGRect) -> OverlayWindow?

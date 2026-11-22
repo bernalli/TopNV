@@ -52,12 +52,13 @@ public struct MenuState: Equatable, Sendable {
   /// The last registration error; blank text counts as no error.
   public var loginError: String?
   public var updates: UpdateItems
+  public var menuBarBackground: Bool
   public var isTestCopy: Bool
 
   public init(
     hideNotch: Bool, roundCorners: Bool, cornersOnAllDisplays: Bool, launchAtLogin: Bool,
     loginNeedsApproval: Bool, loginError: String?, updates: UpdateItems,
-    isTestCopy: Bool = false
+    isTestCopy: Bool = false, menuBarBackground: Bool = false
   ) {
     self.hideNotch = hideNotch
     self.roundCorners = roundCorners
@@ -67,6 +68,7 @@ public struct MenuState: Equatable, Sendable {
     self.loginError = loginError
     self.updates = updates
     self.isTestCopy = isTestCopy
+    self.menuBarBackground = menuBarBackground
   }
 }
 
@@ -80,7 +82,12 @@ public enum MenuLayout {
       MenuRow(id: "topnv", title: appName, symbol: nil, kind: .header),
       MenuRow(
         id: "hideNotch", title: localizer(.hideNotch), symbol: "menubar.rectangle",
-        kind: .toggle(.hideNotch, isOn: state.hideNotch, enabled: true)),
+        kind: .toggle(.hideNotch, isOn: state.hideNotch, enabled: true))
+    ]
+    if state.hideNotch && state.menuBarBackground {
+      rows += info(localizer(.menuBarBackgroundCaption), id: "hideNotch.caption")
+    }
+    rows += [
       MenuRow(
         id: "roundCorners", title: localizer(.roundCorners), symbol: "rectangle",
         kind: .toggle(.roundCorners, isOn: state.roundCorners, enabled: true)),

@@ -20,6 +20,7 @@ import TopNVCore
   private var visibilityObservation: NSKeyValueObservation?
   private var refreshScheduled = false
   var onEntrancePreview: (() -> Void)?
+  var menuBarBackground = false { didSet { scheduleRefresh() } }
   private let isTestCopy: Bool
 
   private static let icon: NSImage? = {
@@ -95,7 +96,7 @@ import TopNVCore
       hideNotch: settings.hideNotch, roundCorners: settings.roundCorners,
       cornersOnAllDisplays: settings.cornersOnAllDisplays, launchAtLogin: loginItem.isEnabled,
       loginNeedsApproval: loginItem.needsApproval, loginError: loginItem.errorMessage,
-      updates: updates.items, isTestCopy: isTestCopy)
+      updates: updates.items, isTestCopy: isTestCopy, menuBarBackground: menuBarBackground)
   }
 
   /// The login item does not publish approval changes made in System Settings; opening the menu
@@ -115,7 +116,7 @@ import TopNVCore
       if let url = AppLink.reportIssue.url { NSWorkspace.shared.open(url) }
     case .quit: NSApp.terminate(nil)
     case .previewCalm:
-      guard isTestCopy, settings.hideNotch else { return }
+      guard isTestCopy, settings.hideNotch, !menuBarBackground else { return }
       onEntrancePreview?()
     }
   }

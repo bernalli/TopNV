@@ -70,12 +70,14 @@ private final class Keys: BarKeyExecuting {
   var active: [UInt32: [Int]] = [:]
   var closed: Set<UInt32> = []
   var creations: [BarKeyCreation] = []
+  private(set) var framesCheckedForKeyClosure: [UInt32: CGRect] = [:]
   var windows: [UInt32: [Int: Double]] = [:]
   var plans: [BarPlan] = []
   init(_ samples: Samples) { self.samples = samples }
 
   func closeChanged(frames: [UInt32: CGRect], enabled: Bool, scales: [UInt32: CGFloat]) -> Set<UInt32> {
     samples.events.append("closeChanged")
+    framesCheckedForKeyClosure = frames
     for id in closed {
       active[id] = nil
       for number in windows.removeValue(forKey: id)?.keys.map({ $0 }) ?? [] {
@@ -187,8 +189,10 @@ private final class Fixture {
                  safeAreaTop: 32, scale: scale, notchWidth: 180, isBuiltin: id == 1)
   }
 
-  func menu(_ id: UInt32 = 1) -> MenuBarEvidence.Window {
-    .init(owner: .windowServer, layer: 24, bounds: CGRect(x: display(id).frame.minX, y: 949, width: 1512, height: 33))
+  func menu(_ id: UInt32 = 1, depth: CGFloat = 33) -> MenuBarEvidence.Window {
+    let frame = display(id).frame
+    return .init(owner: .windowServer, layer: 24,
+                 bounds: CGRect(x: frame.minX, y: frame.maxY - depth, width: frame.width, height: depth))
   }
 
   func surface(_ layer: Int, alpha: Double = 1) -> MenuBarEvidence.Window {
@@ -204,6 +208,21 @@ private final class Fixture {
 
 @MainActor
 final class OverlayCoordinatorTests: XCTestCase {
+  func testMenuMeasurementResizesTheBandBeforeKeyWindowsAreReconciled() throws {
+    let fixture = Fixture()
+    fixture.controller.start()
+    let old = try XCTUnwrap(fixture.keys.creations.last)
+    fixture.keys.active[1] = [101]
+    fixture.deliver([fixture.menu(depth: 37)])
+    XCTAssertEqual(fixture.keys.framesCheckedForKeyClosure[1]?.height, 33)
+    fixture.keys.closed = [1]
+    fixture.deliver([fixture.menu(depth: 37)])
+    let plan = try XCTUnwrap(fixture.bands.plans.last?.displays[1])
+    XCTAssertNotEqual(fixture.keys.creations.last?.instance, old.instance)
+    XCTAssertEqual(plan.band.frame?.height, 37)
+    XCTAssertEqual(fixture.keys.framesCheckedForKeyClosure[1], plan.band.frame)
+  }
+
   func testARebuildAppliesOnePlanAndOrdersBandAndCornersFront() throws {
     let fixture = Fixture()
     fixture.controller.start()
@@ -258,7 +277,7 @@ final class OverlayCoordinatorTests: XCTestCase {
     fixture.samples.windows = [fixture.menu(), fixture.menu(2)]
     fixture.controller.start()
     XCTAssertTrue(fixture.lines.contains {
-      $0.contains("display=1 scene=desktop part=summary") && $0.hasSuffix("blackBottom=68")
+      $0.contains("display=1 scene=desktop part=summary") && $0.hasSuffix("blackBottom=66")
     })
     fixture.keys.active = [1: [101], 2: [102]]
     for (surfaces, kind) in [([fixture.surface(18), fixture.surface(19)], BarSceneKind.revealed),
