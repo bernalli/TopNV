@@ -8,6 +8,12 @@ import XCTest
 final class KeyLampTests: XCTestCase {
   private let litMask = BarMask.rect(CGRect(x: 20, y: 0, width: 80, height: 17))
 
+  func testNormalWindowShadowsStayBelowTheLampAndSystemRevealsStayAboveIt() {
+    XCTAssertGreaterThan(KeyLamp.level.rawValue, NSWindow.Level.normal.rawValue)
+    XCTAssertLessThan(KeyLamp.level.rawValue, BarSceneKind.overviewLayer - 1)
+    XCTAssertLessThan(KeyLamp.level.rawValue, NSWindow.Level.mainMenu.rawValue)
+  }
+
   func testTheLampWindowBelongsToOneSpaceLikeItsKeyAndSitsBelowIt() {
     _ = NSApplication.shared
     let lamp = KeyLamp.makeWindow(ExecutorPlans.frame)
