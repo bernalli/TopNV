@@ -1,9 +1,8 @@
 import CoreGraphics
 
-/// Decides band operations without a window server. A Space transition never changes the
-/// geometry. A screen-configuration event is not trusted blindly either: wake and display events
-/// can arrive while a full-screen Space hides the menu bar or the notch area. So for a display
-/// that keeps its screen size the band never shrinks and never closes; it can only grow.
+/// Decides band operations without a window server. Space notifications preserve geometry.
+/// A measured menu can resize the band. Until then, keep the tallest fallback at the same
+/// screen size because wake and display events can arrive with the menu or notch area hidden.
 public struct BandState: Sendable {
   public enum Event: Sendable {
     case screenConfigurationChanged
@@ -30,10 +29,22 @@ public struct BandState: Sendable {
     case close(displayID: UInt32)
   }
 
-  /// The screen size of a display at its last good measure, and the band height found then.
+  private enum MenuObservation: Equatable, Sendable {
+    case measured(CGFloat)
+    case unlisted
+    case unavailable
+  }
+
   private struct Memory: Sendable {
     let size: CGSize
-    let height: CGFloat
+    let fallbackHeight: CGFloat
+    var safeAreaTop: CGFloat
+    var menuDepth: CGFloat?
+
+    func frame(on screen: CGRect) -> CGRect {
+      let height = min(screen.height, max(menuDepth ?? fallbackHeight, safeAreaTop))
+      return BarGeometry.topStrip(frame: screen, height: height)
+    }
   }
 
   /// Frames of the currently requested windows; also positions the corners below the band.
@@ -41,21 +52,23 @@ public struct BandState: Sendable {
   private var confirmedFrames: [UInt32: CGRect] = [:]
   /// Outlives a display that leaves the list, so the same display returns at its good height.
   private var memories: [UInt32: Memory] = [:]
+  private var pendingMenuObservations: [UInt32: MenuObservation] = [:]
 
   public init() {}
 
   public mutating func update(
     _ event: Event, screens: [Screen], hideNotch: Bool
   ) -> [Action] {
+    pendingMenuObservations.removeAll()
     // Even an empty or changed screen list during a Space switch is not a topology change.
     guard event != .spaceChanged else { return [] }
 
     if event == .screenConfigurationChanged {
       confirmedFrames.removeAll()
       for screen in screens {
-        let frame = confirmedFrame(for: screen)
-        confirmedFrames[screen.id] = frame
-        memories[screen.id] = frame.map { Memory(size: screen.frame.size, height: $0.height) }
+        let memory = configurationMemory(for: screen)
+        confirmedFrames[screen.id] = memory?.frame(on: screen.frame)
+        memories[screen.id] = memory
       }
     }
 
@@ -75,17 +88,41 @@ public struct BandState: Sendable {
     return actions
   }
 
-  /// The measured band, or the remembered one when the display kept its screen size and the
-  /// measure is lower or missing. A different size, or a display never seen, takes the measure.
-  private func confirmedFrame(for screen: Screen) -> CGRect? {
-    let measured = BarGeometry.barRect(
-      frame: screen.frame, visibleFrame: screen.visibleFrame, safeAreaTop: screen.safeAreaTop)
-    guard let memory = memories[screen.id], memory.size == screen.frame.size else {
-      return measured
+  func menuDepth(for id: UInt32) -> CGFloat? { memories[id]?.menuDepth }
+
+  mutating func discardMenuObservation(for id: UInt32) { pendingMenuObservations[id] = nil }
+
+  /// A first measurement applies immediately. Changes to it need two consecutive matching samples.
+  mutating func observeMenu(_ menu: CGRect?, listAvailable: Bool, on display: BarDisplay) {
+    let id = display.id
+    let frame = display.frame
+    let pending = pendingMenuObservations.removeValue(forKey: id)
+    guard let band = frames[id], var memory = memories[id], memory.size == frame.size,
+          band.minX == frame.minX, band.maxY == frame.maxY else { return }
+    if display.safeAreaTop > memory.safeAreaTop { memory.safeAreaTop = display.safeAreaTop }
+    let depth = menu?.height
+    if depth != memory.menuDepth {
+      let observation = depth.map(MenuObservation.measured) ?? (listAvailable ? .unlisted : .unavailable)
+      if memory.menuDepth == nil || pending == observation {
+        memory.menuDepth = depth
+      } else {
+        pendingMenuObservations[id] = observation
+      }
     }
-    if let measured, measured.height >= memory.height { return measured }
-    return CGRect(
-      x: screen.frame.minX, y: screen.frame.maxY - memory.height, width: screen.frame.width,
-      height: memory.height)
+    memories[id] = memory
+    let measured = memory.frame(on: frame)
+    confirmedFrames[id] = measured
+    frames[id] = measured
+  }
+
+  private func configurationMemory(for screen: Screen) -> Memory? {
+    let fallback = BarGeometry.barRect(
+      frame: screen.frame, visibleFrame: screen.visibleFrame, safeAreaTop: screen.safeAreaTop)
+    let previous = memories[screen.id].flatMap { $0.size == screen.frame.size ? $0 : nil }
+    let height = max(fallback?.height ?? 0, previous?.fallbackHeight ?? 0)
+    guard height > 0 else { return nil }
+    let safeArea = screen.safeAreaTop > 0 ? screen.safeAreaTop : previous?.safeAreaTop ?? 0
+    return Memory(size: screen.frame.size, fallbackHeight: height, safeAreaTop: safeArea,
+                  menuDepth: previous?.menuDepth)
   }
 }

@@ -27,7 +27,6 @@ public struct BarPlate: Equatable, Sendable {
 }
 
 public enum BarGeometry {
-  public static let separator: CGFloat = 1
   public static let edgeDepth: CGFloat = 2
   // Cover the illuminated bottom rim while leaving the two-tone glyph edges visible.
   public static let calibratedPlateMargin: CGFloat = 4
@@ -38,11 +37,15 @@ public enum BarGeometry {
     frame: CGRect, visibleFrame: CGRect, safeAreaTop: CGFloat
   ) -> CGRect? {
     guard ScreenGeometry.isNotched(safeAreaTop: safeAreaTop) else { return nil }
-    // The system surface ends above a one-point separator (rows 66 and 67 at 2x).
-    let gap = frame.maxY - visibleFrame.maxY
-    let height = min(frame.height, max(safeAreaTop, gap > 0 ? gap + separator : 0))
+    // Use the reserved top when the menu window has not been measured.
+    let gap = max(0, frame.maxY - visibleFrame.maxY)
+    let height = min(frame.height, max(safeAreaTop, gap))
     guard height > 0 else { return nil }
-    return CGRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
+    return topStrip(frame: frame, height: height)
+  }
+
+  static func topStrip(frame: CGRect, height: CGFloat) -> CGRect {
+    CGRect(x: frame.minX, y: frame.maxY - height, width: frame.width, height: height)
   }
 
   /// Local frame of the opaque plate along the bottom edge of the keyed window.

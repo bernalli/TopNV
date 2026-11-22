@@ -5,6 +5,7 @@ import Foundation
 public enum TextKey: String, CaseIterable {
   // TopNV only.
   case hideNotch = "Hide Notch"
+  case menuBarBackgroundCaption = "To hide the notch, turn off Show menu bar background in System Settings."
   case roundCorners = "Round Corners"
   case roundCornersOnAllDisplays = "Round Corners on All Displays"
   case launchAtLoginNeedsApproval = "Launch at Login (Requires Approval)"
@@ -35,7 +36,7 @@ public enum TextKey: String, CaseIterable {
 
   public var scope: Scope {
     switch self {
-    case .hideNotch, .roundCorners, .roundCornersOnAllDisplays, .launchAtLoginNeedsApproval,
+    case .hideNotch, .menuBarBackgroundCaption, .roundCorners, .roundCornersOnAllDisplays, .launchAtLoginNeedsApproval,
       .loginItemApproval:
       return .topNV
     case .options, .launchAtLogin, .hideMenuBarIcon, .hideMenuBarIconCaption,

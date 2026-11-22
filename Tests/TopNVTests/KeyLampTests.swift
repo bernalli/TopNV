@@ -179,6 +179,43 @@ final class KeyLampTests: XCTestCase {
     XCTAssertEqual(harness.lamp.keys, [])
   }
 
+  func testConfirmedDepthUpdatesThePlateWithoutReplacingTheKey() throws {
+    let harness = KeyHarness()
+    defer { harness.executor.closeAll() }
+    harness.runtime.rejectPair = true
+    harness.apply(ExecutorPlans.key(create: try harness.creation(), confirmedMenuDepth: 31))
+    let key = try XCTUnwrap(harness.windows.first)
+    let plate = try XCTUnwrap(key.contentView?.layer?.sublayers?.first { $0.name == "Bottom plate" })
+    XCTAssertEqual(plate.frame.height, 10.5)
+
+    harness.apply(ExecutorPlans.key(confirmedMenuDepth: 32))
+    XCTAssertEqual(plate.frame.height, 9.5)
+    XCTAssertEqual(harness.windows.count, 1)
+
+    harness.apply(ExecutorPlans.key())
+    XCTAssertEqual(plate.frame.height, 8.5)
+    harness.apply(ExecutorPlans.key(gap: 20))
+    XCTAssertEqual(plate.frame.height, 8.5)
+  }
+
+  func testConfirmedDepthUpdatesTheCalibratedPlate() throws {
+    let initial = ExecutorPlans.key(confirmedMenuDepth: 31)
+    let plate = KeyBottomPlate(original: try XCTUnwrap(initial.plate),
+                               calibrated: try XCTUnwrap(initial.calibratedPlate), menuDepth: 31)
+    let root = CALayer()
+    plate.install(in: root, scale: 2)
+    plate.apply(calibrated: true)
+    XCTAssertEqual(plate.layer.frame.height, 7)
+
+    plate.update(ExecutorPlans.key(confirmedMenuDepth: 32), calibrated: true)
+    XCTAssertEqual(plate.layer.frame.height, 6)
+    plate.update(ExecutorPlans.key(), calibrated: true)
+    XCTAssertEqual(plate.layer.frame.height, 5)
+    plate.update(ExecutorPlans.key(gap: 20), calibrated: true)
+    XCTAssertEqual(plate.layer.frame.height, 5)
+    XCTAssertTrue(plate.layer.superlayer === root)
+  }
+
   func testPairAndLampFailuresRestoreTheOrdinaryKeyAndCreationPlate() throws {
     for failure in ["lamp", "lamp readback", "lamp out", "pair", "pair readback"] {
       let harness = KeyHarness()

@@ -323,6 +323,7 @@ final class LocalizationTests: XCTestCase {
     XCTAssertEqual(
       keys(.topNV),
       [
+        "To hide the notch, turn off Show menu bar background in System Settings.",
         "Hide Notch", "Round Corners", "Round Corners on All Displays",
         "Launch at Login (Requires Approval)",
         "Allow %@ in System Settings > General > Login Items.",

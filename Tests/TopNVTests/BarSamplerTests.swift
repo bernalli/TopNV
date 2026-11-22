@@ -33,6 +33,24 @@ final class BarSamplerTests: XCTestCase {
     })
   }
 
+  func testMenuBackgroundRefreshesOnExistingSamplesAndBoundsPreferenceReads() {
+    var preference = MenuBarBackgroundPreference()
+    var systemValue = false
+    var reads = 0
+    func read() -> Bool {
+      reads += 1
+      return systemValue
+    }
+    XCTAssertFalse(preference.value(at: 0, read: read))
+    systemValue = true
+    XCTAssertFalse(preference.value(at: 0.1, read: read))
+    XCTAssertTrue(preference.value(at: 1, read: read))
+    systemValue = false
+    XCTAssertTrue(preference.value(at: 1.1, read: read))
+    XCTAssertFalse(preference.value(at: 2, read: read))
+    XCTAssertEqual(reads, 3)
+  }
+
   func testATimerSampleReadsTheWindowListOffTheMainThreadAndKeepsItsAcquisitionTime() {
     _ = NSApplication.shared
     let log = ReadLog()

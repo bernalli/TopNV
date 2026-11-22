@@ -36,6 +36,7 @@ typealias WindowListReader = @Sendable (WindowListQuery?) -> WindowListRead
 @MainActor
 final class BarSampler: BarSampling {
   var onSample: (() -> Void)?
+  private var backgroundPreference = MenuBarBackgroundPreference()
   private var monitor: MenuBarConditionsMonitor?
   private var timer: Timer?
   private var dock: NSRunningApplication?
@@ -159,7 +160,7 @@ final class BarSampler: BarSampling {
                  systemFullScreen: NSApp.currentSystemPresentationOptions.contains(.fullScreen),
                  appearance: appearance, activeKeyWindows: [:], now: read.uptime,
                  reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                 signalTime: read.signalTime)
+                 signalTime: read.signalTime, menuBarBackground: backgroundPreference.value(at: read.uptime))
   }
 
   private func query() -> WindowListQuery? {

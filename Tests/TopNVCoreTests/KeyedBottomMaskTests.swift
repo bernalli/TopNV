@@ -17,15 +17,15 @@ final class KeyedBottomMaskTests: XCTestCase {
     }
   }
 
-  func testOpaquePlateReachesTheTwoSeparatorPixelsBelowTheSystemMenu() throws {
+  func testOpaquePlateReachesTheBottomOfTheSystemMenu() throws {
     let frame = CGRect(x: -1512, y: 100, width: 1512, height: 982)
     let visible = CGRect(x: -1512, y: 100, width: 1512, height: 949)
     let band = try XCTUnwrap(BarGeometry.barRect(frame: frame, visibleFrame: visible, safeAreaTop: 32))
     XCTAssertEqual(band.maxY, frame.maxY)
     let plate = BarGeometry.keyedBottomMask(size: band.size, menuHeight: 33, scale: 2, flipped: true)
     XCTAssertEqual(plate.minY * 2, 51)
-    XCTAssertEqual(plate.maxY * 2, 68)
-    XCTAssertEqual((frame.maxY - band.minY) * 2, 68)
+    XCTAssertEqual(plate.maxY * 2, 66)
+    XCTAssertEqual((frame.maxY - band.minY) * 2, 66)
   }
 
   func testHiddenMenuUsesTheBandAndOneTimesScalePreservesWholeGlyphPixels() {

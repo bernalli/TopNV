@@ -47,7 +47,7 @@ public enum MenuBarEvidence {
     /// Show Desktop or a click on the wallpaper: the backdrop under the menu bar is darker.
     public var desktopRevealed: Bool { revealOverride ?? (revealSurface != nil) }
     var revealOverride: Bool?
-    let revealSurface: Window?
+    public let revealSurface: Window?
     public var revealLayer: Int? { revealSurface?.layer }
     /// A Space switch slides the desktop of this display sideways. Every other value then mixes
     /// the Space that leaves with the Space that arrives.

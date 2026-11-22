@@ -20,7 +20,7 @@ final class ScreenGeometryTests: XCTestCase {
   func testBarRectOnNotchedScreenUsesMenuBarGap() {
     let rect = BarGeometry.barRect(
       frame: notchedFrame, visibleFrame: notchedVisible, safeAreaTop: 32)
-    XCTAssertEqual(rect, CGRect(x: 0, y: 948, width: 1512, height: 34))
+    XCTAssertEqual(rect, CGRect(x: 0, y: 949, width: 1512, height: 33))
   }
 
   func testBarRectIsNilOnScreenWithoutNotch() {
@@ -41,7 +41,7 @@ final class ScreenGeometryTests: XCTestCase {
     let frame = CGRect(x: -1728, y: 200, width: 1728, height: 1117)  // maxY = 1317
     let visible = CGRect(x: -1728, y: 200, width: 1728, height: 1079)  // maxY = 1279
     let rect = BarGeometry.barRect(frame: frame, visibleFrame: visible, safeAreaTop: 32)
-    XCTAssertEqual(rect, CGRect(x: -1728, y: 1278, width: 1728, height: 39))
+    XCTAssertEqual(rect, CGRect(x: -1728, y: 1279, width: 1728, height: 38))
   }
 
   // MARK: - Corner rects

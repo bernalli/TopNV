@@ -17,6 +17,8 @@ struct AnimationTiming {
   static let linear = Self(0, 0, 1, 1)
   static let arrow = Self(0.3, 0, 0.2, 1)
   static let calm = Self(0.65, 0, 0.35, 1)
+  // Symmetric handles limit center speed while retaining a soft start and finish.
+  static let bandTravel = Self(0.20, 0, 0.80, 1)
   static let settle = Self(0.16, 1, 0.3, 1)
   static let out = Self(0.2, 0.7, 0.2, 1)
   static let slow = Self(0.4, 0, 0.1, 1)

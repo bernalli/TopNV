@@ -19,6 +19,7 @@ final class OverlayController: NSObject {
   private let registryLine: (String) -> Void
   private let testCopy: Bool
 
+  var onMenuBarBackgroundChange: ((Bool) -> Void)?
   private var scene = BarScene()
   private var geometry: [UInt32: BarDisplay] = [:]
   private var clocks: [UInt32: EntranceTiming] = [:]
@@ -150,6 +151,11 @@ final class OverlayController: NSObject {
     let collected = applied
     let input = sampler.sampleNow()
     geometry = Dictionary(input.displays.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    var effects = scene.handlePresentation(input) { id in
+      collected.entries[.init(display: id, part: .band)]?.window.flatMap(CGWindowID.init(exactly:))
+    }
+    traceReturnSurfaces(input)
+    if let enabled = effects.menuBarBackgroundChange { onMenuBarBackgroundChange?(enabled) }
     let closed = keys.closeChanged(frames: scene.bandFrames, enabled: scene.appliedHideNotch,
                                    scales: geometry.mapValues(\.scale))
     // handle(event:) already reset states whose frame was removed at rebuild.
@@ -160,9 +166,7 @@ final class OverlayController: NSObject {
         active[id] = keys.activeWindowIDs(display: id)
       }
     }
-    let effects = scene.handle(BarSample(displays: input.displays, windows: input.windows,
-      systemFullScreen: input.systemFullScreen, appearance: input.appearance, activeKeyWindows: active,
-      now: input.now, reduceMotion: input.reduceMotion, signalTime: input.signalTime))
+    scene.handleKeys(input, activeWindows: active, effects: &effects)
     let plan = takePlan()
     for line in effects.traces { Self.trace.info("\(line, privacy: .public)") }
     for clock in clocks.values { clock.finishIfOverdue() }
@@ -271,5 +275,28 @@ final class OverlayController: NSObject {
     let lines = registry.record(snapshot, ownWindows: windows, listedAgainst: listedAgainst ?? applied)
     applied = snapshot
     for line in lines { registryLine(line) }
+  }
+}
+
+extension OverlayController {
+  private func traceReturnSurfaces(_ sample: BarSample) {
+    guard testCopy else { return }
+    for display in sample.displays {
+      guard let evidence = scene.evidence(display: display.id), let surface = evidence.revealSurface else { continue }
+      let time = Int(sample.signalTime * 1000)
+      let line = "returnSurface display=\(display.id) atMS=\(time) layer=\(surface.layer) alpha=\(surface.alpha)"
+        + " window=\(surface.number.map(String.init) ?? "none") menu=\(evidence.menuVisible)"
+        + " revealed=\(evidence.desktopRevealed)"
+      var detail = line
+      if let windows = sample.windows, let frame = scene.bandFrames[display.id] {
+        let menu = MenuBarEvidence.menuSurface(in: windows, bandFrame: frame, preferredLayer: 24)
+        let docs = windows.filter {
+          $0.owner == .application && $0.layer == 0 && $0.alpha > 0 && $0.bounds.intersects(display.frame)
+        }.count
+        detail += " menuLayer=\(menu?.layer ?? -1) menuAlpha=\(menu?.alpha ?? -1)"
+          + " measuredMenu=\(evidence.menuBounds != nil) documents=\(docs)"
+      }
+      Self.trace.info("\(detail, privacy: .public)")
+    }
   }
 }

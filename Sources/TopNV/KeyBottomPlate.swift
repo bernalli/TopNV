@@ -4,14 +4,24 @@ import TopNVCore
 @MainActor
 final class KeyBottomPlate {
   let layer = CALayer()
-  private let original: BarPlate
-  private let calibrated: BarPlate
+  private var original: BarPlate
+  private var calibrated: BarPlate
+  private var menuDepth: CGFloat?
 
-  init(original: BarPlate, display: BarDisplay, keySize: CGSize) {
+  init(original: BarPlate, calibrated: BarPlate, menuDepth: CGFloat?) {
     self.original = original
-    let menuHeight = display.frame.maxY - display.visibleFrame.maxY
-    calibrated = BarGeometry.plate(keySize: keySize, menuHeight: menuHeight, scale: display.scale,
-                                   margin: BarGeometry.calibratedPlateMargin)
+    self.calibrated = calibrated
+    self.menuDepth = menuDepth
+  }
+
+  // The notch can hold the window's size constant when the menu depth changes.
+  func update(_ key: BarKeyPlan, calibrated enabled: Bool) {
+    guard key.confirmedMenuDepth != menuDepth, let original = key.plate,
+          let calibrated = key.calibratedPlate else { return }
+    menuDepth = key.confirmedMenuDepth
+    self.original = original
+    self.calibrated = calibrated
+    apply(calibrated: enabled)
   }
 
   func install(in root: CALayer, scale: CGFloat) {

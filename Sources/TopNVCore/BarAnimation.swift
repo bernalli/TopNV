@@ -42,7 +42,7 @@ public enum BarAnimation: String, CaseIterable, Sendable {
   }
 
   private static func calmProgress(at time: Double) -> Double {
-    AnimationTiming.calm.progress(time, to: 410.4)
+    AnimationTiming.bandTravel.progress(time, to: 410.4)
   }
 
   public func frame(at time: Double, width: Double, height: Double, notch: Double) -> Frame {
