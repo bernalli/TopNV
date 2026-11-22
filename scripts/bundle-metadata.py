@@ -36,6 +36,17 @@ def languages_complete(folder):
     present = {p.name for p in folder.iterdir() if p.suffix == '.lproj'}
     return present == {l + '.lproj' for l in LANGUAGES} and all((folder/(l + '.lproj')/'Localizable.strings').is_file() for l in LANGUAGES)
 
+def clean_executable(app, root):
+    binary = (app/'Contents/MacOS/TopNV').read_bytes()
+    return all(marker not in binary for marker in
+               (b'/Users/', b'/private/var/folders/', b'/var/folders/', os.fsencode(root.resolve()) + b'/'))
+
+def clean_payload_names(app):
+    private_names = {'.env', '.git', '.claude', '.codex', 'auth.json'}
+    private_suffixes = {'.log', '.dSYM', '.xcresult', '.p8', '.p12', '.keychain-db', '.mov'}
+    return all(p.name not in private_names and not p.name.startswith('.env.') and
+               p.suffix not in private_suffixes for p in app.rglob('*'))
+
 def main():
     mode, root = sys.argv[1], Path(sys.argv[2])
     if mode == 'inputs':
@@ -62,6 +73,8 @@ def main():
             ('V2: public key mismatch', lambda: key(p.get('SUPublicEDKey')) and p['SUPublicEDKey'] == (root/'Assets/SparklePublicEDKey.txt').read_text().rstrip()),
             ('V3: updater flags must be booleans', lambda: all(type(p.get(k)) is bool and p[k] == v for k,v in [('SUEnableAutomaticChecks',False),('SUAllowsAutomaticUpdates',False),('SUVerifyUpdateBeforeExtraction',True)])),
             ('V4: invalid identity or version', lambda: version(p.get('CFBundleShortVersionString')) and build(p.get('CFBundleVersion')) and p.get('CFBundleIdentifier') == 'io.github.bernalli.topnv' and p.get('LSMinimumSystemVersion') == '14.0'),
+            ('V19: executable contains local build paths', lambda: clean_executable(app, root)),
+            ('V20: bundle contains a private or diagnostic file', lambda: clean_payload_names(app)),
             ('V11: Sparkle license mismatch', lambda: hash_matches(resources/'Sparkle.txt',SPARKLE_HASH)),
             ('V12: TopNV license mismatch', lambda: hash_matches(resources/'TopNV.txt',MIT_HASH)),
             ('V16: About font mismatch', lambda: hash_matches(app/'Contents/Resources/PlusJakartaSans-SemiBold.ttf',FONT_HASH)),

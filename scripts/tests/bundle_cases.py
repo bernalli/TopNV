@@ -69,11 +69,21 @@ def run_tests(kind):
                                  'codesign': 'exit 0'}.items():
                 tool = bindir / name; tool.write_text('#!/bin/bash\n' + script + '\n'); tool.chmod(0o755)
             products = root / 'products'; (products / 'Sparkle.framework').mkdir(parents=True)
-            executable = products / 'TopNV'; executable.write_text('#!/bin/bash\n'); executable.chmod(0o755)
+            # Mach-O debug maps retain the path to the object file until packaging strips them.
+            source = root / 'fixture.c'
+            source.write_text('int main(void) { return 0; }\n')
+            obj = root / 'private-build-location.o'
+            executable = products / 'TopNV'
+            subprocess.run(['xcrun', 'clang', '-g', '-c', str(source), '-o', str(obj)], check=True)
+            subprocess.run(['xcrun', 'clang', str(obj), '-o', str(executable)], check=True)
+            marker = os.fsencode(obj)
+            assert marker in executable.read_bytes(), 'fixture must contain an object path'
             extra = root / 'Localization/it.lproj/AppleStyleUpdateDriver.strings'
             extra.write_text('"Later" = "Più tardi";\n')
             result = bundle(TOPNV_EXECUTABLE=str(executable), PATH=str(bindir) + ':' + env['PATH'])
             assert result.returncode == 0, result
+            assert marker not in (app / 'Contents/MacOS/TopNV').read_bytes(), 'bundled executable leaked its object path'
+            assert marker in executable.read_bytes(), 'packaging modified the build product'
             built = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
             assert built['CFBundleLocalizations'] == LANGUAGES, built.get('CFBundleLocalizations')
             for language in LANGUAGES:
@@ -181,6 +191,12 @@ def run_tests(kind):
             if expected: assert result.returncode == 1 and expected.encode() in result.stdout + result.stderr, result
             else: assert result.returncode == 0, result
         info.write_bytes(plistlib.dumps(plist)); verify()
+        binary = contents / 'MacOS/TopNV'
+        binary.write_bytes(b'fixture\0/Users/example/build/module.o\0'); verify('V19')
+        binary.write_bytes(b'fixture')
+        extra_log = contents / 'Resources/session.log'
+        extra_log.touch(); verify('V20')
+        extra_log.unlink(); verify()
         for field, code in [('SUFeedURL','V1'), ('SUPublicEDKey','V2'), ('SUEnableAutomaticChecks','V3'),
                             ('SUAllowsAutomaticUpdates','V3'), ('SUVerifyUpdateBeforeExtraction','V3'),
                             ('CFBundleVersion','V4'), ('LSMinimumSystemVersion','V4'), ('NSHumanReadableCopyright','V13')]:
@@ -279,6 +295,6 @@ def run_tests(kind):
         # Ad hoc mode never accepts a Developer ID signature, and never looks at the components.
         signed(); env['TOPNV_EXPECT_SIGNATURE'] = 'adhoc'; verify('V9')
         (bindir/'codesign').write_text('#!/bin/bash\n'+responses['codesign']+'\n')
-        verify(); print('PASS verifier V0-V18 mutations; signature modes')
+        verify(); print('PASS verifier V0-V20 mutations; signature modes')
 
 run_tests(sys.argv[1])

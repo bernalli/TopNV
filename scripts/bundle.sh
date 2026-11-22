@@ -72,6 +72,8 @@ cp "$ROOT/Licenses/Sparkle.txt" "$APP_DIR/Contents/Resources/Licenses/Sparkle.tx
 cp "$ROOT/LICENSE" "$APP_DIR/Contents/Resources/Licenses/TopNV.txt"
 cp "$ROOT/Assets/Fonts/PlusJakartaSans-OFL.txt" "$APP_DIR/Contents/Resources/Licenses/PlusJakartaSans-OFL.txt"
 cp "$EXECUTABLE" "$APP_DIR/Contents/MacOS/$APP_NAME"
+# Strip debug-map object paths from the distributable copy before signing it.
+/usr/bin/strip -S "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "$ROOT/Assets/AppIcon.icns" "$ROOT/Assets/MenuBarIcon.png" "$ROOT/Assets/MenuBarIcon@2x.png" \
   "$ROOT/Assets/GitHubMark.pdf" "$ROOT/Assets/Fonts/PlusJakartaSans-SemiBold.ttf" \
   "$APP_DIR/Contents/Resources/"
