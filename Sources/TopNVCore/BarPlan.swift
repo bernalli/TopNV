@@ -40,6 +40,7 @@ public struct BarDisplayPlan: Equatable, Sendable {
   public let edge: BarPartPlan
   public let key: BarKeyPlan
   public let corners: [ScreenCorner: BarPartPlan]
+  public internal(set) var preparesCascade = true
   public internal(set) var cascadesOnReturn = false
   public let blackBottom: Int
 }
@@ -113,9 +114,9 @@ public enum BarSurface {
     }
     return BarDisplayPlan(geometry: display, appearance: scene.appearances[id] ?? .unknown, kind: kind,
                           bandEnabled: bandFrame != nil, band: band, edge: edge, key: key,
-                          corners: corners, cascadesOnReturn: bandCell == .path && entrance?.origin == .returnSignal,
-                          blackBottom: BarGeometry.blackBottom(band: band.solidPixels,
-                                                                                edge: edge.solidPixels))
+                          corners: corners, preparesCascade: !scene.reduceMotion,
+                          cascadesOnReturn: bandCell == .path && entrance?.origin == .returnSignal,
+                          blackBottom: BarGeometry.blackBottom(band: band.solidPixels, edge: edge.solidPixels))
   }
 
   private static func keyPlan(id: UInt32, cell: BarCell, band: BarPartPlan,

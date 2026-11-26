@@ -77,4 +77,19 @@ final class AutomaticUpdateQuestionTests: XCTestCase {
     XCTAssertEqual(AutomaticUpdateQuestion.answer(buttonIndex: 2), .dismissed)
     XCTAssertEqual(AutomaticUpdateQuestion.answer(buttonIndex: nil), .dismissed)
   }
+
+  func testClosingTheWindowDismissesAndReleasesTheQuestion() {
+    weak var shown: AutomaticUpdateQuestion?
+    var window: NSWindow?
+    do {
+      let question = makeQuestion()
+      question.show()
+      shown = question
+      window = question.alert.window
+    }
+    XCTAssertNotNil(shown)
+    window?.close()
+    XCTAssertEqual(answers, [.dismissed])
+    XCTAssertNil(shown)
+  }
 }

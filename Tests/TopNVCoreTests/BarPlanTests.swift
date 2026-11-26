@@ -184,4 +184,21 @@ final class BarPlanTests: XCTestCase {
     XCTAssertEqual(absent.corners.count, 4)
     XCTAssertTrue(absent.corners.values.allSatisfy { $0.exists && $0.frame == nil && $0.alpha == .value(1) })
   }
+
+  func testReduceMotionDisablesCascadePreparation() throws {
+    let fixture = BarPlanFixture(active: [], appearance: .dark)
+    let normal = try XCTUnwrap(fixture.plan())
+    XCTAssertTrue(normal.preparesCascade)
+    let frame = fixture.display.frame
+    let menu = MenuBarEvidence.Window(
+      owner: .windowServer, layer: 24,
+      bounds: CGRect(x: frame.minX, y: frame.maxY - 33, width: frame.width, height: 33))
+    var reduced = fixture.scene
+    reduced.handle(BarSample(displays: [fixture.display], windows: [menu], systemFullScreen: false,
+                             appearance: [1: .dark], activeKeyWindows: [:], now: 2,
+                             reduceMotion: true, signalTime: 2))
+    let reducedPlan = BarSurface.plan(geometry: [1: fixture.display], scene: reduced,
+                                      entrance: [:], settings: fixture.settings)
+    XCTAssertEqual(reducedPlan.displays[1]?.preparesCascade, false)
+  }
 }

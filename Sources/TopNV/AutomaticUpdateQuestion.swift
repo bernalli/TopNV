@@ -12,6 +12,7 @@ import TopNVCore
   private var reply: ((AutomaticUpdateAnswer) -> Void)?
   /// Holds the question while it waits for its answer.
   private var retained: AutomaticUpdateQuestion?
+  private var closeObserver: NSObjectProtocol?
 
   /// The entry point of `UpdateCoordinator`.
   static func ask(_ reply: @escaping (AutomaticUpdateAnswer) -> Void) {
@@ -41,6 +42,13 @@ import TopNVCore
   /// Shows the alert and activates the app.
   func show() {
     retained = self
+    if closeObserver == nil {
+      closeObserver = NotificationCenter.default.addObserver(
+        forName: NSWindow.willCloseNotification, object: alert.window, queue: nil
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.finish(.dismissed) }
+      }
+    }
     present(alert.window, true)
   }
 
@@ -55,12 +63,21 @@ import TopNVCore
 
   /// Only the first click answers; it closes the alert and releases the question.
   @objc private func choose(_ sender: NSButton) {
-    guard let reply, let index = alert.buttons.firstIndex(where: { $0 === sender }) else {
+    guard let index = alert.buttons.firstIndex(where: { $0 === sender }) else {
       return
     }
+    finish(Self.answer(buttonIndex: index))
+  }
+
+  private func finish(_ answer: AutomaticUpdateAnswer) {
+    if let closeObserver {
+      NotificationCenter.default.removeObserver(closeObserver)
+      self.closeObserver = nil
+    }
+    guard let reply else { return }
     self.reply = nil
     alert.window.orderOut(nil)
-    reply(Self.answer(buttonIndex: index))
+    reply(answer)
     retained = nil
   }
 }

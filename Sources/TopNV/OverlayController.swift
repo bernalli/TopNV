@@ -29,21 +29,27 @@ final class OverlayController: NSObject {
   private var pendingScreenRebuild: DispatchWorkItem?
   private var screenGeneration: UInt64 = 0
   private var delivering = false
+  private var stopped = false
+  private var keysInitialized = false
   private var pending: [() -> Void] = []
 
-  private lazy var keys: BarKeyExecuting = KeyExecutor(
-    keyCommitted: { [weak self] in self?.keyCommitted($0, window: $1, display: $2) ?? false },
-    keyClosed: { [weak self] in self?.keyClosed(window: $0, display: $1) },
-    keyDidFail: { [weak self] in self?.keyDidFail() },
-    stopAppearanceMonitor: { [weak self] in self?.sampler.monitorAppearance(false) })
+  private lazy var keys: BarKeyExecuting = {
+    keysInitialized = true
+    return KeyExecutor(
+      keyCommitted: { [weak self] in self?.keyCommitted($0, window: $1, display: $2) ?? false },
+      keyClosed: { [weak self] in self?.keyClosed(window: $0, display: $1) },
+      keyDidFail: { [weak self] in self?.keyDidFail() },
+      stopAppearanceMonitor: { [weak self] in self?.sampler.monitorAppearance(false) })
+  }()
 
   convenience init(settings: AppSettings) {
+    let isTestCopy = TestCopy.matches(Bundle.main.bundleIdentifier)
     self.init(settings: settings, displays: { NSScreen.screens.compactMap(BarDisplay.init(screen:)) },
-              sampler: BarSampler(), bands: BandExecutor(), edges: EdgeExecutor(), corners: CornerExecutor(),
-              keys: nil, makeClock: { EntranceClock(display: $0) },
+              sampler: BarSampler(), bands: BandExecutor(trace: isTestCopy), edges: EdgeExecutor(),
+              corners: CornerExecutor(), keys: nil, makeClock: { EntranceClock(display: $0) },
               orderFront: { NSApp.window(withWindowNumber: $0)?.orderFrontRegardless() },
               scheduleRebuild: { DispatchQueue.main.asyncAfter(deadline: .now() + $0, execute: $1) },
-              testCopy: TestCopy.matches(Bundle.main.bundleIdentifier),
+              testCopy: isTestCopy,
               registryLine: { line in OverlayController.registryLog.info("\(line, privacy: .public)") })
   }
 
@@ -65,7 +71,10 @@ final class OverlayController: NSObject {
     self.registryLine = registryLine
     registry = BarRegistry(testCopy: testCopy)
     super.init()
-    if let keys { self.keys = keys }
+    if let keys {
+      self.keys = keys
+      keysInitialized = true
+    }
     sampler.onSample = { [weak self] in self?.sample() }
   }
 
@@ -75,6 +84,8 @@ final class OverlayController: NSObject {
   }
 
   func start() {
+    stopped = false
+    sampler.onSample = { [weak self] in self?.sample() }
     NotificationCenter.default.addObserver(self, selector: #selector(systemDidChange(_:)),
       name: NSApplication.didChangeScreenParametersNotification, object: nil)
     let center = NSWorkspace.shared.notificationCenter
@@ -86,6 +97,11 @@ final class OverlayController: NSObject {
       MainActor.assumeIsolated { self?.settingsChanged() }
     }
     deliver { self.rebuild(.screenConfigurationChanged, entrance: .settings) }
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+    NSWorkspace.shared.notificationCenter.removeObserver(self)
   }
 
   func settingsChanged() {
@@ -125,10 +141,11 @@ final class OverlayController: NSObject {
   /// Structural events and link callbacks keep delivery order through registry emission.
   /// A synchronous request for another sample is dropped, as in the original sampling loop.
   private func deliver(_ action: @escaping () -> Void) {
+    guard !stopped else { return }
     guard !delivering else { pending.append(action); return }
     delivering = true
     action()
-    while !pending.isEmpty { pending.removeFirst()() }
+    while !stopped && !pending.isEmpty { pending.removeFirst()() }
     delivering = false
   }
 
@@ -193,7 +210,7 @@ final class OverlayController: NSObject {
     let wasDelivering = delivering
     scene.keyDidFail()
     // A delayed re-commit can fail between samples. Publish its closed windows immediately.
-    if !wasDelivering { deliver { self.apply(self.takePlan()) } }
+    if !wasDelivering && !stopped { deliver { self.apply(self.takePlan()) } }
   }
 
   func replayEntrance() {
@@ -279,6 +296,31 @@ final class OverlayController: NSObject {
 }
 
 extension OverlayController {
+  func stop() {
+    stopped = true
+    pending.removeAll()
+    NotificationCenter.default.removeObserver(
+      self, name: NSApplication.didChangeScreenParametersNotification, object: nil)
+    let center = NSWorkspace.shared.notificationCenter
+    for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didWakeNotification,
+                 NSWorkspace.screensDidWakeNotification] {
+      center.removeObserver(self, name: name, object: nil)
+    }
+    settingsSubscription?.cancel()
+    settingsSubscription = nil
+    pendingScreenRebuild?.cancel()
+    pendingScreenRebuild = nil
+    screenGeneration &+= 1
+    cancelClocks()
+    sampler.onSample = nil
+    sampler.scheduleSamples(needed: false, duringReveal: false)
+    sampler.monitorAppearance(false)
+    bands.closeAll()
+    edges.closeAll()
+    corners.closeAll()
+    if keysInitialized { keys.closeAll() }
+  }
+
   private func traceReturnSurfaces(_ sample: BarSample) {
     guard testCopy else { return }
     for display in sample.displays {
