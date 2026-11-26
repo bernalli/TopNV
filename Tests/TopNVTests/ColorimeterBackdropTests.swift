@@ -56,13 +56,18 @@ import XCTest
     XCTAssertEqual(glyph.filters?.count, 1)
   }
 
+  @MainActor
+  private final class SwatchPhase {
+    var dark = true
+  }
+
   private func verifyInputs(_ upper: CALayer, swatch: CALayer, present: () -> Void) async throws {
     let black = expectation(description: "Upper samples black underneath white glyph output")
     let white = expectation(description: "Upper samples white underneath black glyph output")
-    var dark = true
+    let phase = SwatchPhase()
     let reader = Reader { luma in
-      if dark && luma < 0.1 { black.fulfill() }
-      if !dark && luma > 0.9 { white.fulfill() }
+      if phase.dark && luma < 0.1 { black.fulfill() }
+      if !phase.dark && luma > 0.9 { white.fulfill() }
     }
     black.assertForOverFulfill = false
     white.assertForOverFulfill = false
@@ -80,7 +85,7 @@ import XCTest
     present()
     CATransaction.flush()
     await fulfillment(of: [black], timeout: 3)
-    dark = false
+    phase.dark = false
     CATransaction.begin()
     CATransaction.setDisableActions(true)
     swatch.backgroundColor = NSColor.white.cgColor

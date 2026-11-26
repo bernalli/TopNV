@@ -30,6 +30,7 @@ final class Parts: BarPartExecuting {
   let parts: [BarPart]
   var plans: [BarPlan] = []
   var duringApply: (() -> Void)?
+  var closedAllCount = 0
 
   init(_ parts: [BarPart]) { self.parts = parts }
 
@@ -60,7 +61,7 @@ final class Parts: BarPartExecuting {
     return entries
   }
 
-  func closeAll() {}
+  func closeAll() { closedAllCount += 1 }
 }
 
 @MainActor
@@ -73,6 +74,8 @@ private final class Keys: BarKeyExecuting {
   private(set) var framesCheckedForKeyClosure: [UInt32: CGRect] = [:]
   var windows: [UInt32: [Int: Double]] = [:]
   var plans: [BarPlan] = []
+  var closedAllCount = 0
+  var failOnCloseAll = false
   init(_ samples: Samples) { self.samples = samples }
 
   func closeChanged(frames: [UInt32: CGRect], enabled: Bool, scales: [UInt32: CGFloat]) -> Set<UInt32> {
@@ -127,7 +130,10 @@ private final class Keys: BarKeyExecuting {
     return entries
   }
 
-  func closeAll() {}
+  func closeAll() {
+    closedAllCount += 1
+    if failOnCloseAll { controller?.keyDidFail() }
+  }
 }
 
 @MainActor
@@ -396,5 +402,23 @@ final class OverlayCoordinatorTests: XCTestCase {
       fixture.delayed.first?.1.perform()
       XCTAssertTrue(try XCTUnwrap(fixture.bands.plans.last).displays.isEmpty)
     }
+  }
+
+  func testStopClosesAllPartsAndPreventsReopeningOnKeyFailure() {
+    let fixture = Fixture()
+    fixture.controller.start()
+    let plansBeforeStop = fixture.bands.plans.count
+    fixture.keys.failOnCloseAll = true
+    fixture.controller.stop()
+    XCTAssertEqual(fixture.bands.closedAllCount, 1)
+    XCTAssertEqual(fixture.edges.closedAllCount, 1)
+    XCTAssertEqual(fixture.corners.closedAllCount, 1)
+    XCTAssertEqual(fixture.keys.closedAllCount, 1)
+    XCTAssertNil(fixture.samples.onSample)
+    XCTAssertFalse(fixture.samples.monitoring)
+    XCTAssertFalse(fixture.samples.fast)
+    // keyDidFail during stop() and later samples must not reapply plans or reopen windows.
+    fixture.controller.sample()
+    XCTAssertEqual(fixture.bands.plans.count, plansBeforeStop)
   }
 }

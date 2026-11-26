@@ -3,9 +3,14 @@ import TopNVCore
 
 @MainActor
 final class BandExecutor: BarPartExecuting {
+  private let trace: Bool
   private var windows: [UInt32: BarWindow] = [:]
 
   private var cascades: [UInt32: BandCascade] = [:]
+
+  init(trace: Bool = false) {
+    self.trace = trace
+  }
 
   @discardableResult
   func apply(_ plan: BarPlan) -> BarEntries {
@@ -27,16 +32,18 @@ final class BandExecutor: BarPartExecuting {
           _ = BarStripView(in: window)
           windows[id] = window
         }
-        if cascades[id]?.frame != frame, display.geometry != nil {
+        let wasReturning = cascades[id]?.isRunning == true
+        if !display.preparesCascade {
           cascades.removeValue(forKey: id)?.close()
-          cascades[id] = BandCascade(frame: frame, display: id)
+        } else if cascades[id]?.frame != frame, display.geometry != nil {
+          cascades.removeValue(forKey: id)?.close()
+          cascades[id] = BandCascade(frame: frame, display: id, trace: trace)
         }
         let cascade = cascades[id]
         let returning = display.cascadesOnReturn && cascade != nil
         let mask: BarMask = returning ? .none : part.mask
         (window.contentView as? BarStripView)?.apply(mask, to: window)
-        window.applyAlpha(Self.presentationAlpha(part.alpha, returning: returning,
-                                                  wasReturning: cascade?.isRunning == true))
+        window.applyAlpha(Self.presentationAlpha(part.alpha, returning: returning, wasReturning: wasReturning))
         cascade?.apply(returning ? part.mask : .none)
         if !window.isVisible { window.orderFrontRegardless() }
         entries[.init(display: id, part: .band)] = window.registryEntry(on: display.geometry, mask: mask)

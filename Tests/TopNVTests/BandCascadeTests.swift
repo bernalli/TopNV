@@ -79,4 +79,45 @@ final class BandCascadeTests: XCTestCase {
     XCTAssertEqual(BandExecutor.presentationAlpha(.value(0), returning: false, wasReturning: true), .value(0))
     XCTAssertEqual(BandExecutor.presentationAlpha(.hold, returning: false, wasReturning: false), .hold)
   }
+
+  func testReduceMotionPlanCreatesNoSliceWindowsAndClosesExistingCascade() {
+    _ = NSApplication.shared
+    let executor = BandExecutor()
+    defer { executor.closeAll() }
+    let existing = Set(NSApp.windows.map(ObjectIdentifier.init))
+    var reduced = ExecutorPlans.display()
+    reduced.preparesCascade = false
+    executor.apply(.init(displays: [1: reduced]))
+    let initialSlices = NSApp.windows.filter { !existing.contains(ObjectIdentifier($0)) }
+      .compactMap { $0 as? BandSliceWindow }
+    XCTAssertTrue(initialSlices.isEmpty)
+
+    let normal = ExecutorPlans.display()
+    executor.apply(.init(displays: [1: normal]))
+    let createdSlices = NSApp.windows.filter { !existing.contains(ObjectIdentifier($0)) }
+      .compactMap { $0 as? BandSliceWindow }
+    XCTAssertEqual(createdSlices.count, 64)
+
+    executor.apply(.init(displays: [1: reduced]))
+    XCTAssertTrue(createdSlices.allSatisfy { !$0.isVisible })
+  }
+
+  func testDisablingCascadeMidReturnWithHoldAlphaRestoresBandWindow() throws {
+    _ = NSApplication.shared
+    let executor = BandExecutor()
+    defer { executor.closeAll() }
+    let id = BarRegistryID(display: 1, part: .band)
+    let steady = ExecutorPlans.display()
+    let window = try ExecutorPlans.window(executor.apply(.init(displays: [1: steady]))[id])
+    var returning = ExecutorPlans.display(band: ExecutorPlans.part(mask: .rect(
+      CGRect(x: 60, y: 0, width: 80, height: 34))))
+    returning.cascadesOnReturn = true
+    executor.apply(.init(displays: [1: returning]))
+    XCTAssertEqual(window.alphaValue, 0)
+
+    var reducedAbsent = ExecutorPlans.display(band: ExecutorPlans.part(alpha: .hold), geometry: nil)
+    reducedAbsent.preparesCascade = false
+    executor.apply(.init(displays: [1: reducedAbsent]))
+    XCTAssertEqual(window.alphaValue, 1)
+  }
 }

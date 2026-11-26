@@ -92,7 +92,7 @@ public struct BarScene {
   private var latestEvidence: [UInt32: MenuBarEvidence.Result] = [:]
   private var lastKeyTrace: [UInt32: String] = [:]
   private var spaceUptime = Double.nan
-  private var reduceMotion = false
+  public private(set) var reduceMotion = false
   private var menuBarBackground = false
   private(set) var appearances: [UInt32: KeyedOverlayState.Appearance] = [:]
 

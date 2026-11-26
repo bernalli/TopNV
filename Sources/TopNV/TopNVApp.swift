@@ -62,4 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     sparkleUpdater?.onChange = { [weak self] in self?.updates.updaterDidChange() }
     updateCoordinator.start()
   }
+
+  func applicationWillTerminate(_ notification: Notification) {
+    overlay?.stop()
+  }
 }

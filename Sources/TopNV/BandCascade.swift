@@ -24,13 +24,15 @@ final class BandCascade {
 
   let frame: CGRect
   private let display: UInt32
+  private let trace: Bool
   private var pairs: [Pair] = []
   private(set) var isRunning = false
   private static let logger = Logger(subsystem: "TopNV", category: "DesktopReturn")
 
-  init(frame: CGRect, display: UInt32) {
+  init(frame: CGRect, display: UInt32, trace: Bool = false) {
     self.frame = frame
     self.display = display
+    self.trace = trace
     pairs = BandSlice.pairs(in: frame).map { slice in
       Pair(left: BandSliceWindow(frame: slice.left), right: BandSliceWindow(frame: slice.right), slice: slice)
     }
@@ -74,8 +76,9 @@ final class BandCascade {
     }
   }
 
-  private func record(_ event: String) {
-    let line = "display=\(display) cascade=\(event) atMS=\(Int(CACurrentMediaTime() * 1000))"
+  private func record(_ event: @autoclosure () -> String) {
+    guard trace else { return }
+    let line = "display=\(display) cascade=\(event()) atMS=\(Int(CACurrentMediaTime() * 1000))"
     Self.logger.info("\(line, privacy: .public)")
   }
 }
